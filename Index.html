@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hệ thống Tự động hóa Chứng từ Xuất Nhập Khẩu &amp; Logistics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <?!= include('CSS_Style'); ?>
+</head>
+<body>
+  <!-- Login Screen + App Header + Sidebar Navigation -->
+  <?!= include('View_Login_Sidebar'); ?>
+
+  <!-- Main Workspace Forms + Batch Export Modal + Confirmation Modal -->
+  <?!= include('View_Document_Forms'); ?>
+
+  <!-- Toast Notifications Container -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- Global Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-busy="true">
+    <div class="loading-card">
+      <div class="spinner"></div>
+      <div id="loadingMessage" class="loading-text">Đang xử lý dữ liệu...</div>
+    </div>
+  </div>
+
+  <!-- Core State, Sync Engine, Cascading Dropdowns, Auto-Calculations & Validations -->
+  <?!= include('JS_App_State'); ?>
+
+  <!-- Schema-Driven Form Renderer for All 21 Views -->
+  <?!= include('JS_Render_Forms'); ?>
+</body>
+</html>

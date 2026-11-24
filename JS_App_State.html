@@ -1,0 +1,1024 @@
+<script>
+/**
+ * JS_App_State.html
+ * Central APP_STATE, Google Apps Script RPC calls, Two-Way Sync Engine,
+ * Cascading Dropdowns, Auto-Calculations, Currency Words, and ISO 6346 Validation.
+ */
+
+const ISO_6346_REGEX = /^[A-Z]{4}\d{7}$/;
+
+const DOC_GROUPS = [
+  {
+    id: 'GROUP_II',
+    title: 'II. Người xuất khẩu chuẩn bị',
+    docs: [
+      { key: 'QUOTATION', label: 'Bảng Báo Giá (Quotation)' },
+      { key: 'SALES_CONTRACT', label: 'Hợp Đồng Ngoại Thương (Sales Contract)' },
+      { key: 'COMMERCIAL_INVOICE', label: 'Hóa Đơn Thương Mại (Commercial Invoice)' },
+      { key: 'PACKING_LIST', label: 'Phiếu Đóng Gói Hàng Hóa (Packing List)' },
+      { key: 'BOOKING_REQUEST', label: 'Yêu Cầu Đặt Chỗ (Booking Request)' },
+      { key: 'VGM', label: 'Phiếu Xác Nhận Khối Lượng Toàn Bộ (VGM)' },
+      { key: 'SHIPPING_INSTRUCTION', label: 'Hướng Dẫn Giao Hàng (S/I)' }
+    ]
+  },
+  {
+    id: 'GROUP_III',
+    title: 'III. Cơ quan chuyên ngành khác cấp',
+    docs: [
+      { key: 'VETERINARY_CERTIFICATE', label: 'Kiểm Dịch Động Vật (Veterinary Cert)' },
+      { key: 'PHYTOSANITARY_CERTIFICATE', label: 'Kiểm Dịch Thực Vật (Phytosanitary Cert)' },
+      { key: 'QUALITY_CERTIFICATE', label: 'Chứng Nhận Chất Lượng (Quality Cert)' },
+      { key: 'FUMIGATION_CERTIFICATE', label: 'Chứng Nhận Hun Trùng (Fumigation Cert)' },
+      { key: 'CERTIFICATE_OF_ORIGIN', label: 'Chứng Nhận Xuất Xứ (C/O)' }
+    ]
+  },
+  {
+    id: 'GROUP_IV',
+    title: 'IV. Hãng tàu / Forwarder cấp',
+    docs: [
+      { key: 'BOOKING_NOTE', label: 'Phiếu Đặt Chỗ (Booking Note)' },
+      { key: 'BOOKING_CONFIRMATION', label: 'Xác Nhận Đặt Chỗ (Booking Confirmation)' },
+      { key: 'RELEASE_ORDER', label: 'Lệnh Cấp Container Rỗng (Release Order)' },
+      { key: 'BILL_OF_LADING', label: 'Vận Đơn Đường Biển (Bill of Lading)' },
+      { key: 'DELIVERY_ORDER', label: 'Lệnh Giao Hàng (Delivery Order)' }
+    ]
+  },
+  {
+    id: 'GROUP_V',
+    title: 'V. Hải quan & Thanh toán quốc tế',
+    docs: [
+      { key: 'To_khai_XK', label: 'Tờ Khai Hải Quan Xuất Khẩu' },
+      { key: 'To_khai_NK', label: 'Tờ Khai Hải Quan Nhập Khẩu' },
+      { key: 'LETTER_OF_CREDIT', label: 'Thư Tín Dụng (Letter of Credit)' }
+    ]
+  }
+];
+
+function createEmptyItem() {
+  return {
+    PROD: '',
+    PCODE: '',
+    DES: '',
+    HS: '',
+    PREF: '',
+    MARKS: '',
+    LOT_NO: '',
+    QTY: '',
+    UNIT: '',
+    PRICE: '',
+    AMT: '',
+    PACK: '',
+    NW: '',
+    GW: '',
+    CBM: '',
+    EX_VAL: '',
+    EX_TAX_RATE: '',
+    EX_AMT: '',
+    FEE_VAL: '',
+    FEE_RATE: '',
+    FEE_AMT: ''
+  };
+}
+
+function createEmptyContainer() {
+  return {
+    CONT: '',
+    SEAL: '',
+    CTYPE: '',
+    CSIZE: '',
+    PACK: '',
+    UNIT_PACK: '',
+    MAX_GW: '',
+    GW: '',
+    VGM_WEI: '',
+    CBM: ''
+  };
+}
+
+const APP_STATE = {
+  user: null,
+  activeTab: 'MASTER_PARTIES',
+  dropdowns: {
+    cuocTau: [],
+    loaiHinhXNK: [],
+    danhMucChung: {
+      LOAI_CONT: [],
+      SERVICE_TYPE: [],
+      INCOTERM: [],
+      PAY_TERM: [],
+      UNIT: [],
+      CURR: [],
+      CO_FORM: [],
+      CO_CRITERIA: [],
+      TRADE_AGREEMENT: []
+    }
+  },
+  shared: {},
+  items: [createEmptyItem()],
+  containers: [createEmptyContainer()],
+  exportResults: {}
+};
+
+/* ==========================================================================
+   UI UTILITIES: LOADING, TOASTS, ESCAPING, SIDEBAR & MODALS
+   ========================================================================== */
+
+function showLoading(message) {
+  const overlay = document.getElementById('loadingOverlay');
+  const textEl = document.getElementById('loadingMessage');
+  if (textEl) textEl.textContent = message || 'Đang xử lý dữ liệu...';
+  if (overlay) overlay.classList.remove('hidden');
+}
+
+function hideLoading() {
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
+function showToast(message, type) {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + (type || 'info');
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  setTimeout(function () {
+    if (toast.parentNode) {
+      toast.parentNode.removeChild(toast);
+    }
+  }, 4200);
+}
+
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function toggleMobileSidebar() {
+  const sidebar = document.getElementById('appSidebar');
+  if (sidebar) sidebar.classList.toggle('open');
+}
+
+function switchTab(tabKey) {
+  APP_STATE.activeTab = tabKey;
+
+  document.querySelectorAll('.sidebar-nav-btn[data-nav]').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-nav') === tabKey);
+  });
+
+  document.querySelectorAll('.doc-panel[data-tab-panel]').forEach(function (panel) {
+    panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === tabKey);
+  });
+
+  const sidebar = document.getElementById('appSidebar');
+  if (sidebar && sidebar.classList.contains('open')) {
+    sidebar.classList.remove('open');
+  }
+}
+
+/* ==========================================================================
+   AUTHENTICATION, DROPDOWN BOOTSTRAP, DRAFT SAVE & CLEAR
+   ========================================================================== */
+
+function handleLoginSubmit(event) {
+  event.preventDefault();
+
+  const maSV = document.getElementById('loginMaSV').value.trim();
+  const matKhau = document.getElementById('loginMatKhau').value.trim();
+  const errorBox = document.getElementById('loginError');
+
+  errorBox.classList.add('hidden');
+  errorBox.textContent = '';
+
+  if (!maSV || !matKhau) {
+    errorBox.textContent = 'Vui lòng nhập đầy đủ Mã sinh viên và Mật khẩu.';
+    errorBox.classList.remove('hidden');
+    return;
+  }
+
+  showLoading('Đang xác thực tài khoản sinh viên...');
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      if (!res || !res.success) {
+        hideLoading();
+        errorBox.textContent = (res && res.message) || 'Đăng nhập thất bại.';
+        errorBox.classList.remove('hidden');
+        return;
+      }
+
+      APP_STATE.user = res.user;
+      APP_STATE.exportResults = {};
+      restoreDraftState(res.draftJson);
+
+      const badgeText = document.getElementById('userBadgeText');
+      if (badgeText) {
+        badgeText.textContent = (res.user.tenSV || 'Sinh viên') + ' (' + res.user.maSV + ')';
+      }
+
+      loadInitialDropdowns();
+    })
+    .withFailureHandler(function (err) {
+      hideLoading();
+      errorBox.textContent = 'Lỗi kết nối máy chủ: ' + (err && err.message ? err.message : err);
+      errorBox.classList.remove('hidden');
+    })
+    .loginUser(maSV, matKhau);
+}
+
+function restoreDraftState(draftJson) {
+  APP_STATE.shared = {};
+  APP_STATE.items = [createEmptyItem()];
+  APP_STATE.containers = [createEmptyContainer()];
+
+  if (!draftJson || typeof draftJson !== 'string' || draftJson.trim() === '') {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(draftJson);
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.shared && typeof parsed.shared === 'object') {
+        Object.keys(parsed.shared).forEach(function (k) {
+          APP_STATE.shared[k] = parsed.shared[k] == null ? '' : String(parsed.shared[k]);
+        });
+      }
+      if (Array.isArray(parsed.items)) {
+        APP_STATE.items = parsed.items.length > 0
+          ? parsed.items.map(function (row) { return Object.assign(createEmptyItem(), row); })
+          : [];
+      }
+      if (Array.isArray(parsed.containers)) {
+        APP_STATE.containers = parsed.containers.length > 0
+          ? parsed.containers.map(function (row) { return Object.assign(createEmptyContainer(), row); })
+          : [];
+      }
+    }
+  } catch (e) {
+    showToast('Dữ liệu nháp cũ không đúng định dạng JSON, đã khởi tạo biểu mẫu mới.', 'warning');
+  }
+}
+
+function loadInitialDropdowns() {
+  showLoading('Đang tải dữ liệu danh mục Cước tàu & Hải quan...');
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      hideLoading();
+
+      if (!res || !res.success) {
+        showToast((res && res.message) || 'Không tải được dữ liệu danh mục.', 'error');
+      } else {
+        APP_STATE.dropdowns = {
+          cuocTau: Array.isArray(res.cuocTau) ? res.cuocTau : [],
+          loaiHinhXNK: Array.isArray(res.loaiHinhXNK) ? res.loaiHinhXNK : [],
+          danhMucChung: res.danhMucChung || {}
+        };
+      }
+
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('appShell').classList.remove('hidden');
+
+      recalculateAllTotals(false);
+      renderAllFormViews();
+      switchTab('MASTER_PARTIES');
+      showToast('Đăng nhập thành công! Chào mừng ' + (APP_STATE.user.tenSV || APP_STATE.user.maSV), 'success');
+    })
+    .withFailureHandler(function (err) {
+      hideLoading();
+      showToast('Lỗi tải danh mục: ' + (err && err.message ? err.message : err), 'error');
+    })
+    .getInitialDropdownData();
+}
+
+function handleSaveDraft() {
+  if (!APP_STATE.user || !APP_STATE.user.maSV) {
+    showToast('Vui lòng đăng nhập lại trước khi lưu nháp.', 'error');
+    return;
+  }
+
+  recalculateAllTotals(false);
+  const draftPayload = {
+    shared: APP_STATE.shared,
+    items: APP_STATE.items,
+    containers: APP_STATE.containers
+  };
+
+  showLoading('Đang lưu bản nháp vào Google Sheet...');
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      hideLoading();
+      if (res && res.success) {
+        showToast('Đã lưu nháp thành công cho MSSV ' + APP_STATE.user.maSV + '.', 'success');
+      } else {
+        showToast((res && res.message) || 'Lưu nháp thất bại.', 'error');
+      }
+    })
+    .withFailureHandler(function (err) {
+      hideLoading();
+      showToast('Lỗi lưu nháp: ' + (err && err.message ? err.message : err), 'error');
+    })
+    .saveUserDraft(APP_STATE.user.maSV, JSON.stringify(draftPayload));
+}
+
+function openClearConfirmModal() {
+  document.getElementById('clearConfirmModal').classList.remove('hidden');
+}
+
+function closeClearConfirmModal() {
+  document.getElementById('clearConfirmModal').classList.add('hidden');
+}
+
+function confirmClearData() {
+  closeClearConfirmModal();
+  APP_STATE.shared = {};
+  APP_STATE.items = [createEmptyItem()];
+  APP_STATE.containers = [createEmptyContainer()];
+  APP_STATE.exportResults = {};
+
+  renderAllFormViews();
+  switchTab(APP_STATE.activeTab || 'MASTER_PARTIES');
+  showToast('Đã xóa toàn bộ dữ liệu trên biểu mẫu hiện tại.', 'info');
+}
+
+function handleLogout() {
+  APP_STATE.user = null;
+  APP_STATE.shared = {};
+  APP_STATE.items = [createEmptyItem()];
+  APP_STATE.containers = [createEmptyContainer()];
+  APP_STATE.exportResults = {};
+
+  document.getElementById('loginMatKhau').value = '';
+  document.getElementById('loginError').classList.add('hidden');
+  document.getElementById('appShell').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  showToast('Bạn đã đăng xuất khỏi hệ thống.', 'info');
+}
+
+/* ==========================================================================
+   DOCUMENT EXPORT (SINGLE & BATCH)
+   ========================================================================== */
+
+function buildExportPayload() {
+  recalculateAllTotals(false);
+  return {
+    shared: APP_STATE.shared,
+    items: APP_STATE.items,
+    containers: APP_STATE.containers
+  };
+}
+
+function handleExportSingle(docKey) {
+  if (!APP_STATE.user || !APP_STATE.user.maSV) {
+    showToast('Vui lòng đăng nhập để xuất chứng từ.', 'error');
+    return;
+  }
+
+  const invalidConts = getInvalidIsoContainers();
+  if (invalidConts.length > 0) {
+    showToast('Cảnh báo: Có số Container chưa đúng chuẩn ISO 6346 (' + invalidConts.join(', ') + '). Vẫn tiếp tục xuất.', 'warning');
+  }
+
+  showLoading('Đang tạo chứng từ Google Docs & PDF...');
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      hideLoading();
+      if (!res || !res.success || !res.results || res.results.length === 0) {
+        showToast((res && res.message) || 'Xuất chứng từ thất bại.', 'error');
+        return;
+      }
+
+      res.results.forEach(function (item) {
+        APP_STATE.exportResults[item.docKey] = item;
+      });
+      renderSingleExportResultBox(docKey);
+      showToast('Xuất chứng từ "' + docKey + '" thành công!', 'success');
+    })
+    .withFailureHandler(function (err) {
+      hideLoading();
+      showToast('Lỗi xuất chứng từ: ' + (err && err.message ? err.message : err), 'error');
+    })
+    .generateDocuments(APP_STATE.user.maSV, [docKey], buildExportPayload());
+}
+
+function openBatchExportModal() {
+  const resultsBox = document.getElementById('batchExportResults');
+  if (resultsBox) resultsBox.classList.add('hidden');
+  document.getElementById('batchExportModal').classList.remove('hidden');
+}
+
+function closeBatchExportModal() {
+  document.getElementById('batchExportModal').classList.add('hidden');
+}
+
+function toggleAllBatchCheckboxes(checked) {
+  document.querySelectorAll('#batchExportChecklist input[type="checkbox"]').forEach(function (cb) {
+    cb.checked = checked;
+  });
+}
+
+function handleExportBatch() {
+  if (!APP_STATE.user || !APP_STATE.user.maSV) {
+    showToast('Vui lòng đăng nhập để xuất chứng từ.', 'error');
+    return;
+  }
+
+  const selectedKeys = [];
+  document.querySelectorAll('#batchExportChecklist input[type="checkbox"]:checked').forEach(function (cb) {
+    selectedKeys.push(cb.value);
+  });
+
+  if (selectedKeys.length === 0) {
+    showToast('Vui lòng chọn ít nhất một chứng từ để xuất hàng loạt.', 'warning');
+    return;
+  }
+
+  showLoading('Đang xuất hàng loạt ' + selectedKeys.length + ' chứng từ... Vui lòng chờ.');
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      hideLoading();
+      if (!res || !res.success || !res.results || res.results.length === 0) {
+        showToast((res && res.message) || 'Xuất hàng loạt thất bại.', 'error');
+        return;
+      }
+
+      const listEl = document.getElementById('batchExportResultsList');
+      const boxEl = document.getElementById('batchExportResults');
+      listEl.innerHTML = '';
+
+      res.results.forEach(function (item) {
+        APP_STATE.exportResults[item.docKey] = item;
+        renderSingleExportResultBox(item.docKey);
+
+        const row = document.createElement('div');
+        row.className = 'export-result-item';
+        row.innerHTML =
+          '<span class="export-result-name">' + escapeHtml(item.docName) + '</span>' +
+          '<div class="export-result-links">' +
+            '<a class="btn btn-secondary btn-sm" href="' + escapeHtml(item.docUrl) + '" target="_blank" rel="noopener noreferrer">Mở Google Doc</a>' +
+            '<a class="btn btn-success btn-sm" href="' + escapeHtml(item.pdfUrl) + '" target="_blank" rel="noopener noreferrer">Tải PDF</a>' +
+          '</div>';
+        listEl.appendChild(row);
+      });
+
+      boxEl.classList.remove('hidden');
+
+      if (res.errors && res.errors.length > 0) {
+        showToast('Đã xuất ' + res.results.length + ' chứng từ. Có ' + res.errors.length + ' chứng từ lỗi/chưa có Template ID.', 'warning');
+      } else {
+        showToast('Đã xuất thành công ' + res.results.length + ' chứng từ!', 'success');
+      }
+    })
+    .withFailureHandler(function (err) {
+      hideLoading();
+      showToast('Lỗi xuất hàng loạt: ' + (err && err.message ? err.message : err), 'error');
+    })
+    .generateDocuments(APP_STATE.user.maSV, selectedKeys, buildExportPayload());
+}
+
+/* ==========================================================================
+   TWO-WAY SYNC & CASCADING DROPDOWNS
+   ========================================================================== */
+
+function handleWorkspaceFieldChange(target) {
+  const key = target.getAttribute('data-sync');
+  if (!key) return;
+
+  // Preserve leading zeros by storing raw string value verbatim
+  const value = target.value;
+  APP_STATE.shared[key] = value;
+
+  // Mirror across all other views without disturbing active focus
+  syncSharedFieldToDOM(key, value, target);
+
+  // Cascading Logic
+  if (key === 'POL') {
+    handlePolChanged(value);
+  } else if (key === 'POD') {
+    handlePodChanged(value);
+  } else if (key === 'EXP_TYPE_CODE') {
+    handleXnkTypeChanged('Xuất khẩu', value, 'EXP_TYPE_NAME');
+  } else if (key === 'IMP_TYPE_CODE') {
+    handleXnkTypeChanged('Nhập khẩu', value, 'IMP_TYPE_NAME');
+  } else if (key === 'VESSEL' || key === 'VOYAGE') {
+    updateVesVoyDerived();
+  } else if (key === 'SHIP_NAME' || key === 'CNE_NAME') {
+    updateAllContextBanners();
+  }
+
+  if (key === 'VAT_RATE' || key === 'CURR') {
+    recalculateAllTotals(true);
+  }
+}
+
+function syncSharedFieldToDOM(key, value, sourceElement) {
+  document.querySelectorAll('[data-sync="' + key + '"]').forEach(function (el) {
+    if (el === sourceElement) return;
+    if (el.tagName === 'SELECT') {
+      ensureSelectHasOption(el, value);
+    }
+    el.value = value;
+  });
+}
+
+function setSharedFieldAndSync(key, value) {
+  const strVal = value == null ? '' : String(value);
+  APP_STATE.shared[key] = strVal;
+  syncSharedFieldToDOM(key, strVal, null);
+}
+
+function ensureSelectHasOption(selectEl, value) {
+  if (!value) return;
+  const exists = Array.prototype.some.call(selectEl.options, function (opt) {
+    return opt.value === value;
+  });
+  if (!exists) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = value;
+    selectEl.appendChild(opt);
+  }
+}
+
+function handlePolChanged(polValue) {
+  const cuocTau = APP_STATE.dropdowns.cuocTau || [];
+  const filteredPods = [];
+  const seen = {};
+
+  cuocTau.forEach(function (row) {
+    if (!polValue || row.POL === polValue) {
+      if (row.POD && !seen[row.POD]) {
+        seen[row.POD] = true;
+        filteredPods.push(row.POD);
+      }
+    }
+  });
+
+  // Update all POD select dropdowns across all views
+  document.querySelectorAll('select[data-sync="POD"]').forEach(function (sel) {
+    const currentPod = APP_STATE.shared.POD || '';
+    sel.innerHTML = '<option value="">-- Chọn Cảng dỡ hàng (POD) --</option>';
+    filteredPods.forEach(function (pod) {
+      const opt = document.createElement('option');
+      opt.value = pod;
+      opt.textContent = pod;
+      sel.appendChild(opt);
+    });
+    if (currentPod && seen[currentPod]) {
+      sel.value = currentPod;
+    }
+  });
+
+  // If current POD no longer matches filtered POL rows, clear POD or re-trigger POD lookup
+  const currentPod = APP_STATE.shared.POD || '';
+  if (currentPod && !seen[currentPod]) {
+    setSharedFieldAndSync('POD', '');
+  } else if (currentPod && seen[currentPod]) {
+    handlePodChanged(currentPod);
+  }
+}
+
+function handlePodChanged(podValue) {
+  if (!podValue) return;
+  const cuocTau = APP_STATE.dropdowns.cuocTau || [];
+  const currentPol = APP_STATE.shared.POL || '';
+
+  let match = cuocTau.find(function (row) {
+    return (!currentPol || row.POL === currentPol) && row.POD === podValue;
+  });
+
+  if (!match) {
+    match = cuocTau.find(function (row) {
+      return row.POD === podValue;
+    });
+  }
+
+  if (match) {
+    if (match.Quoc_Gia) setSharedFieldAndSync('DEST_CTRY', match.Quoc_Gia);
+    if (match.Ten_hang_tau) setSharedFieldAndSync('CAR_NAME', match.Ten_hang_tau);
+    if (match.Ten_tau) setSharedFieldAndSync('VESSEL', match.Ten_tau);
+    if (match.So_chuyen) setSharedFieldAndSync('VOYAGE', match.So_chuyen);
+    updateVesVoyDerived();
+  }
+}
+
+function updateVesVoyDerived() {
+  const vessel = String(APP_STATE.shared.VESSEL || '').trim();
+  const voyage = String(APP_STATE.shared.VOYAGE || '').trim();
+  const vesVoy = vessel && voyage ? (vessel + ' / ' + voyage) : (vessel || voyage || '');
+  setSharedFieldAndSync('VES_VOY', vesVoy);
+}
+
+function handleXnkTypeChanged(directionLabel, selectedCode, targetNameKey) {
+  const list = getFilteredLoaiHinhXnk(directionLabel);
+  const found = list.find(function (r) {
+    return r.Ma_loai_hinh === selectedCode;
+  });
+  setSharedFieldAndSync(targetNameKey, found ? found.Ten_loai_hinh : '');
+}
+
+function getFilteredLoaiHinhXnk(direction) {
+  const all = APP_STATE.dropdowns.loaiHinhXNK || [];
+  const normDir = direction.toLowerCase();
+  const isExport = normDir.indexOf('xuất') !== -1 || normDir.indexOf('xuat') !== -1;
+
+  return all.filter(function (row) {
+    const p = String(row.Phan_loai || '').toLowerCase();
+    if (isExport) {
+      return p.indexOf('xuất') !== -1 || p.indexOf('xuat') !== -1 || p === 'xk';
+    }
+    return p.indexOf('nhập') !== -1 || p.indexOf('nhap') !== -1 || p === 'nk';
+  });
+}
+
+function updateAllContextBanners() {
+  const ship = String(APP_STATE.shared.SHIP_NAME || '').trim() || 'Chưa nhập Shipper';
+  const cne = String(APP_STATE.shared.CNE_NAME || '').trim() || 'Chưa nhập Consignee';
+
+  document.querySelectorAll('.context-banner-parties').forEach(function (el) {
+    el.innerHTML = 'Pháp nhân đang áp dụng: <strong>' + escapeHtml(ship) + '</strong> &#10132; <strong>' + escapeHtml(cne) + '</strong>';
+  });
+}
+
+/* ==========================================================================
+   DYNAMIC TABLES SYNC (items[] & containers[])
+   ========================================================================== */
+
+function handleTableCellChange(target) {
+  const tableType = target.getAttribute('data-table-type');
+  const rowIdx = parseInt(target.getAttribute('data-row-idx'), 10);
+  const colKey = target.getAttribute('data-col-key');
+  if (!tableType || isNaN(rowIdx) || !colKey) return;
+
+  const targetArray = tableType === 'containers' ? APP_STATE.containers : APP_STATE.items;
+  if (!targetArray[rowIdx]) return;
+
+  // Store raw string to preserve leading zeros (HS code, LOT_NO, SEAL, CONT, etc.)
+  let rawVal = target.value;
+  if (colKey === 'CONT') {
+    rawVal = rawVal.toUpperCase();
+    if (target.value !== rawVal) {
+      target.value = rawVal;
+    }
+  }
+
+  targetArray[rowIdx][colKey] = rawVal;
+
+  // Auto-calculate row-level amounts for items[]
+  if (tableType === 'items') {
+    const item = targetArray[rowIdx];
+    if (colKey === 'QTY' || colKey === 'PRICE') {
+      const qty = parseNum(item.QTY);
+      const price = parseNum(item.PRICE);
+      item.AMT = (item.QTY !== '' || item.PRICE !== '') ? formatNum(qty * price, 2) : '';
+      syncTableCellToDOM('items', rowIdx, 'AMT', item.AMT, null);
+    }
+
+    if (colKey === 'EX_VAL' || colKey === 'EX_TAX_RATE') {
+      const exVal = parseNum(item.EX_VAL);
+      const exRate = parseNum(item.EX_TAX_RATE);
+      item.EX_AMT = (item.EX_VAL !== '' && item.EX_TAX_RATE !== '') ? formatNum((exVal * exRate) / 100, 2) : '';
+      syncTableCellToDOM('items', rowIdx, 'EX_AMT', item.EX_AMT, null);
+    }
+
+    if (colKey === 'FEE_VAL' || colKey === 'FEE_RATE') {
+      const feeVal = parseNum(item.FEE_VAL);
+      const feeRate = parseNum(item.FEE_RATE);
+      item.FEE_AMT = (item.FEE_VAL !== '' && item.FEE_RATE !== '') ? formatNum((feeVal * feeRate) / 100, 2) : '';
+      syncTableCellToDOM('items', rowIdx, 'FEE_AMT', item.FEE_AMT, null);
+    }
+  }
+
+  // Mirror edited cell across all other tabs' tables without losing focus
+  syncTableCellToDOM(tableType, rowIdx, colKey, rawVal, target);
+
+  // ISO 6346 live validation on CONT inputs
+  if (tableType === 'containers' && colKey === 'CONT') {
+    validateContainerInputsInDOM();
+  }
+
+  recalculateAllTotals(true);
+}
+
+function syncTableCellToDOM(tableType, rowIdx, colKey, value, sourceElement) {
+  const selector =
+    '[data-table-type="' + tableType + '"][data-row-idx="' + rowIdx + '"][data-col-key="' + colKey + '"]';
+
+  document.querySelectorAll(selector).forEach(function (el) {
+    if (el === sourceElement) return;
+    if (el.tagName === 'SELECT') {
+      ensureSelectHasOption(el, value);
+    }
+    el.value = value;
+  });
+}
+
+function addItemRow() {
+  APP_STATE.items.push(createEmptyItem());
+  recalculateAllTotals(true);
+  rerenderAllSyncedTables('items');
+}
+
+function deleteItemRow(rowIdx) {
+  APP_STATE.items.splice(rowIdx, 1);
+  recalculateAllTotals(true);
+  rerenderAllSyncedTables('items');
+}
+
+function addContainerRow() {
+  APP_STATE.containers.push(createEmptyContainer());
+  recalculateAllTotals(true);
+  rerenderAllSyncedTables('containers');
+}
+
+function deleteContainerRow(rowIdx) {
+  APP_STATE.containers.splice(rowIdx, 1);
+  recalculateAllTotals(true);
+  rerenderAllSyncedTables('containers');
+}
+
+/* ==========================================================================
+   ISO 6346 CONTAINER VALIDATION (^[A-Z]{4}\d{7}$)
+   ========================================================================== */
+
+function isValidIsoContainer(contNo) {
+  const trimmed = String(contNo || '').trim().toUpperCase();
+  if (!trimmed) return true; // empty is allowed (e.g. LCL)
+  return ISO_6346_REGEX.test(trimmed);
+}
+
+function getInvalidIsoContainers() {
+  const invalid = [];
+  (APP_STATE.containers || []).forEach(function (c) {
+    const val = String(c.CONT || '').trim().toUpperCase();
+    if (val && !ISO_6346_REGEX.test(val)) {
+      invalid.push(val);
+    }
+  });
+  return invalid;
+}
+
+function validateContainerInputsInDOM() {
+  document.querySelectorAll('[data-table-type="containers"][data-col-key="CONT"]').forEach(function (input) {
+    const val = String(input.value || '').trim().toUpperCase();
+    const valid = isValidIsoContainer(val);
+    input.classList.toggle('iso-invalid', !valid);
+
+    const cell = input.parentNode;
+    if (!cell) return;
+    let badge = cell.querySelector('.badge-warning-iso');
+    if (!valid) {
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'badge-warning-iso';
+        badge.textContent = 'Sai chuẩn ISO 6346 (4 chữ + 7 số)';
+        cell.appendChild(badge);
+      }
+    } else if (badge) {
+      badge.parentNode.removeChild(badge);
+    }
+  });
+}
+
+/* ==========================================================================
+   REAL-TIME AUTO-CALCULATIONS & CURRENCY WORDS
+   ========================================================================== */
+
+function parseNum(val) {
+  if (val == null || val === '') return 0;
+  const cleaned = String(val).replace(/,/g, '').trim();
+  const num = Number(cleaned);
+  return isNaN(num) ? 0 : num;
+}
+
+function formatNum(num, maxDecimals) {
+  if (num == null || isNaN(num)) return '';
+  const factor = Math.pow(10, maxDecimals || 2);
+  const rounded = Math.round((num + Number.EPSILON) * factor) / factor;
+  if (rounded === 0) return '0';
+  return String(rounded);
+}
+
+function recalculateAllTotals(syncDom) {
+  const items = APP_STATE.items || [];
+  const containers = APP_STATE.containers || [];
+
+  let totQty = 0;
+  let totAmt = 0;
+  let totItemPack = 0;
+  let totNw = 0;
+  let totItemGw = 0;
+  let totItemCbm = 0;
+  let totTax = 0;
+
+  items.forEach(function (it) {
+    totQty += parseNum(it.QTY);
+    totAmt += parseNum(it.AMT);
+    totItemPack += parseNum(it.PACK);
+    totNw += parseNum(it.NW);
+    totItemGw += parseNum(it.GW);
+    totItemCbm += parseNum(it.CBM);
+    totTax += parseNum(it.EX_AMT) + parseNum(it.FEE_AMT);
+  });
+
+  let totContPack = 0;
+  let totContGw = 0;
+  let totContCbm = 0;
+  let totVgm = 0;
+
+  containers.forEach(function (c) {
+    totContPack += parseNum(c.PACK);
+    const gw = parseNum(c.GW);
+    const vgm = parseNum(c.VGM_WEI);
+    totContGw += gw;
+    totContCbm += parseNum(c.CBM);
+    totVgm += vgm > 0 ? vgm : gw;
+  });
+
+  const totPack = totItemPack > 0 ? totItemPack : totContPack;
+  const totGw = totItemGw > 0 ? totItemGw : totContGw;
+  const totCbm = totItemCbm > 0 ? totItemCbm : totContCbm;
+
+  const vatRate = parseNum(APP_STATE.shared.VAT_RATE);
+  const vatAmt = vatRate > 0 ? (totAmt * vatRate) / 100 : 0;
+  const grandTotal = totAmt + vatAmt;
+
+  const curr = String(APP_STATE.shared.CURR || 'USD').trim().toUpperCase();
+  const amtForWords = vatRate > 0 ? grandTotal : totAmt;
+
+  const updates = {
+    TOT_QTY: totQty > 0 ? formatNum(totQty, 3) : (items.length ? '0' : ''),
+    TOT_AMT: totAmt > 0 ? formatNum(totAmt, 2) : (items.length ? '0' : ''),
+    VAT_AMT: vatRate > 0 ? formatNum(vatAmt, 2) : '',
+    GRAND_TOTAL: grandTotal > 0 ? formatNum(grandTotal, 2) : (items.length ? '0' : ''),
+    TOT_PACK: totPack > 0 ? formatNum(totPack, 2) : '',
+    TOT_NW: totNw > 0 ? formatNum(totNw, 3) : '',
+    TOT_GW: totGw > 0 ? formatNum(totGw, 3) : '',
+    TOT_CBM: totCbm > 0 ? formatNum(totCbm, 3) : '',
+    TOT_VGM: totVgm > 0 ? formatNum(totVgm, 3) : '',
+    TOT_TAX: totTax > 0 ? formatNum(totTax, 2) : '',
+    TOT_AMT_WORDS: amtForWords > 0
+      ? (curr === 'VND'
+        ? numberToVietnameseWords(amtForWords, 'VND')
+        : numberToEnglishWords(amtForWords, curr))
+      : '',
+    TOT_TAX_WORDS: totTax > 0 ? numberToVietnameseWords(totTax, 'VND') : ''
+  };
+
+  // Auto-generate CONTAINER_SEAL_DETAILS preview in shared
+  const contDetails = containers
+    .map(function (c) {
+      return [c.CONT, c.CTYPE, c.SEAL]
+        .map(function (v) { return String(v || '').trim(); })
+        .filter(Boolean)
+        .join(' / ');
+    })
+    .filter(Boolean)
+    .join('\n');
+  updates.CONTAINER_SEAL_DETAILS = contDetails;
+
+  Object.keys(updates).forEach(function (k) {
+    if (syncDom) {
+      setSharedFieldAndSync(k, updates[k]);
+    } else {
+      APP_STATE.shared[k] = updates[k];
+    }
+  });
+}
+
+/* ==========================================================================
+   ENGLISH & VIETNAMESE CURRENCY IN WORDS
+   ========================================================================== */
+
+function numberToEnglishWords(amount, currencyCode) {
+  const num = Number(amount);
+  if (isNaN(num) || num <= 0) return '';
+
+  const rounded = Math.round(num * 100) / 100;
+  const intPart = Math.floor(rounded);
+  const decPart = Math.round((rounded - intPart) * 100);
+
+  const ones = [
+    '', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
+    'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN',
+    'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'
+  ];
+  const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+  const scales = ['', 'THOUSAND', 'MILLION', 'BILLION', 'TRILLION'];
+
+  function threeDigitsToEn(n) {
+    let words = [];
+    const h = Math.floor(n / 100);
+    const rem = n % 100;
+    if (h > 0) words.push(ones[h] + ' HUNDRED');
+    if (rem > 0) {
+      if (rem < 20) {
+        words.push(ones[rem]);
+      } else {
+        const t = Math.floor(rem / 10);
+        const o = rem % 10;
+        words.push(o > 0 ? tens[t] + '-' + ones[o] : tens[t]);
+      }
+    }
+    return words.join(' ');
+  }
+
+  function convertInt(n) {
+    if (n === 0) return 'ZERO';
+    let parts = [];
+    let scaleIdx = 0;
+    while (n > 0) {
+      const chunk = n % 1000;
+      if (chunk > 0) {
+        const chunkStr = threeDigitsToEn(chunk);
+        parts.unshift(scales[scaleIdx] ? chunkStr + ' ' + scales[scaleIdx] : chunkStr);
+      }
+      n = Math.floor(n / 1000);
+      scaleIdx++;
+    }
+    return parts.join(' ');
+  }
+
+  const currNames = {
+    USD: { major: 'US DOLLARS', minor: 'CENTS' },
+    EUR: { major: 'EUROS', minor: 'CENTS' },
+    JPY: { major: 'JAPANESE YEN', minor: 'SEN' },
+    GBP: { major: 'POUNDS STERLING', minor: 'PENCE' },
+    CNY: { major: 'CHINESE YUAN', minor: 'FEN' },
+    SGD: { major: 'SINGAPORE DOLLARS', minor: 'CENTS' },
+    AUD: { major: 'AUSTRALIAN DOLLARS', minor: 'CENTS' },
+    KRW: { major: 'KOREAN WON', minor: 'JEON' },
+    VND: { major: 'VIETNAM DONG', minor: 'XU' }
+  };
+
+  const curr = currNames[currencyCode] || { major: currencyCode || 'US DOLLARS', minor: 'CENTS' };
+  let result = 'SAY TOTAL ' + curr.major + ' ' + convertInt(intPart);
+  if (decPart > 0) {
+    result += ' AND ' + convertInt(decPart) + ' ' + curr.minor;
+  }
+  return result + ' ONLY.';
+}
+
+function numberToVietnameseWords(amount, currencyCode) {
+  const num = Math.round(Number(amount));
+  if (isNaN(num) || num <= 0) return '';
+
+  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+  const units = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ', 'triệu tỷ'];
+
+  function readThreeDigits(n, showZeroHundred) {
+    const tram = Math.floor(n / 100);
+    const chuc = Math.floor((n % 100) / 10);
+    const donvi = n % 10;
+    let res = '';
+
+    if (tram > 0 || showZeroHundred) {
+      res += digits[tram] + ' trăm ';
+    }
+    if (chuc > 1) {
+      res += digits[chuc] + ' mươi ';
+      if (donvi === 1) res += 'mốt';
+      else if (donvi === 5) res += 'lăm';
+      else if (donvi > 0) res += digits[donvi];
+    } else if (chuc === 1) {
+      res += 'mười ';
+      if (donvi === 5) res += 'lăm';
+      else if (donvi > 0) res += digits[donvi];
+    } else if (donvi > 0) {
+      if (tram > 0 || showZeroHundred) res += 'lẻ ';
+      res += digits[donvi];
+    }
+    return res.trim();
+  }
+
+  let n = num;
+  const groups = [];
+  while (n > 0) {
+    groups.push(n % 1000);
+    n = Math.floor(n / 1000);
+  }
+
+  let parts = [];
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i] > 0) {
+      const showZero = i < groups.length - 1;
+      const text = readThreeDigits(groups[i], showZero);
+      parts.push(units[i] ? text + ' ' + units[i] : text);
+    }
+  }
+
+  let joined = parts.join(' ').replace(/\s+/g, ' ').trim();
+  joined = joined.charAt(0).toUpperCase() + joined.slice(1);
+  const unitLabel = currencyCode && currencyCode !== 'VND' ? currencyCode : 'đồng';
+  return joined + ' ' + unitLabel + ' chẵn.';
+}
+</script>

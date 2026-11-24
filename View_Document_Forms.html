@@ -1,0 +1,64 @@
+    <!-- Main Workspace Area -->
+    <main id="mainWorkspace" class="main-workspace">
+      <div id="workspacePanels"></div>
+    </main>
+  </div> <!-- /.app-body -->
+</div> <!-- /#appShell -->
+
+<!-- ========================================================================
+     BATCH EXPORT MODAL (Xuất hàng loạt)
+     ======================================================================== -->
+<div id="batchExportModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="batchModalTitle">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h2 id="batchModalTitle" class="modal-title">Xuất hàng loạt bộ chứng từ</h2>
+      <button type="button" class="modal-close" onclick="closeBatchExportModal()" aria-label="Đóng">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
+        <span style="font-size:13px; color:var(--text-secondary);">
+          Chọn các chứng từ cần tạo đồng thời trên Google Drive (Google Docs &amp; PDF):
+        </span>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllBatchCheckboxes(true)">Chọn tất cả (20)</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllBatchCheckboxes(false)">Bỏ chọn tất cả</button>
+        </div>
+      </div>
+
+      <div id="batchExportChecklist"></div>
+
+      <div id="batchExportResults" class="export-result-box hidden">
+        <div class="export-result-title">Kết quả xuất hàng loạt</div>
+        <div id="batchExportResultsList" class="export-result-list"></div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeBatchExportModal()">Đóng</button>
+      <button type="button" class="btn btn-primary" onclick="handleExportBatch()">Xuất các chứng từ đã chọn</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================================
+     CLEAR DATA CONFIRMATION MODAL (No window.confirm)
+     ======================================================================== -->
+<div id="clearConfirmModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="clearModalTitle">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-header">
+      <h2 id="clearModalTitle" class="modal-title">Xác nhận xóa dữ liệu</h2>
+      <button type="button" class="modal-close" onclick="closeClearConfirmModal()" aria-label="Đóng">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin:0; font-size:13px; color:var(--text-secondary);">
+        Bạn có chắc chắn muốn xóa toàn bộ dữ liệu đang nhập trên biểu mẫu hiện tại không?
+        (Bản nháp đã lưu trên Google Sheet sẽ chỉ bị ghi đè khi bạn bấm <strong>Lưu nháp</strong>.)
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeClearConfirmModal()">Hủy</button>
+      <button type="button" class="btn btn-danger-outline" onclick="confirmClearData()">Xác nhận xóa</button>
+    </div>
+  </div>
+</div>

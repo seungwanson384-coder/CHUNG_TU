@@ -1,0 +1,6 @@
+{
+  "name": "XNK & Logistics Document Auto-Fill (GAS Backend)",
+  "description": "Google Apps Script backend for automated Import-Export and Logistics document generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
