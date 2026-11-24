@@ -27,83 +27,83 @@ const OUTPUT_FOLDER_ID = '10qg61iy-FqOkDKSqkQu_fFnvMcoVbetb';
  */
 const TEMPLATE_MAP = {
   QUOTATION: {
-    name: 'Bảng Báo Giá (Quotation)',
+    name: 'Quotation',
     tabName: 'QUOTATION'
   },
   SALES_CONTRACT: {
-    name: 'Hợp Đồng Ngoại Thương (Sales Contract)',
+    name: 'Sales Contract',
     tabName: 'SALES_CONTRACT'
   },
   COMMERCIAL_INVOICE: {
-    name: 'Hóa Đơn Thương Mại (Commercial Invoice)',
+    name: 'Commercial Invoice',
     tabName: 'COMMERCIAL_INVOICE'
   },
   PACKING_LIST: {
-    name: 'Phiếu Đóng Gói Hàng Hóa (Packing List)',
+    name: 'Packing List',
     tabName: 'PACKING_LIST'
   },
   BOOKING_REQUEST: {
-    name: 'Yêu Cầu Đặt Chỗ (Booking Request)',
+    name: 'Booking Request',
     tabName: 'BOOKING_REQUEST'
   },
   VGM: {
-    name: 'Phiếu Xác Nhận Khối Lượng Toàn Bộ (VGM)',
+    name: 'VGM',
     tabName: 'VGM'
   },
   SHIPPING_INSTRUCTION: {
-    name: 'Hướng Dẫn Giao Hàng (Shipping Instruction)',
+    name: 'Shipping Instruction',
     tabName: 'SHIPPING_INSTRUCTION'
   },
   VETERINARY_CERTIFICATE: {
-    name: 'Giấy Chứng Nhận Kiểm Dịch Động Vật (Veterinary Certificate)',
+    name: 'Veterinary Certificate',
     tabName: 'VETERINARY_CERTIFICATE'
   },
   PHYTOSANITARY_CERTIFICATE: {
-    name: 'Giấy Chứng Nhận Kiểm Dịch Thực Vật (Phytosanitary Certificate)',
+    name: 'Phytosanitary Certificate',
     tabName: 'PHYTOSANITARY_CERTIFICATE'
   },
   QUALITY_CERTIFICATE: {
-    name: 'Giấy Chứng Nhận Chất Lượng (Quality Certificate)',
+    name: 'Quality Certificate',
     tabName: 'QUALITY_CERTIFICATE'
   },
   FUMIGATION_CERTIFICATE: {
-    name: 'Giấy Chứng Nhận Hun Trùng (Fumigation Certificate)',
+    name: 'Fumigation Certificate',
     tabName: 'FUMIGATION_CERTIFICATE'
   },
   CERTIFICATE_OF_ORIGIN: {
-    name: 'Giấy Chứng Nhận Xuất Xứ (Certificate of Origin - C/O)',
+    name: 'Certificate of Origin',
     tabName: 'CERTIFICATE_OF_ORIGIN'
   },
   BOOKING_NOTE: {
-    name: 'Phiếu Đặt Chỗ (Booking Note)',
+    name: 'Booking Note',
     tabName: 'BOOKING_NOTE'
   },
   BOOKING_CONFIRMATION: {
-    name: 'Xác Nhận Đặt Chỗ (Booking Confirmation)',
+    name: 'Booking Confirmation',
     tabName: 'BOOKING_CONFIRMATION'
   },
   RELEASE_ORDER: {
-    name: 'Lệnh Cấp Container Rỗng (Release Order)',
+    name: 'Release Order',
     tabName: 'RELEASE_ORDER'
   },
   BILL_OF_LADING: {
-    name: 'Vận Đơn Đường Biển (Bill of Lading)',
+    name: 'Bill of Lading',
     tabName: 'BILL_OF_LADING'
   },
   DELIVERY_ORDER: {
-    name: 'Lệnh Giao Hàng (Delivery Order)',
+    name: 'Delivery Order',
     tabName: 'DELIVERY_ORDER'
   },
   To_khai_XK: {
-    name: 'Tờ Khai Hải Quan Xuất Khẩu',
+    name: 'Export Customs Declaration',
     tabName: 'To_khai_XK'
   },
   To_khai_NK: {
-    name: 'Tờ Khai Hải Quan Nhập Khẩu',
+    name: 'Import Customs Declaration',
     tabName: 'To_khai_NK'
   },
   LETTER_OF_CREDIT: {
-    name: 'Thư Tín Dụng (Letter of Credit - L/C)',
+    name: 'Letter of Credit',
     tabName: 'LETTER_OF_CREDIT'
   }
 };
@@ -116,6 +116,7 @@ const ITEM_TAGS = [
   'PCODE',
   'DES',
   'HS',
+  'ORG',
   'PREF',
   'MARKS',
   'LOT_NO',
@@ -123,6 +124,7 @@ const ITEM_TAGS = [
   'UNIT',
   'PRICE',
   'AMT',
+  'CTYPE',
   'NW'
 ];
 

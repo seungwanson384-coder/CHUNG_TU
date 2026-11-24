@@ -1,22 +1,16 @@
 /**
  * GS_Doc_Engine.gs
- * Core Google Docs multi-tab auto-fill engine using 1 master Google Doc ("Chứng từ" - 20 Tabs):
- * 1. Copy MASTER_TEMPLATE_DOC_ID to OUTPUT_FOLDER_ID
- * 2. Open copy via DocumentApp.openById() and read tabs via doc.getTabs()
- * 3. Match tab by tab.getTitle().trim() (case-insensitive) against TEMPLATE_MAP[docKey].tabName
- *    and retrieve Body, Header, Footer via tab.asDocumentTab()
- * 4. Execute 3-step processing per selected Tab:
- *    - Bottom-up target-row cloning (processDynamicTableRows)
- *    - Global single-tag replacement (replaceGlobalTags)
- *    - Sanitizer (/\{\{[A-Z0-9_]+\}\}/g -> "")
- * 5. Save & close, then delete unselected tabs via Google Docs API (Docs.Documents.batchUpdate deleteTab)
- *    with safe try...catch fallback if Advanced Docs Service is not yet enabled.
+ * Core Google Docs auto-fill engine supporting BOTH:
+ * - Mode A (Folder of 20 Google Docs templates, e.g. folder "CHỨNG TỪ"):
+ *   MASTER_TEMPLATE_DOC_ID = Folder ID containing 20 files named by docKey (QUOTATION, BILL_OF_LADING, ...)
+ * - Mode B (Single multi-tab Google Doc with 20 Tabs):
+ *   MASTER_TEMPLATE_DOC_ID = Google Doc ID containing 20 tabs matching TEMPLATE_MAP[docKey].tabName
  * Runtime: Google Apps Script (V8)
  */
 
 /**
- * Tạo 1 hoặc nhiều chứng từ từ file Google Docs tổng hợp (MASTER_TEMPLATE_DOC_ID)
- * và trả về link Google Docs + link tải PDF.
+ * Tạo 1 hoặc nhiều chứng từ từ thư mục mẫu 20 file Google Docs hoặc 1 file Google Docs tổng hợp
+ * (MASTER_TEMPLATE_DOC_ID) và trả về link Google Docs + link tải PDF.
  *
  * @param {string} maSV
  * @param {Array<string>|string} docKeysArray
@@ -46,22 +40,6 @@ function generateDocuments(maSV, docKeysArray, payload) {
       };
     }
 
-    if (!MASTER_TEMPLATE_DOC_ID || MASTER_TEMPLATE_DOC_ID.indexOf('YOUR_') === 0) {
-      return {
-        success: false,
-        results: [],
-        message: 'Chưa cấu hình MASTER_TEMPLATE_DOC_ID trong GS_Config_Templates.gs.'
-      };
-    }
-
-    if (!OUTPUT_FOLDER_ID || OUTPUT_FOLDER_ID.indexOf('YOUR_') === 0) {
-      return {
-        success: false,
-        results: [],
-        message: 'Chưa cấu hình OUTPUT_FOLDER_ID trong GS_Config_Templates.gs.'
-      };
-    }
-
     const parsedPayload =
       typeof payload === 'string'
         ? JSON.parse(payload || '{}')
@@ -71,30 +49,114 @@ function generateDocuments(maSV, docKeysArray, payload) {
     const items = Array.isArray(parsedPayload.items) ? parsedPayload.items : [];
     const containers = Array.isArray(parsedPayload.containers) ? parsedPayload.containers : [];
 
-    // Bước 1: Nhân bản file Google Docs gốc ("Chứng từ") vào OUTPUT_FOLDER_ID
+    const validated = validateMasterTemplateAndFolder_();
+    const outputFolder = validated.outputFolder;
     const suffix = resolveDocFilenameSuffix_(shared, maSV);
+
+    // =========================================================================
+    // CHẾ ĐỘ A: MASTER_TEMPLATE_DOC_ID là THƯ MỤC chứa 20 file Google Docs
+    // =========================================================================
+    if (validated.mode === 'FOLDER') {
+      const results = [];
+      const errors = [];
+
+      for (let i = 0; i < keys.length; i++) {
+        const docKey = keys[i];
+        const tplConfig = TEMPLATE_MAP[docKey];
+
+        if (!tplConfig) {
+          errors.push({
+            docKey: docKey,
+            message: 'Không tìm thấy cấu hình cho "' + docKey + '" trong TEMPLATE_MAP.'
+          });
+          continue;
+        }
+
+        let copyFile = null;
+        try {
+          const tplFile = findTemplateFileInFolder_(validated.templateFolder, docKey, tplConfig);
+          if (!tplFile) {
+            errors.push({
+              docKey: docKey,
+              message:
+                'Không tìm thấy file Google Docs mẫu "' +
+                docKey +
+                '" trong thư mục "' +
+                validated.templateFolder.getName() +
+                '".'
+            });
+            continue;
+          }
+
+          const copyFileName = docKey + '_' + suffix;
+          copyFile = tplFile.makeCopy(copyFileName, outputFolder);
+          const copyFileId = copyFile.getId();
+
+          const doc = DocumentApp.openById(copyFileId);
+          processSingleDocumentObject_(doc, items, containers, shared);
+          doc.saveAndClose();
+
+          results.push({
+            docKey: docKey,
+            docName: copyFileName,
+            tabName: tplFile.getName(),
+            docUrl: copyFile.getUrl(),
+            pdfUrl: 'https://docs.google.com/document/d/' + copyFileId + '/export?format=pdf'
+          });
+        } catch (fileErr) {
+          if (copyFile) {
+            try {
+              copyFile.setTrashed(true);
+            } catch (e) {}
+          }
+          errors.push({
+            docKey: docKey,
+            message: 'Lỗi xử lý "' + docKey + '": ' + fileErr.message
+          });
+        }
+      }
+
+      if (results.length === 0) {
+        return {
+          success: false,
+          results: [],
+          errors: errors,
+          message: errors.length > 0 ? errors[0].message : 'Không tìm thấy file mẫu phù hợp để xuất chứng từ.'
+        };
+      }
+
+      const folderResponse = {
+        success: true,
+        results: results
+      };
+      if (errors.length > 0) {
+        folderResponse.errors = errors;
+      }
+      return folderResponse;
+    }
+
+    // =========================================================================
+    // CHẾ ĐỘ B: MASTER_TEMPLATE_DOC_ID là 1 FILE GOOGLE DOCS nhiều Tab
+    // =========================================================================
+    const masterFile = validated.masterFile;
     const copyFileName =
       keys.length === 1
         ? keys[0] + '_' + suffix
         : 'BO_CHUNG_TU_' + suffix;
 
-    const masterFile = DriveApp.getFileById(MASTER_TEMPLATE_DOC_ID);
-    const outputFolder = DriveApp.getFolderById(OUTPUT_FOLDER_ID);
     const copyFile = masterFile.makeCopy(copyFileName, outputFolder);
     const copyFileId = copyFile.getId();
     const docUrl = copyFile.getUrl();
     const pdfUrl = 'https://docs.google.com/document/d/' + copyFileId + '/export?format=pdf';
 
-    // Bước 2: Mở file bản sao và lấy danh sách toàn bộ Tab bằng doc.getTabs()
     const doc = DocumentApp.openById(copyFileId);
-    const topLevelTabs = doc.getTabs();
+    const topLevelTabs = typeof doc.getTabs === 'function' ? doc.getTabs() : [];
     const allTabs = collectAllTabsFlat_(topLevelTabs);
 
     const selectedTabIds = [];
     const results = [];
     const errors = [];
 
-    // Bước 3 & 4: Tìm đúng Tab của từng docKey và chạy 3 bước xử lý trên Tab đó
     for (let i = 0; i < keys.length; i++) {
       const docKey = keys[i];
       const tplConfig = TEMPLATE_MAP[docKey];
@@ -121,13 +183,8 @@ function generateDocuments(maSV, docKeysArray, payload) {
         const body = docTab.getBody();
         const sections = collectDocumentTabSections_(docTab);
 
-        // 4a. Nhân bản dòng bảng động từ dưới lên trên (items[], containers[], tax)
         processDynamicTableRows(body, items, containers);
-
-        // 4b. Thay thế toàn bộ biến đơn {{TAG}} trên Body, Header, Footer của Tab
         replaceGlobalTags(sections, shared);
-
-        // 4c. Quét dọn thẻ sót /\{\{[A-Z0-9_]+\}\}/g -> ""
         sanitizeRemainingTags_(sections);
 
         const tabId = targetTab.getId();
@@ -150,11 +207,9 @@ function generateDocuments(maSV, docKeysArray, payload) {
       }
     }
 
-    // Lưu và đóng DocumentApp trước khi gọi Google Docs API để tránh xung đột phiên bản
     doc.saveAndClose();
 
     if (results.length === 0) {
-      // Nếu không có tab nào xử lý thành công, xóa file copy rỗng cho sạch Drive
       try {
         copyFile.setTrashed(true);
       } catch (trashErr) {}
@@ -167,7 +222,6 @@ function generateDocuments(maSV, docKeysArray, payload) {
       };
     }
 
-    // Bước 5: Xóa các Tab không được chọn khỏi file bản sao bằng Google Docs API (deleteTab)
     const cleanupStatus = removeUnselectedTabsViaDocsApi_(copyFileId, topLevelTabs, selectedTabIds);
 
     const response = {
@@ -186,8 +240,536 @@ function generateDocuments(maSV, docKeysArray, payload) {
     return {
       success: false,
       results: [],
-      message: 'Lỗi hệ thống tạo chứng từ: ' + err.message
+      message: formatEngineErrorMessage_('Lỗi hệ thống tạo chứng từ', err)
     };
+  }
+}
+
+/**
+ * Tạo bản xem trước (Live Preview) cho 1 chứng từ từ file mẫu (MASTER_TEMPLATE_DOC_ID).
+ * Sao chép tạm vào DriveApp.getRootFolder() để tránh lỗi phân quyền trên thư mục chia sẻ OUTPUT_FOLDER_ID,
+ * giữ nguyên 100% định dạng gốc, xuất PDF dạng base64, xóa ngay file tạm và trả về { success: true, base64Pdf }.
+ *
+ * @param {string} maSV
+ * @param {string} docKey
+ * @param {{shared?: Object, items?: Array<Object>, containers?: Array<Object>}|string} payload
+ * @return {{success: boolean, docKey?: string, docName?: string, tabName?: string, base64Pdf?: string, pdfBase64?: string, mimeType?: string, warning?: string, message?: string}}
+ */
+function previewDocument(maSV, docKey, payload) {
+  let tempDocFile = null;
+
+  try {
+    const cleanKey = String(docKey || '').trim();
+    if (!cleanKey) {
+      return {
+        success: false,
+        message: 'Thiếu mã chứng từ để xem trước.'
+      };
+    }
+
+    const tplConfig = TEMPLATE_MAP[cleanKey];
+    if (!tplConfig) {
+      return {
+        success: false,
+        message: 'Không tìm thấy cấu hình cho "' + cleanKey + '" trong TEMPLATE_MAP.'
+      };
+    }
+
+    const parsedPayload =
+      typeof payload === 'string'
+        ? JSON.parse(payload || '{}')
+        : (payload || {});
+
+    const shared = buildEnrichedShared_(parsedPayload);
+    const items = Array.isArray(parsedPayload.items) ? parsedPayload.items : [];
+    const containers = Array.isArray(parsedPayload.containers) ? parsedPayload.containers : [];
+
+    const safeMaSV = String(maSV == null ? 'GUEST' : maSV)
+      .trim()
+      .replace(/[^A-Za-z0-9_-]/g, '_') || 'GUEST';
+
+    const rootFolder = DriveApp.getRootFolder();
+    const tempDocName = '__PREVIEW_TEMP_' + safeMaSV + '_' + Date.now();
+    const validated = validateMasterTemplateAndFolder_(false);
+
+    let pdfBlob = null;
+    let cleanupStatus = null;
+    let resolvedTemplateLabel = tplConfig.tabName || cleanKey;
+
+    if (validated.mode === 'FOLDER') {
+      const tplFile = findTemplateFileInFolder_(validated.templateFolder, cleanKey, tplConfig);
+      if (!tplFile) {
+        return {
+          success: false,
+          message:
+            'Không tìm thấy file Google Docs mẫu "' +
+            cleanKey +
+            '" trong thư mục "' +
+            validated.templateFolder.getName() +
+            '".'
+        };
+      }
+
+      resolvedTemplateLabel = tplFile.getName();
+      tempDocFile = tplFile.makeCopy(tempDocName, rootFolder);
+
+      const doc = DocumentApp.openById(tempDocFile.getId());
+      processSingleDocumentObject_(doc, items, containers, shared);
+      doc.saveAndClose();
+
+      pdfBlob = tempDocFile.getAs('application/pdf');
+    } else {
+      const masterFile = validated.masterFile;
+      tempDocFile = masterFile.makeCopy(tempDocName, rootFolder);
+      const tempDocId = tempDocFile.getId();
+
+      const doc = DocumentApp.openById(tempDocId);
+      const topLevelTabs = typeof doc.getTabs === 'function' ? doc.getTabs() : [];
+      const allTabs = collectAllTabsFlat_(topLevelTabs);
+      const targetTab = findTabByTitleInsensitive_(allTabs, tplConfig.tabName);
+
+      if (!targetTab) {
+        doc.saveAndClose();
+        try {
+          tempDocFile.setTrashed(true);
+          tempDocFile = null;
+        } catch (e) {}
+
+        return {
+          success: false,
+          message: 'Không tìm thấy Tab "' + tplConfig.tabName + '" trong file Google Docs mẫu.'
+        };
+      }
+
+      const docTab = targetTab.asDocumentTab();
+      const body = docTab.getBody();
+      const sections = collectDocumentTabSections_(docTab);
+
+      processDynamicTableRows(body, items, containers);
+      replaceGlobalTags(sections, shared);
+      sanitizeRemainingTags_(sections);
+
+      const tabId = targetTab.getId();
+      doc.saveAndClose();
+
+      cleanupStatus = removeUnselectedTabsViaDocsApi_(
+        tempDocId,
+        topLevelTabs,
+        tabId ? [tabId] : []
+      );
+
+      if (cleanupStatus && cleanupStatus.warning && tabId) {
+        try {
+          const exportUrl =
+            'https://docs.google.com/document/d/' +
+            tempDocId +
+            '/export?format=pdf&tab=' +
+            encodeURIComponent(tabId);
+          const fetchRes = UrlFetchApp.fetch(exportUrl, {
+            headers: {
+              Authorization: 'Bearer ' + ScriptApp.getOAuthToken()
+            },
+            muteHttpExceptions: true
+          });
+          if (fetchRes.getResponseCode() === 200) {
+            pdfBlob = fetchRes.getBlob();
+          }
+        } catch (fetchErr) {}
+      }
+
+      if (!pdfBlob) {
+        pdfBlob = tempDocFile.getAs('application/pdf');
+      }
+    }
+
+    const base64Pdf = Utilities.base64Encode(pdfBlob.getBytes());
+
+    if (tempDocFile) {
+      try {
+        tempDocFile.setTrashed(true);
+        tempDocFile = null;
+      } catch (trashDocErr) {}
+    }
+
+    const response = {
+      success: true,
+      docKey: cleanKey,
+      docName: tplConfig.name || cleanKey,
+      tabName: resolvedTemplateLabel,
+      base64Pdf: base64Pdf,
+      pdfBase64: base64Pdf,
+      mimeType: 'application/pdf'
+    };
+
+    if (cleanupStatus && cleanupStatus.warning) {
+      response.warning = cleanupStatus.warning;
+    }
+
+    return response;
+  } catch (err) {
+    if (tempDocFile) {
+      try {
+        tempDocFile.setTrashed(true);
+        tempDocFile = null;
+      } catch (e) {}
+    }
+    return {
+      success: false,
+      message: formatEngineErrorMessage_('Lỗi tạo bản xem trước chứng từ', err)
+    };
+  }
+}
+
+/**
+ * Kiểm tra MASTER_TEMPLATE_DOC_ID (chấp nhận cả THƯ MỤC chứa 20 file Google Docs
+ * lẫn 1 file Google Docs nhiều Tab) và tùy chọn kiểm tra OUTPUT_FOLDER_ID.
+ * @param {boolean=} requireOutputFolder
+ * @return {{mode: string, masterId: string, templateFolder?: GoogleAppsScript.Drive.Folder, masterFile?: GoogleAppsScript.Drive.File, outputFolderId: string, outputFolder: GoogleAppsScript.Drive.Folder|null}}
+ */
+function validateMasterTemplateAndFolder_(requireOutputFolder) {
+  const shouldCheckOutput = requireOutputFolder !== false;
+  const masterId = String(typeof MASTER_TEMPLATE_DOC_ID !== 'undefined' ? MASTER_TEMPLATE_DOC_ID : '').trim();
+  const outputFolderId = String(typeof OUTPUT_FOLDER_ID !== 'undefined' ? OUTPUT_FOLDER_ID : '').trim();
+
+  if (!masterId || masterId.indexOf('YOUR_') === 0) {
+    throw new Error('Chưa cấu hình MASTER_TEMPLATE_DOC_ID trong GS_Config_Templates.gs.');
+  }
+  if (shouldCheckOutput && (!outputFolderId || outputFolderId.indexOf('YOUR_') === 0)) {
+    throw new Error('Chưa cấu hình OUTPUT_FOLDER_ID trong GS_Config_Templates.gs.');
+  }
+
+  const outputFolder = shouldCheckOutput ? DriveApp.getFolderById(outputFolderId) : null;
+  let masterItem = null;
+  let mimeType = '';
+  try {
+    masterItem = DriveApp.getFileById(masterId);
+    mimeType = masterItem.getMimeType();
+  } catch (fileLookupErr) {
+    try {
+      const folderFallback = DriveApp.getFolderById(masterId);
+      return {
+        mode: 'FOLDER',
+        masterId: masterId,
+        templateFolder: folderFallback,
+        outputFolderId: outputFolderId,
+        outputFolder: outputFolder
+      };
+    } catch (folderLookupErr) {
+      throw fileLookupErr;
+    }
+  }
+
+  if (mimeType === MimeType.FOLDER) {
+    const templateFolder = DriveApp.getFolderById(masterId);
+    return {
+      mode: 'FOLDER',
+      masterId: masterId,
+      templateFolder: templateFolder,
+      outputFolderId: outputFolderId,
+      outputFolder: outputFolder
+    };
+  }
+
+  if (mimeType === MimeType.GOOGLE_DOCS) {
+    return {
+      mode: 'SINGLE_MULTI_TAB_DOC',
+      masterId: masterId,
+      masterFile: masterItem,
+      outputFolderId: outputFolderId,
+      outputFolder: outputFolder
+    };
+  }
+
+  if (
+    mimeType === MimeType.MICROSOFT_WORD ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    mimeType === 'application/msword'
+  ) {
+    throw new Error(
+      'File "' +
+        masterItem.getName() +
+        '" đang ở định dạng Word (.docx), không phải Google Docs gốc. Hãy mở file trên Google Drive -> Tệp -> Lưu dưới dạng Google Tài liệu (Save as Google Docs).'
+    );
+  }
+
+  throw new Error(
+    'MASTER_TEMPLATE_DOC_ID đang trỏ tới "' +
+      masterItem.getName() +
+      '" (loại: ' +
+      mimeType +
+      '). Hãy điền ID của thư mục "CHỨNG TỪ" hoặc file Google Docs tổng hợp.'
+  );
+}
+
+/**
+ * Tìm file Google Docs mẫu tương ứng với docKey bên trong thư mục mẫu (ví dụ thư mục "CHỨNG TỪ").
+ * @param {GoogleAppsScript.Drive.Folder} templateFolder
+ * @param {string} docKey
+ * @param {{name?: string, tabName?: string}} tplConfig
+ * @return {GoogleAppsScript.Drive.File|null}
+ */
+function findTemplateFileInFolder_(templateFolder, docKey, tplConfig) {
+  if (!templateFolder) return null;
+
+  const candidates = [docKey];
+  if (tplConfig && tplConfig.tabName && candidates.indexOf(tplConfig.tabName) === -1) {
+    candidates.push(tplConfig.tabName);
+  }
+
+  const normCandidates = candidates.map(function (c) {
+    return normalizeTemplateLookupName_(c);
+  });
+
+  const filesIter = templateFolder.getFiles();
+  let wordFallbackFile = null;
+
+  while (filesIter.hasNext()) {
+    const file = filesIter.next();
+    const rawName = String(file.getName() || '').trim();
+    const strippedName = rawName.replace(/\.(docx?|gdoc)$/i, '').trim();
+    const normName = normalizeTemplateLookupName_(strippedName);
+
+    const exactMatch = candidates.some(function (cand) {
+      const lowerCand = String(cand || '').trim().toLowerCase();
+      return rawName.toLowerCase() === lowerCand || strippedName.toLowerCase() === lowerCand;
+    });
+    const normMatch = normCandidates.indexOf(normName) !== -1;
+
+    if (exactMatch || normMatch) {
+      const mime = file.getMimeType();
+      if (mime === MimeType.GOOGLE_DOCS) {
+        return file;
+      }
+      if (
+        mime === MimeType.MICROSOFT_WORD ||
+        mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        mime === 'application/msword'
+      ) {
+        wordFallbackFile = file;
+      }
+    }
+  }
+
+  if (wordFallbackFile) {
+    throw new Error(
+      'File mẫu "' +
+        wordFallbackFile.getName() +
+        '" đang ở định dạng Word (.docx). Hãy mở file này trên Drive -> Tệp -> Lưu dưới dạng Google Tài liệu (Google Docs).'
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Chuẩn hóa tên file mẫu để so khớp linh hoạt (không dấu, không phân biệt hoa thường, bỏ dấu cách/gạch dưới).
+ * @param {string} name
+ * @return {string}
+ */
+function normalizeTemplateLookupName_(name) {
+  return String(name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+/**
+ * Xử lý 1 file Google Docs đơn lẻ (giữ nguyên 100% định dạng gốc):
+ * hỗ trợ cả tài liệu thường lẫn tài liệu có Tab.
+ * @param {GoogleAppsScript.Document.Document} doc
+ * @param {Array<Object>} items
+ * @param {Array<Object>} containers
+ * @param {Object} shared
+ */
+function processSingleDocumentObject_(doc, items, containers, shared) {
+  if (typeof doc.getTabs === 'function') {
+    const topTabs = doc.getTabs();
+    const allTabs = collectAllTabsFlat_(topTabs);
+    if (allTabs.length > 0) {
+      for (let t = 0; t < allTabs.length; t++) {
+        const docTab = allTabs[t].asDocumentTab();
+        const body = docTab.getBody();
+        const sections = collectDocumentTabSections_(docTab);
+        processDynamicTableRows(body, items, containers);
+        replaceGlobalTags(sections, shared);
+        sanitizeRemainingTags_(sections);
+      }
+      return;
+    }
+  }
+
+  const body = doc.getBody();
+  const sections = collectSingleDocSections_(doc);
+  processDynamicTableRows(body, items, containers);
+  replaceGlobalTags(sections, shared);
+  sanitizeRemainingTags_(sections);
+}
+
+/**
+ * Lấy Body + Header + Footer của 1 file Google Docs đơn lẻ.
+ * @param {GoogleAppsScript.Document.Document} doc
+ * @return {Array<GoogleAppsScript.Document.Element>}
+ */
+function collectSingleDocSections_(doc) {
+  const sections = [];
+  const seen = [];
+
+  function addSection(el) {
+    if (!el) return;
+    if (seen.indexOf(el) === -1) {
+      seen.push(el);
+      sections.push(el);
+    }
+  }
+
+  const body = doc.getBody();
+  addSection(body);
+  addSection(doc.getHeader());
+  addSection(doc.getFooter());
+
+  const root = body && typeof body.getParent === 'function' ? body.getParent() : null;
+  if (root && typeof root.getNumChildren === 'function') {
+    const numChildren = root.getNumChildren();
+    for (let i = 0; i < numChildren; i++) {
+      const child = root.getChild(i);
+      const type = child.getType();
+      if (
+        type === DocumentApp.ElementType.HEADER_SECTION ||
+        type === DocumentApp.ElementType.FOOTER_SECTION
+      ) {
+        addSection(child);
+      }
+    }
+  }
+
+  return sections;
+}
+
+/**
+ * Chạy hàm này 1 lần trực tiếp trong trình soạn thảo Apps Script (Run -> authorizePermissions)
+ * để kích hoạt màn hình cấp quyền Drive, Docs, Sheets và UrlFetch cho Web App trước khi Deploy lại.
+ */
+function authorizePermissions() {
+  const ss = getAppSpreadsheet_();
+  const sheetTitle = ss.getName();
+
+  DriveApp.getRootFolder().getName();
+  ScriptApp.getOAuthToken();
+  UrlFetchApp.getRequest('https://docs.google.com');
+
+  const validated = validateMasterTemplateAndFolder_();
+  const folderName = validated.outputFolder.getName();
+
+  if (validated.mode === 'FOLDER') {
+    const templateFolderName = validated.templateFolder.getName();
+    const filesIter = validated.templateFolder.getFiles();
+    let googleDocCount = 0;
+    let firstDocId = '';
+
+    while (filesIter.hasNext()) {
+      const f = filesIter.next();
+      if (f.getMimeType() === MimeType.GOOGLE_DOCS) {
+        googleDocCount++;
+        if (!firstDocId) {
+          firstDocId = f.getId();
+        }
+      }
+    }
+
+    if (firstDocId) {
+      DocumentApp.openById(firstDocId).getId();
+    }
+
+    Logger.log(
+      'Authorized OK (FOLDER MODE) -> Sheet: ' +
+        sheetTitle +
+        ' | Template Folder: ' +
+        templateFolderName +
+        ' (Google Docs: ' +
+        googleDocCount +
+        ') | Output Folder: ' +
+        folderName
+    );
+
+    return {
+      success: true,
+      mode: 'FOLDER',
+      sheetTitle: sheetTitle,
+      templateFolderName: templateFolderName,
+      googleDocCount: googleDocCount,
+      folderName: folderName
+    };
+  }
+
+  const templateName = validated.masterFile.getName();
+  const openedDoc = DocumentApp.openById(validated.masterId);
+  const tabCount = typeof openedDoc.getTabs === 'function' ? openedDoc.getTabs().length : 0;
+  const docsApiEnabled = typeof Docs !== 'undefined' && Docs.Documents && typeof Docs.Documents.batchUpdate === 'function';
+
+  Logger.log(
+    'Authorized OK (SINGLE DOC MODE) -> Sheet: ' +
+      sheetTitle +
+      ' | Template: ' +
+      templateName +
+      ' (Tabs: ' +
+      tabCount +
+      ') | Output Folder: ' +
+      folderName +
+      ' | Docs API enabled: ' +
+      docsApiEnabled
+  );
+
+  return {
+    success: true,
+    mode: 'SINGLE_MULTI_TAB_DOC',
+    sheetTitle: sheetTitle,
+    templateName: templateName,
+    tabCount: tabCount,
+    folderName: folderName,
+    docsApiEnabled: docsApiEnabled
+  };
+}
+
+/**
+ * Chuẩn hóa thông báo lỗi và gợi ý xử lý khi gặp lỗi phân quyền DriveApp / Web App.
+ * @param {string} prefix
+ * @param {*} err
+ * @return {string}
+ */
+function formatEngineErrorMessage_(prefix, err) {
+  const rawMsg = err && err.message ? String(err.message) : String(err || '');
+  const lower = rawMsg.toLowerCase();
+  if (
+    lower.indexOf('truy cập bị từ chối') !== -1 ||
+    lower.indexOf('access denied') !== -1 ||
+    lower.indexOf('specified permissions') !== -1 ||
+    lower.indexOf('không có quyền') !== -1
+  ) {
+    return (
+      prefix +
+      ': ' +
+      rawMsg +
+      ' — Cách khắc phục: (1) Trong Apps Script Editor, chọn hàm authorizePermissions và bấm Run (Chạy) để cấp quyền Drive/Docs; (2) Khi Deploy Web App, chọn "Execute as: Me (Tôi)"; (3) Tạo New version (Phiên bản mới) sau khi lưu code.'
+    );
+  }
+  return prefix + ': ' + rawMsg;
+}
+
+/**
+ * Đưa vào thùng rác các file trùng tên trong thư mục đích (dùng để ghi đè file tạm theo maSV).
+ * @param {GoogleAppsScript.Drive.Folder} folder
+ * @param {string} fileName
+ */
+function trashFilesByName_(folder, fileName) {
+  if (!folder || !fileName) return;
+  const files = folder.getFilesByName(fileName);
+  while (files.hasNext()) {
+    try {
+      files.next().setTrashed(true);
+    } catch (e) {}
   }
 }
 
@@ -603,3 +1185,12 @@ function sanitizeRemainingTags_(sections) {
 function escapeRegex_(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+/**
+ * Hàm không tham số dùng để kích hoạt nhanh màn hình cấp quyền Google Drive / Docs trong Apps Script Editor.
+ * Chọn authorizeDrive ở thanh công cụ phía trên và bấm Run (Chạy) 1 lần trước khi Deploy.
+ */
+function authorizeDrive() {
+  DriveApp.getRootFolder();
+}
+

@@ -10,46 +10,46 @@ const ISO_6346_REGEX = /^[A-Z]{4}\d{7}$/;
 const DOC_GROUPS = [
   {
     id: 'GROUP_II',
-    title: 'II. Người xuất khẩu chuẩn bị',
+    title: 'Người xuất khẩu chuẩn bị',
     docs: [
-      { key: 'QUOTATION', label: 'Bảng Báo Giá (Quotation)' },
-      { key: 'SALES_CONTRACT', label: 'Hợp Đồng Ngoại Thương (Sales Contract)' },
-      { key: 'COMMERCIAL_INVOICE', label: 'Hóa Đơn Thương Mại (Commercial Invoice)' },
-      { key: 'PACKING_LIST', label: 'Phiếu Đóng Gói Hàng Hóa (Packing List)' },
-      { key: 'BOOKING_REQUEST', label: 'Yêu Cầu Đặt Chỗ (Booking Request)' },
-      { key: 'VGM', label: 'Phiếu Xác Nhận Khối Lượng Toàn Bộ (VGM)' },
-      { key: 'SHIPPING_INSTRUCTION', label: 'Hướng Dẫn Giao Hàng (S/I)' }
+      { key: 'QUOTATION', label: 'Quotation' },
+      { key: 'SALES_CONTRACT', label: 'Sales Contract' },
+      { key: 'COMMERCIAL_INVOICE', label: 'Commercial Invoice' },
+      { key: 'PACKING_LIST', label: 'Packing List' },
+      { key: 'BOOKING_REQUEST', label: 'Booking Request' },
+      { key: 'VGM', label: 'VGM' },
+      { key: 'SHIPPING_INSTRUCTION', label: 'Shipping Instruction' }
     ]
   },
   {
     id: 'GROUP_III',
-    title: 'III. Cơ quan chuyên ngành khác cấp',
+    title: 'Cơ quan chuyên ngành khác cấp',
     docs: [
-      { key: 'VETERINARY_CERTIFICATE', label: 'Kiểm Dịch Động Vật (Veterinary Cert)' },
-      { key: 'PHYTOSANITARY_CERTIFICATE', label: 'Kiểm Dịch Thực Vật (Phytosanitary Cert)' },
-      { key: 'QUALITY_CERTIFICATE', label: 'Chứng Nhận Chất Lượng (Quality Cert)' },
-      { key: 'FUMIGATION_CERTIFICATE', label: 'Chứng Nhận Hun Trùng (Fumigation Cert)' },
-      { key: 'CERTIFICATE_OF_ORIGIN', label: 'Chứng Nhận Xuất Xứ (C/O)' }
+      { key: 'VETERINARY_CERTIFICATE', label: 'Veterinary Certificate' },
+      { key: 'PHYTOSANITARY_CERTIFICATE', label: 'Phytosanitary Certificate' },
+      { key: 'QUALITY_CERTIFICATE', label: 'Quality Certificate' },
+      { key: 'FUMIGATION_CERTIFICATE', label: 'Fumigation Certificate' },
+      { key: 'CERTIFICATE_OF_ORIGIN', label: 'Certificate of Origin' }
     ]
   },
   {
     id: 'GROUP_IV',
-    title: 'IV. Hãng tàu / Forwarder cấp',
+    title: 'Hãng tàu / Forwarder cấp',
     docs: [
-      { key: 'BOOKING_NOTE', label: 'Phiếu Đặt Chỗ (Booking Note)' },
-      { key: 'BOOKING_CONFIRMATION', label: 'Xác Nhận Đặt Chỗ (Booking Confirmation)' },
-      { key: 'RELEASE_ORDER', label: 'Lệnh Cấp Container Rỗng (Release Order)' },
-      { key: 'BILL_OF_LADING', label: 'Vận Đơn Đường Biển (Bill of Lading)' },
-      { key: 'DELIVERY_ORDER', label: 'Lệnh Giao Hàng (Delivery Order)' }
+      { key: 'BOOKING_NOTE', label: 'Booking Note' },
+      { key: 'BOOKING_CONFIRMATION', label: 'Booking Confirmation' },
+      { key: 'RELEASE_ORDER', label: 'Release Order' },
+      { key: 'BILL_OF_LADING', label: 'Bill of Lading' },
+      { key: 'DELIVERY_ORDER', label: 'Delivery Order' }
     ]
   },
   {
     id: 'GROUP_V',
-    title: 'V. Hải quan & Thanh toán quốc tế',
+    title: 'Hải quan & Thanh toán quốc tế',
     docs: [
-      { key: 'To_khai_XK', label: 'Tờ Khai Hải Quan Xuất Khẩu' },
-      { key: 'To_khai_NK', label: 'Tờ Khai Hải Quan Nhập Khẩu' },
-      { key: 'LETTER_OF_CREDIT', label: 'Thư Tín Dụng (Letter of Credit)' }
+      { key: 'To_khai_XK', label: 'Export Customs Declaration' },
+      { key: 'To_khai_NK', label: 'Import Customs Declaration' },
+      { key: 'LETTER_OF_CREDIT', label: 'Letter of Credit' }
     ]
   }
 ];
@@ -60,6 +60,7 @@ function createEmptyItem() {
     PCODE: '',
     DES: '',
     HS: '',
+    ORG: '',
     PREF: '',
     MARKS: '',
     LOT_NO: '',
@@ -68,6 +69,8 @@ function createEmptyItem() {
     PRICE: '',
     AMT: '',
     PACK: '',
+    UNIT_PACK: '',
+    CTYPE: '',
     NW: '',
     GW: '',
     CBM: '',
@@ -116,7 +119,8 @@ const APP_STATE = {
   shared: {},
   items: [createEmptyItem()],
   containers: [createEmptyContainer()],
-  exportResults: {}
+  exportResults: {},
+  previewDocKey: null
 };
 
 /* ==========================================================================
@@ -126,7 +130,7 @@ const APP_STATE = {
 function showLoading(message) {
   const overlay = document.getElementById('loadingOverlay');
   const textEl = document.getElementById('loadingMessage');
-  if (textEl) textEl.textContent = message || 'Đang xử lý dữ liệu...';
+  if (textEl) textEl.textContent = message || 'Loading...';
   if (overlay) overlay.classList.remove('hidden');
 }
 
@@ -189,20 +193,20 @@ function switchTab(tabKey) {
 function handleLoginSubmit(event) {
   event.preventDefault();
 
-  const maSV = document.getElementById('loginMaSV').value.trim();
-  const matKhau = document.getElementById('loginMatKhau').value.trim();
+  const username = document.getElementById('loginMaSV').value.trim();
+  const password = document.getElementById('loginMatKhau').value.trim();
   const errorBox = document.getElementById('loginError');
 
   errorBox.classList.add('hidden');
   errorBox.textContent = '';
 
-  if (!maSV || !matKhau) {
-    errorBox.textContent = 'Vui lòng nhập đầy đủ Mã sinh viên và Mật khẩu.';
+  if (!username || !password) {
+    errorBox.textContent = 'Vui lòng nhập đầy đủ Tên đăng nhập và Mật khẩu.';
     errorBox.classList.remove('hidden');
     return;
   }
 
-  showLoading('Đang xác thực tài khoản sinh viên...');
+  showLoading('Loading...');
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -215,11 +219,15 @@ function handleLoginSubmit(event) {
 
       APP_STATE.user = res.user;
       APP_STATE.exportResults = {};
-      restoreDraftState(res.draftJson);
+      restoreDraftState(res.draftJson != null ? res.draftJson : res.draft);
 
       const badgeText = document.getElementById('userBadgeText');
       if (badgeText) {
-        badgeText.textContent = (res.user.tenSV || 'Sinh viên') + ' (' + res.user.maSV + ')';
+        const displayName = String(res.user.tenSV || '').trim();
+        const displayId = String(res.user.maSV || '').trim();
+        badgeText.textContent = displayName && displayId
+          ? displayName + ' (' + displayId + ')'
+          : (displayName || displayId || 'Sinh viên');
       }
 
       loadInitialDropdowns();
@@ -229,7 +237,48 @@ function handleLoginSubmit(event) {
       errorBox.textContent = 'Lỗi kết nối máy chủ: ' + (err && err.message ? err.message : err);
       errorBox.classList.remove('hidden');
     })
-    .loginUser(maSV, matKhau);
+    .loginUser(username, password);
+}
+
+function getTodayYYMMDD_() {
+  const d = new Date();
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return yy + mm + dd;
+}
+
+function initDefaultDocumentNumbers(forceOverwrite) {
+  const yymmdd = getTodayYYMMDD_();
+  const defaults = {
+    QUOT_NO: 'QT-' + yymmdd + '-01',
+    CTR_NO: 'SC-' + yymmdd + '-01',
+    INV_NO: 'INV-' + yymmdd + '-01',
+    PL_NO: 'PL-' + yymmdd + '-01',
+    BKR_NO: 'BKR-' + yymmdd + '-01',
+    VGM_NO: 'VGM-' + yymmdd + '-01',
+    SI_NO: 'SI-' + yymmdd + '-01',
+    VET_NO: 'VET-' + yymmdd + '-01',
+    PHYTO_NO: 'PHYTO-' + yymmdd + '-01',
+    QUAL_NO: 'QUAL-' + yymmdd + '-01',
+    FUM_NO: 'FUM-' + yymmdd + '-01',
+    CO_NO: 'CO-' + yymmdd + '-01',
+    BK_NO: 'BK-' + yymmdd + '-01',
+    RO_NO: 'RO-' + yymmdd + '-01',
+    BL_NO: 'BL-' + yymmdd + '-01',
+    DOCUMENT_NO: 'DOC-' + yymmdd + '-01',
+    DO_NO: 'DO-' + yymmdd + '-01',
+    TK_XK_NO: 'DEC-' + yymmdd + '-01',
+    TK_NK_NO: 'DEC-' + yymmdd + '-02',
+    LC_NO: 'LC-' + yymmdd + '-01'
+  };
+
+  Object.keys(defaults).forEach(function (k) {
+    const cur = APP_STATE.shared[k];
+    if (forceOverwrite || cur == null || String(cur).trim() === '') {
+      APP_STATE.shared[k] = defaults[k];
+    }
+  });
 }
 
 function restoreDraftState(draftJson) {
@@ -237,36 +286,36 @@ function restoreDraftState(draftJson) {
   APP_STATE.items = [createEmptyItem()];
   APP_STATE.containers = [createEmptyContainer()];
 
-  if (!draftJson || typeof draftJson !== 'string' || draftJson.trim() === '') {
-    return;
+  if (draftJson && typeof draftJson === 'string' && draftJson.trim() !== '') {
+    try {
+      const parsed = JSON.parse(draftJson);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.shared && typeof parsed.shared === 'object') {
+          Object.keys(parsed.shared).forEach(function (k) {
+            APP_STATE.shared[k] = parsed.shared[k] == null ? '' : String(parsed.shared[k]);
+          });
+        }
+        if (Array.isArray(parsed.items)) {
+          APP_STATE.items = parsed.items.length > 0
+            ? parsed.items.map(function (row) { return Object.assign(createEmptyItem(), row); })
+            : [];
+        }
+        if (Array.isArray(parsed.containers)) {
+          APP_STATE.containers = parsed.containers.length > 0
+            ? parsed.containers.map(function (row) { return Object.assign(createEmptyContainer(), row); })
+            : [];
+        }
+      }
+    } catch (e) {
+      showToast('Dữ liệu nháp cũ không đúng định dạng, đã khởi tạo biểu mẫu mới.', 'warning');
+    }
   }
 
-  try {
-    const parsed = JSON.parse(draftJson);
-    if (parsed && typeof parsed === 'object') {
-      if (parsed.shared && typeof parsed.shared === 'object') {
-        Object.keys(parsed.shared).forEach(function (k) {
-          APP_STATE.shared[k] = parsed.shared[k] == null ? '' : String(parsed.shared[k]);
-        });
-      }
-      if (Array.isArray(parsed.items)) {
-        APP_STATE.items = parsed.items.length > 0
-          ? parsed.items.map(function (row) { return Object.assign(createEmptyItem(), row); })
-          : [];
-      }
-      if (Array.isArray(parsed.containers)) {
-        APP_STATE.containers = parsed.containers.length > 0
-          ? parsed.containers.map(function (row) { return Object.assign(createEmptyContainer(), row); })
-          : [];
-      }
-    }
-  } catch (e) {
-    showToast('Dữ liệu nháp cũ không đúng định dạng JSON, đã khởi tạo biểu mẫu mới.', 'warning');
-  }
+  initDefaultDocumentNumbers(false);
 }
 
 function loadInitialDropdowns() {
-  showLoading('Đang tải dữ liệu danh mục Cước tàu & Hải quan...');
+  showLoading('Loading...');
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -285,6 +334,7 @@ function loadInitialDropdowns() {
       document.getElementById('loginScreen').classList.add('hidden');
       document.getElementById('appShell').classList.remove('hidden');
 
+      initDefaultDocumentNumbers(false);
       recalculateAllTotals(false);
       renderAllFormViews();
       switchTab('MASTER_PARTIES');
@@ -310,13 +360,13 @@ function handleSaveDraft() {
     containers: APP_STATE.containers
   };
 
-  showLoading('Đang lưu bản nháp vào Google Sheet...');
+  showLoading('Loading...');
 
   google.script.run
     .withSuccessHandler(function (res) {
       hideLoading();
       if (res && res.success) {
-        showToast('Đã lưu nháp thành công cho MSSV ' + APP_STATE.user.maSV + '.', 'success');
+        showToast('Đã lưu nháp thành công cho ' + APP_STATE.user.maSV + '.', 'success');
       } else {
         showToast((res && res.message) || 'Lưu nháp thất bại.', 'error');
       }
@@ -342,6 +392,7 @@ function confirmClearData() {
   APP_STATE.items = [createEmptyItem()];
   APP_STATE.containers = [createEmptyContainer()];
   APP_STATE.exportResults = {};
+  initDefaultDocumentNumbers(true);
 
   renderAllFormViews();
   switchTab(APP_STATE.activeTab || 'MASTER_PARTIES');
@@ -349,6 +400,7 @@ function confirmClearData() {
 }
 
 function handleLogout() {
+  closeDocPreviewModal();
   APP_STATE.user = null;
   APP_STATE.shared = {};
   APP_STATE.items = [createEmptyItem()];
@@ -360,6 +412,305 @@ function handleLogout() {
   document.getElementById('appShell').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
   showToast('Bạn đã đăng xuất khỏi hệ thống.', 'info');
+}
+
+/* ==========================================================================
+   DOCUMENT PREVIEW MODAL (Review Document via PDF.js Canvas)
+   ========================================================================== */
+
+let currentPreviewBlobUrl = null;
+let pdfJsLoadPromise_ = null;
+
+function revokePreviewBlobUrl_() {
+  if (currentPreviewBlobUrl) {
+    try {
+      URL.revokeObjectURL(currentPreviewBlobUrl);
+    } catch (e) {}
+    currentPreviewBlobUrl = null;
+  }
+}
+
+function base64ToUint8Array_(base64Str) {
+  const binary = atob(base64Str);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function base64ToBlobUrl_(base64Str, mimeType) {
+  const bytes = base64ToUint8Array_(base64Str);
+  const blob = new Blob([bytes], { type: mimeType || 'application/pdf' });
+  return URL.createObjectURL(blob);
+}
+
+function loadScriptOnce_(url) {
+  return new Promise(function (resolve, reject) {
+    const existing = document.querySelector('script[data-pdfjs-src="' + url + '"]');
+    if (existing) {
+      resolve();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = url;
+    script.async = true;
+    script.setAttribute('data-pdfjs-src', url);
+    script.onload = function () { resolve(); };
+    script.onerror = function () { reject(new Error('Failed to load ' + url)); };
+    document.head.appendChild(script);
+  });
+}
+
+function ensurePdfJsLoaded_() {
+  if (window.pdfjsLib && typeof window.pdfjsLib.getDocument === 'function') {
+    return Promise.resolve(window.pdfjsLib);
+  }
+  if (pdfJsLoadPromise_) {
+    return pdfJsLoadPromise_;
+  }
+
+  const cdnPairs = [
+    {
+      worker: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+      lib: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+    },
+    {
+      worker: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+      lib: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'
+    }
+  ];
+
+  function tryPair(idx) {
+    if (idx >= cdnPairs.length) {
+      return Promise.reject(new Error('Không thể tải thư viện hiển thị PDF (PDF.js).'));
+    }
+    const pair = cdnPairs[idx];
+    return loadScriptOnce_(pair.worker)
+      .catch(function () { return null; })
+      .then(function () { return loadScriptOnce_(pair.lib); })
+      .then(function () {
+        if (window.pdfjsLib && typeof window.pdfjsLib.getDocument === 'function') {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = pair.worker;
+          return window.pdfjsLib;
+        }
+        return tryPair(idx + 1);
+      })
+      .catch(function () {
+        return tryPair(idx + 1);
+      });
+  }
+
+  pdfJsLoadPromise_ = tryPair(0).catch(function (err) {
+    pdfJsLoadPromise_ = null;
+    throw err;
+  });
+  return pdfJsLoadPromise_;
+}
+
+async function renderPdfBase64ToCanvases_(base64Str, containerEl) {
+  const pdfjsLib = await ensurePdfJsLoaded_();
+  const pdfBytes = base64ToUint8Array_(base64Str);
+  const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+  const pdfDoc = await loadingTask.promise;
+
+  containerEl.innerHTML = '';
+
+  const parentWidth = containerEl.parentNode && containerEl.parentNode.clientWidth ? containerEl.parentNode.clientWidth : 900;
+  const availableWidth = Math.max(360, parentWidth - 64);
+  const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+  const fragment = document.createDocumentFragment();
+
+  for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+    const page = await pdfDoc.getPage(pageNum);
+    const baseViewport = page.getViewport({ scale: 1 });
+    const cssScale = Math.min(1.65, Math.max(0.85, availableWidth / baseViewport.width));
+    const viewport = page.getViewport({ scale: cssScale });
+
+    const card = document.createElement('div');
+    card.className = 'preview-page-card';
+
+    const label = document.createElement('div');
+    label.className = 'preview-page-label';
+    label.textContent = 'Trang ' + pageNum + ' / ' + pdfDoc.numPages;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = Math.floor(viewport.width * outputScale);
+    canvas.height = Math.floor(viewport.height * outputScale);
+    canvas.style.width = Math.floor(viewport.width) + 'px';
+    canvas.style.height = Math.floor(viewport.height) + 'px';
+
+    card.appendChild(label);
+    card.appendChild(canvas);
+    fragment.appendChild(card);
+
+    const renderContext = {
+      canvasContext: ctx,
+      transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null,
+      viewport: viewport
+    };
+    await page.render(renderContext).promise;
+  }
+
+  containerEl.appendChild(fragment);
+  containerEl.classList.remove('hidden');
+  return pdfDoc.numPages;
+}
+
+function handlePreviewDocument(docKey) {
+  if (!APP_STATE.user || !APP_STATE.user.maSV) {
+    showToast('Vui lòng đăng nhập để xem trước chứng từ.', 'error');
+    return;
+  }
+
+  APP_STATE.previewDocKey = docKey;
+
+  const modal = document.getElementById('docPreviewModal');
+  const titleEl = document.getElementById('docPreviewModalTitle');
+  const subtitleEl = document.getElementById('docPreviewModalSubtitle');
+  const loadingEl = document.getElementById('docPreviewLoading');
+  const errorWrap = document.getElementById('docPreviewError');
+  const errorText = document.getElementById('docPreviewErrorText');
+  const canvasWrap = document.getElementById('docPreviewCanvasWrap');
+  const frame = document.getElementById('docPreviewFrame');
+  const exportBtn = document.getElementById('btnPreviewExportOfficial');
+  const downloadBtn = document.getElementById('btnPreviewDownloadPdf');
+
+  const cfg = (typeof DOC_FORM_CONFIGS !== 'undefined' && DOC_FORM_CONFIGS[docKey]) ? DOC_FORM_CONFIGS[docKey] : null;
+  if (titleEl) {
+    titleEl.textContent = 'Review Document: ' + (cfg ? cfg.title : docKey);
+  }
+  if (subtitleEl) {
+    subtitleEl.textContent = '';
+  }
+
+  revokePreviewBlobUrl_();
+  if (canvasWrap) {
+    canvasWrap.innerHTML = '';
+    canvasWrap.classList.add('hidden');
+  }
+  if (frame) {
+    frame.removeAttribute('srcdoc');
+    frame.src = 'about:blank';
+    frame.classList.add('hidden');
+  }
+  if (downloadBtn) {
+    downloadBtn.classList.add('hidden');
+    downloadBtn.href = '#';
+  }
+  if (errorWrap) errorWrap.classList.add('hidden');
+  if (errorText) errorText.textContent = '';
+  if (loadingEl) {
+    const loadingTextEl = loadingEl.querySelector('.loading-text');
+    if (loadingTextEl) loadingTextEl.textContent = 'Loading...';
+    loadingEl.classList.remove('hidden');
+  }
+  if (exportBtn) exportBtn.disabled = true;
+  if (modal) modal.classList.remove('hidden');
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      if (!res || !res.success) {
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (errorText) errorText.textContent = (res && res.message) || 'Không thể tạo bản xem trước chứng từ.';
+        if (errorWrap) errorWrap.classList.remove('hidden');
+        return;
+      }
+
+      if (exportBtn) exportBtn.disabled = false;
+
+      if (res.pdfBase64) {
+        currentPreviewBlobUrl = base64ToBlobUrl_(res.pdfBase64, res.mimeType || 'application/pdf');
+        if (downloadBtn) {
+          downloadBtn.href = currentPreviewBlobUrl;
+          downloadBtn.download = docKey + '_PREVIEW.pdf';
+          downloadBtn.classList.remove('hidden');
+        }
+
+        if (canvasWrap) {
+          renderPdfBase64ToCanvases_(res.pdfBase64, canvasWrap)
+            .then(function (numPages) {
+              if (loadingEl) loadingEl.classList.add('hidden');
+              if (subtitleEl && numPages) {
+                subtitleEl.textContent =
+                  'Bản xem trước trực tiếp giữ nguyên định dạng từ Google Docs mẫu • ' + numPages + ' trang';
+              }
+            })
+            .catch(function (renderErr) {
+              if (loadingEl) loadingEl.classList.add('hidden');
+              if (canvasWrap) canvasWrap.classList.add('hidden');
+              if (errorText) {
+                errorText.textContent =
+                  'Không thể hiển thị trực tiếp PDF trên trình duyệt (' +
+                  (renderErr && renderErr.message ? renderErr.message : renderErr) +
+                  '). Bạn vẫn có thể bấm "Tải PDF xem trước" ở góc dưới bên trái.';
+              }
+              if (errorWrap) errorWrap.classList.remove('hidden');
+            });
+        } else {
+          if (loadingEl) loadingEl.classList.add('hidden');
+        }
+      } else if (res.htmlPreview) {
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (frame) {
+          frame.srcdoc = res.htmlPreview;
+          frame.classList.remove('hidden');
+        }
+      } else if (res.previewUrl) {
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (frame) {
+          frame.src = res.previewUrl;
+          frame.classList.remove('hidden');
+        }
+      } else {
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (errorText) errorText.textContent = 'Máy chủ không trả về dữ liệu xem trước.';
+        if (errorWrap) errorWrap.classList.remove('hidden');
+      }
+
+      if (res.warning) {
+        showToast(res.warning, 'warning');
+      }
+    })
+    .withFailureHandler(function (err) {
+      if (loadingEl) loadingEl.classList.add('hidden');
+      if (errorText) errorText.textContent = 'Lỗi xem trước chứng từ: ' + (err && err.message ? err.message : err);
+      if (errorWrap) errorWrap.classList.remove('hidden');
+    })
+    .previewDocument(APP_STATE.user.maSV, docKey, buildExportPayload());
+}
+
+function closeDocPreviewModal() {
+  const modal = document.getElementById('docPreviewModal');
+  const frame = document.getElementById('docPreviewFrame');
+  const canvasWrap = document.getElementById('docPreviewCanvasWrap');
+  const downloadBtn = document.getElementById('btnPreviewDownloadPdf');
+  if (modal) modal.classList.add('hidden');
+  if (canvasWrap) {
+    canvasWrap.innerHTML = '';
+    canvasWrap.classList.add('hidden');
+  }
+  if (frame) {
+    frame.removeAttribute('srcdoc');
+    frame.src = 'about:blank';
+    frame.classList.add('hidden');
+  }
+  if (downloadBtn) {
+    downloadBtn.classList.add('hidden');
+    downloadBtn.href = '#';
+  }
+  revokePreviewBlobUrl_();
+  APP_STATE.previewDocKey = null;
+}
+
+function handleExportFromPreview() {
+  const targetDocKey = APP_STATE.previewDocKey;
+  closeDocPreviewModal();
+  if (targetDocKey) {
+    handleExportSingle(targetDocKey);
+  }
 }
 
 /* ==========================================================================
@@ -386,7 +737,7 @@ function handleExportSingle(docKey) {
     showToast('Cảnh báo: Có số Container chưa đúng chuẩn ISO 6346 (' + invalidConts.join(', ') + '). Vẫn tiếp tục xuất.', 'warning');
   }
 
-  showLoading('Đang tạo chứng từ Google Docs & PDF...');
+  showLoading('Loading...');
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -400,7 +751,7 @@ function handleExportSingle(docKey) {
         APP_STATE.exportResults[item.docKey] = item;
       });
       renderSingleExportResultBox(docKey);
-      showToast('Xuất chứng từ "' + docKey + '" thành công!', 'success');
+      showToast('Xuất chứng từ thành công!', 'success');
     })
     .withFailureHandler(function (err) {
       hideLoading();
@@ -441,7 +792,7 @@ function handleExportBatch() {
     return;
   }
 
-  showLoading('Đang xuất hàng loạt ' + selectedKeys.length + ' chứng từ... Vui lòng chờ.');
+  showLoading('Loading...');
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -500,22 +851,23 @@ function handleWorkspaceFieldChange(target) {
   // Mirror across all other views without disturbing active focus
   syncSharedFieldToDOM(key, value, target);
 
-  // Cascading Logic
+  // Cascading & Combobox Logic
   if (key === 'POL') {
     handlePolChanged(value);
   } else if (key === 'POD') {
     handlePodChanged(value);
-  } else if (key === 'EXP_TYPE_CODE') {
-    handleXnkTypeChanged('Xuất khẩu', value, 'EXP_TYPE_NAME');
-  } else if (key === 'IMP_TYPE_CODE') {
-    handleXnkTypeChanged('Nhập khẩu', value, 'IMP_TYPE_NAME');
+  } else if (key === 'DEC_TYPE') {
+    const dir = APP_STATE.activeTab === 'To_khai_NK' ? 'Nhập khẩu' : 'Xuất khẩu';
+    handleXnkTypeChanged(dir, value, dir === 'Nhập khẩu' ? 'IMP_TYPE_NAME' : 'EXP_TYPE_NAME');
+  } else if (key === 'CO_FORM_NAME') {
+    handleCoFormChanged(value);
   } else if (key === 'VESSEL' || key === 'VOYAGE') {
     updateVesVoyDerived();
   } else if (key === 'SHIP_NAME' || key === 'CNE_NAME') {
     updateAllContextBanners();
   }
 
-  if (key === 'VAT_RATE' || key === 'CURR') {
+  if (key === 'VAT_GST' || key === 'VAT_RATE' || key === 'CURR') {
     recalculateAllTotals(true);
   }
 }
@@ -563,26 +915,27 @@ function handlePolChanged(polValue) {
     }
   });
 
-  // Update all POD select dropdowns across all views
-  document.querySelectorAll('select[data-sync="POD"]').forEach(function (sel) {
-    const currentPod = APP_STATE.shared.POD || '';
-    sel.innerHTML = '<option value="">-- Chọn Cảng dỡ hàng (POD) --</option>';
-    filteredPods.forEach(function (pod) {
-      const opt = document.createElement('option');
-      opt.value = pod;
-      opt.textContent = pod;
-      sel.appendChild(opt);
+  // Fallback to all PODs if custom POL was typed that isn't in Cuoc_Tau
+  if (filteredPods.length === 0 && cuocTau.length > 0) {
+    cuocTau.forEach(function (row) {
+      if (row.POD && !seen[row.POD]) {
+        seen[row.POD] = true;
+        filteredPods.push(row.POD);
+      }
     });
-    if (currentPod && seen[currentPod]) {
-      sel.value = currentPod;
-    }
-  });
+  }
 
-  // If current POD no longer matches filtered POL rows, clear POD or re-trigger POD lookup
+  const podDatalist = document.getElementById('dl_POD');
+  if (podDatalist) {
+    podDatalist.innerHTML = filteredPods
+      .map(function (pod) {
+        return '<option value="' + escapeHtml(pod) + '"></option>';
+      })
+      .join('');
+  }
+
   const currentPod = APP_STATE.shared.POD || '';
-  if (currentPod && !seen[currentPod]) {
-    setSharedFieldAndSync('POD', '');
-  } else if (currentPod && seen[currentPod]) {
+  if (currentPod && seen[currentPod]) {
     handlePodChanged(currentPod);
   }
 }
@@ -603,7 +956,10 @@ function handlePodChanged(podValue) {
   }
 
   if (match) {
-    if (match.Quoc_Gia) setSharedFieldAndSync('DEST_CTRY', match.Quoc_Gia);
+    if (match.Quoc_Gia) {
+      setSharedFieldAndSync('DEST_CTRY', match.Quoc_Gia);
+      setSharedFieldAndSync('EXP_CTRY', match.Quoc_Gia);
+    }
     if (match.Ten_hang_tau) setSharedFieldAndSync('CAR_NAME', match.Ten_hang_tau);
     if (match.Ten_tau) setSharedFieldAndSync('VESSEL', match.Ten_tau);
     if (match.So_chuyen) setSharedFieldAndSync('VOYAGE', match.So_chuyen);
@@ -618,12 +974,62 @@ function updateVesVoyDerived() {
   setSharedFieldAndSync('VES_VOY', vesVoy);
 }
 
-function handleXnkTypeChanged(directionLabel, selectedCode, targetNameKey) {
+function handleXnkTypeChanged(directionLabel, selectedVal, targetNameKey) {
   const list = getFilteredLoaiHinhXnk(directionLabel);
+  const raw = String(selectedVal || '').trim();
+  const codePart = raw.split(' - ')[0].trim();
   const found = list.find(function (r) {
-    return r.Ma_loai_hinh === selectedCode;
+    return r.Ma_loai_hinh === raw || r.Ma_loai_hinh === codePart;
   });
   setSharedFieldAndSync(targetNameKey, found ? found.Ten_loai_hinh : '');
+}
+
+function handleCoFormChanged(coFormVal) {
+  const norm = String(coFormVal || '').trim().toUpperCase();
+  if (!norm) return;
+
+  const dmAgreements = (APP_STATE.dropdowns && APP_STATE.dropdowns.danhMucChung && APP_STATE.dropdowns.danhMucChung.TRADE_AGREEMENT) || [];
+  const formMap = [
+    { match: 'FORM D', candidates: ['ATIGA', 'ASEAN'] },
+    { match: 'FORM E', candidates: ['ACFTA', 'ASEAN-CHINA'] },
+    { match: 'FORM AK', candidates: ['AKFTA', 'ASEAN-KOREA'] },
+    { match: 'FORM AJ', candidates: ['AJCEP', 'VJEPA'] },
+    { match: 'FORM VJ', candidates: ['VJEPA'] },
+    { match: 'FORM VK', candidates: ['VKFTA'] },
+    { match: 'FORM VC', candidates: ['VCFTA'] },
+    { match: 'FORM EUR.1', candidates: ['EVFTA', 'EU-VIETNAM'] },
+    { match: 'EUR.1', candidates: ['EVFTA'] },
+    { match: 'CPTPP', candidates: ['CPTPP'] },
+    { match: 'RCEP', candidates: ['RCEP'] },
+    { match: 'AANZ', candidates: ['AANZFTA'] },
+    { match: 'FORM AI', candidates: ['AIFTA'] },
+    { match: 'FORM A', candidates: ['GSP'] },
+    { match: 'FORM B', candidates: ['MFN', 'NON-PREFERENTIAL'] }
+  ];
+
+  let matchedAgreement = '';
+  for (let i = 0; i < formMap.length; i++) {
+    if (norm.indexOf(formMap[i].match) !== -1) {
+      for (let c = 0; c < formMap[i].candidates.length; c++) {
+        const cand = formMap[i].candidates[c];
+        const inSheet = dmAgreements.find(function (a) {
+          return String(a).toUpperCase().indexOf(cand) !== -1;
+        });
+        if (inSheet) {
+          matchedAgreement = inSheet;
+          break;
+        }
+      }
+      if (!matchedAgreement) {
+        matchedAgreement = formMap[i].candidates[0];
+      }
+      break;
+    }
+  }
+
+  if (matchedAgreement) {
+    setSharedFieldAndSync('TRADE_AGREEMENT', matchedAgreement);
+  }
 }
 
 function getFilteredLoaiHinhXnk(direction) {
@@ -645,7 +1051,7 @@ function updateAllContextBanners() {
   const cne = String(APP_STATE.shared.CNE_NAME || '').trim() || 'Chưa nhập Consignee';
 
   document.querySelectorAll('.context-banner-parties').forEach(function (el) {
-    el.innerHTML = 'Pháp nhân đang áp dụng: <strong>' + escapeHtml(ship) + '</strong> &#10132; <strong>' + escapeHtml(cne) + '</strong>';
+    el.innerHTML = '<strong>' + escapeHtml(ship) + '</strong> &#10132; <strong>' + escapeHtml(cne) + '</strong>';
   });
 }
 
@@ -780,7 +1186,7 @@ function validateContainerInputsInDOM() {
       if (!badge) {
         badge = document.createElement('div');
         badge.className = 'badge-warning-iso';
-        badge.textContent = 'Sai chuẩn ISO 6346 (4 chữ + 7 số)';
+        badge.textContent = 'Số Container chưa đúng chuẩn (4 chữ + 7 số)';
         cell.appendChild(badge);
       }
     } else if (badge) {
@@ -819,8 +1225,10 @@ function recalculateAllTotals(syncDom) {
   let totItemGw = 0;
   let totItemCbm = 0;
   let totTax = 0;
+  let firstUnit = '';
 
   items.forEach(function (it) {
+    if (!firstUnit && it.UNIT) firstUnit = String(it.UNIT).trim();
     totQty += parseNum(it.QTY);
     totAmt += parseNum(it.AMT);
     totItemPack += parseNum(it.PACK);
@@ -848,7 +1256,10 @@ function recalculateAllTotals(syncDom) {
   const totGw = totItemGw > 0 ? totItemGw : totContGw;
   const totCbm = totItemCbm > 0 ? totItemCbm : totContCbm;
 
-  const vatRate = parseNum(APP_STATE.shared.VAT_RATE);
+  const vatRateVal = APP_STATE.shared.VAT_GST != null && APP_STATE.shared.VAT_GST !== ''
+    ? APP_STATE.shared.VAT_GST
+    : APP_STATE.shared.VAT_RATE;
+  const vatRate = parseNum(vatRateVal);
   const vatAmt = vatRate > 0 ? (totAmt * vatRate) / 100 : 0;
   const grandTotal = totAmt + vatAmt;
 
@@ -858,6 +1269,7 @@ function recalculateAllTotals(syncDom) {
   const updates = {
     TOT_QTY: totQty > 0 ? formatNum(totQty, 3) : (items.length ? '0' : ''),
     TOT_AMT: totAmt > 0 ? formatNum(totAmt, 2) : (items.length ? '0' : ''),
+    VAT_TOTAL: vatRate > 0 ? formatNum(vatAmt, 2) : '',
     VAT_AMT: vatRate > 0 ? formatNum(vatAmt, 2) : '',
     GRAND_TOTAL: grandTotal > 0 ? formatNum(grandTotal, 2) : (items.length ? '0' : ''),
     TOT_PACK: totPack > 0 ? formatNum(totPack, 2) : '',
@@ -873,6 +1285,10 @@ function recalculateAllTotals(syncDom) {
       : '',
     TOT_TAX_WORDS: totTax > 0 ? numberToVietnameseWords(totTax, 'VND') : ''
   };
+
+  if (!APP_STATE.shared.TOT_UNIT && firstUnit) {
+    updates.TOT_UNIT = firstUnit;
+  }
 
   // Auto-generate CONTAINER_SEAL_DETAILS preview in shared
   const contDetails = containers

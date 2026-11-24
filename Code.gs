@@ -13,7 +13,7 @@ function doGet(e) {
   const template = HtmlService.createTemplateFromFile('Index');
   return template
     .evaluate()
-    .setTitle('Hệ thống Tự động hóa Chứng từ Xuất Nhập Khẩu & Logistics')
+    .setTitle('Hệ thống Chứng từ XNK')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -47,21 +47,22 @@ function getAppSpreadsheet_() {
 /**
  * Authenticates a student/user against tab `Danh_sach_SV`.
  * Columns: [STT, Ma_SV, Ten_SV, Mat_Khau, Draft_JSON]
- * Preserves leading zeros by reading display strings and comparing strict string values.
+ * Matches `username` against column C (Ten_SV) case-insensitively
+ * and `password` against column B (Ma_SV) case-insensitively.
  *
- * @param {string} maSV
- * @param {string} matKhau
- * @return {{success: boolean, user?: {maSV: string, tenSV: string}, draftJson?: string, message?: string}}
+ * @param {string} username
+ * @param {string} password
+ * @return {{success: boolean, user?: {maSV: string, tenSV: string}, draftJson?: string, draft?: string, message?: string}}
  */
-function loginUser(maSV, matKhau) {
+function loginUser(username, password) {
   try {
-    const inputMaSV = String(maSV == null ? '' : maSV).trim();
-    const inputMatKhau = String(matKhau == null ? '' : matKhau).trim();
+    const inputUsername = String(username == null ? '' : username).trim().toLowerCase();
+    const inputPassword = String(password == null ? '' : password).trim().toUpperCase();
 
-    if (!inputMaSV || !inputMatKhau) {
+    if (!inputUsername || !inputPassword) {
       return {
         success: false,
-        message: 'Vui lòng nhập đầy đủ Mã sinh viên và Mật khẩu.'
+        message: 'Vui lòng nhập đầy đủ Tên đăng nhập và Mật khẩu.'
       };
     }
 
@@ -76,7 +77,7 @@ function loginUser(maSV, matKhau) {
 
     const lastRow = sheet.getLastRow();
     const lastCol = sheet.getLastColumn();
-    if (lastRow < 2 || lastCol < 4) {
+    if (lastRow < 2 || lastCol < 3) {
       return {
         success: false,
         message: 'Danh sách sinh viên chưa có dữ liệu.'
@@ -98,10 +99,14 @@ function loginUser(maSV, matKhau) {
     for (let r = 1; r < displayValues.length; r++) {
       const rowDisplay = displayValues[r];
       const cellMaSV = String(rowDisplay[colIdx.Ma_SV] || '').trim();
-      const cellMatKhau = String(rowDisplay[colIdx.Mat_Khau] || '').trim();
+      const cellTenSV = String(rowDisplay[colIdx.Ten_SV] || '').trim();
 
-      if (cellMaSV !== '' && cellMaSV === inputMaSV && cellMatKhau === inputMatKhau) {
-        const cellTenSV = String(rowDisplay[colIdx.Ten_SV] || '').trim();
+      if (
+        cellTenSV !== '' &&
+        cellMaSV !== '' &&
+        cellTenSV.toLowerCase() === inputUsername &&
+        cellMaSV.toUpperCase() === inputPassword
+      ) {
         let draftJson = '';
         if (colIdx.Draft_JSON < rawValues[r].length) {
           const rawDraft = rawValues[r][colIdx.Draft_JSON];
@@ -114,14 +119,15 @@ function loginUser(maSV, matKhau) {
             maSV: cellMaSV,
             tenSV: cellTenSV
           },
-          draftJson: draftJson
+          draftJson: draftJson,
+          draft: draftJson
         };
       }
     }
 
     return {
       success: false,
-      message: 'Mã sinh viên hoặc Mật khẩu không chính xác.'
+      message: 'Tên đăng nhập hoặc Mật khẩu không chính xác.'
     };
   } catch (err) {
     return {

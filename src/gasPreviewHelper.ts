@@ -1,104 +1,80 @@
-import codeGs from '../Code.gs?raw';
-import configTemplatesGs from '../GS_Config_Templates.gs?raw';
-import docEngineGs from '../GS_Doc_Engine.gs?raw';
 import indexHtml from '../Index.html?raw';
 import cssStyleHtml from '../CSS_Style.html?raw';
 import viewLoginSidebarHtml from '../View_Login_Sidebar.html?raw';
 import viewDocumentFormsHtml from '../View_Document_Forms.html?raw';
 import jsAppStateHtml from '../JS_App_State.html?raw';
 import jsRenderFormsHtml from '../JS_Render_Forms.html?raw';
+import codeGs from '../Code.gs?raw';
+import configTemplatesGs from '../GS_Config_Templates.gs?raw';
 
 export interface GasSourceFile {
   id: string;
   filename: string;
-  gasType: 'gs' | 'html';
-  category: 'Backend (.gs)' | 'Frontend (.html)';
+  gasType: 'gs' | 'html' | 'json';
+  category: 'Backend (.gs)' | 'Frontend (.html)' | 'Manifest (.json)';
   description: string;
   content: string;
 }
 
 export const GAS_FILES: GasSourceFile[] = [
   {
-    id: 'Code.gs',
-    filename: 'Code.gs',
-    gasType: 'gs',
-    category: 'Backend (.gs)',
-    description: 'doGet, include(), loginUser, getInitialDropdownData, saveUserDraft',
-    content: codeGs,
-  },
-  {
     id: 'GS_Config_Templates.gs',
     filename: 'GS_Config_Templates.gs',
     gasType: 'gs',
     category: 'Backend (.gs)',
-    description: 'SPREADSHEET_ID, OUTPUT_FOLDER_ID, TEMPLATE_MAP (20 chứng từ), ITEM/CONT/TAX tags',
+    description: 'Chuẩn hóa tên 20 chứng từ sang tiếng Anh chuẩn & bổ sung ORG, CTYPE vào ITEM_TAGS',
     content: configTemplatesGs,
   },
   {
-    id: 'GS_Doc_Engine.gs',
-    filename: 'GS_Doc_Engine.gs',
+    id: 'Code.gs',
+    filename: 'Code.gs',
     gasType: 'gs',
     category: 'Backend (.gs)',
-    description: 'generateDocuments & quy trình 4 bước (Copy, Bottom-Up Clone, Replace, Sanitizer)',
-    content: docEngineGs,
-  },
-  {
-    id: 'Index.html',
-    filename: 'Index.html',
-    gasType: 'html',
-    category: 'Frontend (.html)',
-    description: 'Template chính nhúng CSS_Style, View_Login_Sidebar, View_Document_Forms, JS_App_State, JS_Render_Forms',
-    content: indexHtml,
-  },
-  {
-    id: 'CSS_Style.html',
-    filename: 'CSS_Style.html',
-    gasType: 'html',
-    category: 'Frontend (.html)',
-    description: 'Giao diện light-mode indigo (#4F46E5), responsive grid, bảng động, badge ISO 6346, toast & spinner',
-    content: cssStyleHtml,
+    description: 'Thông báo đăng nhập sạch gọn & đọc đầy đủ 3 sheet danh mục cho combobox',
+    content: codeGs,
   },
   {
     id: 'View_Login_Sidebar.html',
     filename: 'View_Login_Sidebar.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Màn hình đăng nhập, Header cố định và Sidebar 5 nhóm – 20 chứng từ',
+    description: 'Đổi mục đầu tiên thành Thông tin chung & 20 tên chứng từ tiếng Anh chuẩn',
     content: viewLoginSidebarHtml,
-  },
-  {
-    id: 'View_Document_Forms.html',
-    filename: 'View_Document_Forms.html',
-    gasType: 'html',
-    category: 'Frontend (.html)',
-    description: 'Khung workspace chính, Modal Xuất hàng loạt và Modal Xác nhận xóa dữ liệu',
-    content: viewDocumentFormsHtml,
-  },
-  {
-    id: 'JS_App_State.html',
-    filename: 'JS_App_State.html',
-    gasType: 'html',
-    category: 'Frontend (.html)',
-    description: 'APP_STATE, đồng bộ 2 chiều, dropdown dây chuyền POL/POD, đọc tiền chữ Anh/Việt, ISO 6346',
-    content: jsAppStateHtml,
   },
   {
     id: 'JS_Render_Forms.html',
     filename: 'JS_Render_Forms.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Schema cấu hình & bộ render cho toàn bộ 21 màn hình (MASTER_PARTIES + 20 chứng từ)',
+    description: 'Bảng items[] trong Thông tin chung, CAR_* ở Booking Request & Nhóm IV, đủ trường thiếu & combobox <input list>',
     content: jsRenderFormsHtml,
+  },
+  {
+    id: 'JS_App_State.html',
+    filename: 'JS_App_State.html',
+    gasType: 'html',
+    category: 'Frontend (.html)',
+    description: 'Tự sinh mã số chứng từ (QT/SC/INV/BKR/BK/RO/BL/DO/LC/DEC...), đồng bộ 2 chiều & Loading... tối giản',
+    content: jsAppStateHtml,
+  },
+  {
+    id: 'CSS_Style.html',
+    filename: 'CSS_Style.html',
+    gasType: 'html',
+    category: 'Frontend (.html)',
+    description: 'Tinh gọn loading overlay tối giản & giữ style bảng tương phản cao xanh rừng',
+    content: cssStyleHtml,
   },
 ];
 
 const SANDBOX_SHIM_SCRIPT = `
 <script>
 (function() {
-  var MOCK_USERS = {
-    '00123456': { maSV: '00123456', tenSV: 'Nguyễn Văn An', matKhau: '123456' },
-    '20210001': { maSV: '20210001', tenSV: 'Trần Thị Bình', matKhau: '123456' }
-  };
+  var MOCK_USERS = [
+    { maSV: 'NV003', tenSV: 'Rohwan' },
+    { maSV: '00123456', tenSV: 'Nguyễn Văn An' },
+    { maSV: '20210001', tenSV: 'Trần Thị Bình' }
+  ];
 
   var MOCK_DROPDOWNS = {
     success: true,
@@ -136,17 +112,23 @@ const SANDBOX_SHIM_SCRIPT = `
     return {
       withSuccessHandler: function(cb) { return createRunner(cb, failureCb); },
       withFailureHandler: function(cb) { return createRunner(successCb, cb); },
-      loginUser: function(maSV, matKhau) {
+      loginUser: function(username, password) {
         setTimeout(function() {
-          var key = String(maSV || '').trim();
-          var pass = String(matKhau || '').trim();
-          var user = MOCK_USERS[key];
-          if (!user || user.matKhau !== pass) {
-            if (successCb) successCb({ success: false, message: 'Mã SV hoặc Mật khẩu không đúng. (Thử: 00123456 / 123456)' });
+          var inputUser = String(username || '').trim().toLowerCase();
+          var inputPass = String(password || '').trim().toUpperCase();
+          var user = null;
+          for (var i = 0; i < MOCK_USERS.length; i++) {
+            if (MOCK_USERS[i].tenSV.trim().toLowerCase() === inputUser && MOCK_USERS[i].maSV.trim().toUpperCase() === inputPass) {
+              user = MOCK_USERS[i];
+              break;
+            }
+          }
+          if (!user) {
+            if (successCb) successCb({ success: false, message: 'Invalid Username (Student Name) or Password (Student ID). (Try: Rohwan / NV003)' });
             return;
           }
           var saved = '';
-          try { saved = localStorage.getItem('gas_preview_draft_' + key) || ''; } catch (e) {}
+          try { saved = localStorage.getItem('gas_preview_draft_' + user.maSV) || ''; } catch (e) {}
           if (successCb) successCb({ success: true, user: { maSV: user.maSV, tenSV: user.tenSV }, draftJson: saved });
         }, 250);
       },
@@ -164,6 +146,18 @@ const SANDBOX_SHIM_SCRIPT = `
             if (failureCb) failureCb(e);
           }
         }, 220);
+      },
+      previewDocument: function(maSV, docKey, payload) {
+        setTimeout(function() {
+          var shared = (payload && payload.shared) || {};
+          var html = '<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;padding:28px;color:#111;line-height:1.5}h2{margin:0 0 8px;color:#1e293b}table{width:100%;border-collapse:collapse;margin-top:14px}th,td{border:1px solid #cbd5e1;padding:6px 8px;font-size:12px;text-align:left}th{background:#f1f5f9}.note{font-size:12px;color:#475569;margin-bottom:14px}</style></head><body>'
+            + '<h2>' + docKey + ' — Live Preview (Sandbox)</h2>'
+            + '<div class="note">Student: ' + (maSV || '') + ' | Shipper: ' + (shared.SHIP_NAME || '—') + ' | Consignee: ' + (shared.CNE_NAME || '—') + '</div>'
+            + '<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>'
+            + Object.keys(shared).slice(0, 18).map(function(k) { return '<tr><td><b>' + k + '</b></td><td>' + (shared[k] || '') + '</td></tr>'; }).join('')
+            + '</tbody></table></body></html>';
+          if (successCb) successCb({ success: true, docKey: docKey, docName: docKey, htmlPreview: html });
+        }, 250);
       },
       generateDocuments: function(maSV, docKeysArray, payload) {
         setTimeout(function() {
@@ -220,8 +214,8 @@ const SANDBOX_SHIM_SCRIPT = `
       var pwEl = document.getElementById('loginMatKhau');
       var form = document.getElementById('loginForm');
       if (maEl && pwEl && form) {
-        maEl.value = '00123456';
-        pwEl.value = '123456';
+        maEl.value = 'Rohwan';
+        pwEl.value = 'NV003';
         form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
       }
     } else if (ev.data.type === 'GAS_PREVIEW_FILL_SAMPLE') {
@@ -253,7 +247,10 @@ const SANDBOX_SHIM_SCRIPT = `
         POL: 'CAT LAI, HCMC (VNSGN)',
         POD: 'LOS ANGELES, US (USLAX)',
         DEST_CTRY: 'UNITED STATES',
+        EXP_CTRY: 'VIETNAM',
         CAR_NAME: 'MAERSK LINE',
+        CAR_ATTN: 'Booking Desk - Maersk HCMC',
+        CAR_EMAIL: 'vn.booking@maersk.com',
         CAR_ADDR: '280 Nguyen Van Troi, Phu Nhuan Dist., HCMC',
         CAR_TEL: '02839978888',
         VESSEL: 'MAERSK SENTOSA',
@@ -263,32 +260,35 @@ const SANDBOX_SHIM_SCRIPT = `
         INCOTERM: 'FOB',
         PAY_TERM: 'L/C AT SIGHT',
         CURR: 'USD',
+        SALE_NAME: 'Tran Quoc Bao',
         DOCS_NAME: 'Le Thi Hoa',
         DOCS_TITLE: 'Senior Export Docs Specialist',
         DOCS_TEL: '0909123456',
         DOCS_EMAIL: 'docs@mekongagri.vn',
-        QT_NO: 'QT-2026-0088',
-        SC_NO: 'SC-2026-0088',
-        INV_NO: 'INV-2026-0088',
-        PL_NO: 'PL-2026-0088',
-        REQ_NO: 'REQ-0088',
-        ATT: 'Booking Desk - Maersk HCMC',
-        BK_NO: 'MAEU99887766',
-        BL_NO: 'MAEU99887766BL',
-        DOC_NO: 'DOC-BL-0088',
-        REL_NO: 'RO-2026-0088',
+        QUOT_NO: 'QT-261124-01',
+        CTR_NO: 'SC-261124-01',
+        INV_NO: 'INV-261124-01',
+        PL_NO: 'PL-261124-01',
+        BKR_NO: 'BKR-261124-01',
+        BK_NO: 'BK-261124-01',
+        BL_NO: 'BL-261124-01',
+        DOCUMENT_NO: 'DOC-261124-01',
+        RO_NO: 'RO-261124-01',
+        DO_NO: 'DO-261124-01',
         DEPOT_NAME: 'ICD PHUOC LONG 3',
         DEPOT_ADDR: 'Truong Tho Ward, Thu Duc City, HCMC',
-        LC_NO: 'LC-US-774411',
+        LC_NO: 'LC-261124-01',
+        CO_FORM_NAME: 'FORM B',
+        TRADE_AGREEMENT: 'MFN',
         MARKS: 'PACIFIC RIM / LOS ANGELES / CTN NO. 1-1000 / MADE IN VIETNAM',
-        PACKING: 'Export Standard 5-ply Carton Boxes on Fumigated Pallets',
-        CONT_LOADING: '2 x 40HC Containers FCL/FCL',
-        FREIGHT_TERM: 'FREIGHT COLLECT',
-        COLLECT: 'AS ARRANGED',
-        VAT_RATE: '0',
-        EXP_TYPE_CODE: 'B11',
+        PACK_SPEC: 'Export Standard 5-ply Carton Boxes on Fumigated Pallets',
+        CONT_LOAD: '2 x 40HC Containers FCL/FCL',
+        TOTAL_CONTAINERS_TEXT: '2',
+        FREIGHT: 'FREIGHT COLLECT',
+        FREIGHT_COLLECT: 'AS ARRANGED',
+        VAT_GST: '0',
+        DEC_TYPE: 'B11',
         EXP_TYPE_NAME: 'Xuất kinh doanh',
-        IMP_TYPE_CODE: 'A11',
         IMP_TYPE_NAME: 'Nhập kinh doanh tiêu dùng'
       });
       APP_STATE.items = [
@@ -297,6 +297,7 @@ const SANDBOX_SHIM_SCRIPT = `
           PROD: 'ROBUSTA GREEN COFFEE BEANS G1',
           DES: 'Screen 18, Moisture max 12.5%, Crop 2025/2026',
           HS: '09011110',
+          ORG: 'VIETNAM',
           PREF: 'WO',
           MARKS: 'N/M - CROP 2026',
           LOT_NO: 'LOT-CF-01',
@@ -305,6 +306,8 @@ const SANDBOX_SHIM_SCRIPT = `
           PRICE: '4.25',
           AMT: '76500',
           PACK: '300',
+          UNIT_PACK: 'BAG',
+          CTYPE: '40HC',
           NW: '18000',
           GW: '18300',
           CBM: '24.5',
@@ -320,6 +323,7 @@ const SANDBOX_SHIM_SCRIPT = `
           PROD: 'VIETNAM CASHEW KERNELS W320',
           DES: 'Vacuum Tin Pack 2x11.34kg/carton',
           HS: '08013200',
+          ORG: 'VIETNAM',
           PREF: 'RVC 40%',
           MARKS: 'PACIFIC RIM - W320',
           LOT_NO: 'LOT-CS-09',
@@ -328,6 +332,8 @@ const SANDBOX_SHIM_SCRIPT = `
           PRICE: '6.80',
           AMT: '68000',
           PACK: '441',
+          UNIT_PACK: 'CTN',
+          CTYPE: '40HC',
           NW: '10000',
           GW: '10550',
           CBM: '18.2',

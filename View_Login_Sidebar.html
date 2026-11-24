@@ -1,13 +1,12 @@
 <!-- ========================================================================
      1. LOGIN SCREEN
      ======================================================================== -->
-<section id="loginScreen" class="login-screen">
+<section id="loginScreen" class="login-screen login-wrapper">
   <div class="login-card">
     <div class="login-brand">
       <div class="login-logo">XNK</div>
       <div>
-        <h1 class="login-title">Auto-Fill Chứng Từ XNK &amp; Logistics</h1>
-        <p class="login-subtitle">Đăng nhập bằng tài khoản sinh viên để soạn &amp; xuất bộ chứng từ</p>
+        <h1 class="login-title">Hệ thống Chứng từ XNK</h1>
       </div>
     </div>
 
@@ -15,24 +14,24 @@
 
     <form id="loginForm" class="login-form" onsubmit="handleLoginSubmit(event)">
       <div class="form-group">
-        <label class="form-label" for="loginMaSV">Mã sinh viên (Ma_SV)</label>
+        <label class="form-label" for="loginMaSV">Tên đăng nhập</label>
         <input
           id="loginMaSV"
           type="text"
           class="form-control"
-          placeholder="Ví dụ: 00123456"
+          placeholder="Rohwan"
           autocomplete="username"
           required
         />
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="loginMatKhau">Mật khẩu (Mat_Khau)</label>
+        <label class="form-label" for="loginMatKhau">Mật khẩu</label>
         <input
           id="loginMatKhau"
           type="password"
           class="form-control"
-          placeholder="Nhập mật khẩu"
+          placeholder="NV003"
           autocomplete="current-password"
           required
         />
@@ -48,16 +47,15 @@
 <!-- ========================================================================
      2. AUTHENTICATED APP SHELL (STICKY HEADER + LEFT SIDEBAR)
      ======================================================================== -->
-<div id="appShell" class="app-shell hidden">
-  <header class="app-header">
+<div id="appShell" class="app-shell app-layout hidden">
+  <header class="app-header top-header">
     <div class="header-left">
       <button type="button" class="mobile-menu-btn" onclick="toggleMobileSidebar()" title="Menu">
         &#9776;
       </button>
       <div class="header-logo">XNK</div>
       <div class="header-title-wrap">
-        <h1 class="header-title">Hệ thống Chứng từ Xuất Nhập Khẩu &amp; Logistics</h1>
-        <p class="header-subtitle">Đồng bộ 2 chiều 20 bộ chứng từ &amp; xuất Google Docs / PDF tự động</p>
+        <h1 class="header-title">Hệ thống Chứng từ XNK</h1>
       </div>
     </div>
 
@@ -69,7 +67,7 @@
       <button type="button" class="btn btn-danger-outline" onclick="openClearConfirmModal()">
         Xóa dữ liệu
       </button>
-      <button type="button" class="btn btn-secondary" onclick="handleSaveDraft()">
+      <button type="button" class="btn btn-primary" onclick="handleSaveDraft()">
         Lưu nháp
       </button>
       <button type="button" class="btn btn-primary" onclick="openBatchExportModal()">
@@ -83,162 +81,141 @@
 
   <div class="app-body">
     <aside id="appSidebar" class="sidebar" aria-label="Danh mục chứng từ">
-      <!-- I. Thông tin chung -->
+      <!-- Thông tin chung -->
       <div class="sidebar-group">
-        <div class="sidebar-group-title">I. Thông tin chung</div>
+        <div class="sidebar-group-title">Thông tin chung</div>
         <ul class="sidebar-nav-list">
           <li>
             <button type="button" class="sidebar-nav-btn active" data-nav="MASTER_PARTIES" onclick="switchTab('MASTER_PARTIES')">
-              <span>Thông tin Pháp nhân &amp; Tuyến</span>
-              <span class="sidebar-nav-code">MASTER</span>
+              <span>Thông tin chung</span>
             </button>
           </li>
         </ul>
       </div>
 
-      <!-- II. Người xuất khẩu chuẩn bị -->
+      <!-- Người xuất khẩu chuẩn bị -->
       <div class="sidebar-group">
-        <div class="sidebar-group-title">II. Người xuất khẩu chuẩn bị</div>
+        <div class="sidebar-group-title">Người xuất khẩu chuẩn bị</div>
         <ul class="sidebar-nav-list">
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="QUOTATION" onclick="switchTab('QUOTATION')">
-              <span>Bảng Báo Giá</span>
-              <span class="sidebar-nav-code">QT</span>
+              <span>Quotation</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="SALES_CONTRACT" onclick="switchTab('SALES_CONTRACT')">
-              <span>Hợp Đồng Ngoại Thương</span>
-              <span class="sidebar-nav-code">SC</span>
+              <span>Sales Contract</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="COMMERCIAL_INVOICE" onclick="switchTab('COMMERCIAL_INVOICE')">
-              <span>Hóa Đơn Thương Mại</span>
-              <span class="sidebar-nav-code">CI</span>
+              <span>Commercial Invoice</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="PACKING_LIST" onclick="switchTab('PACKING_LIST')">
-              <span>Phiếu Đóng Gói Hàng Hóa</span>
-              <span class="sidebar-nav-code">PL</span>
+              <span>Packing List</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_REQUEST" onclick="switchTab('BOOKING_REQUEST')">
-              <span>Yêu Cầu Đặt Chỗ</span>
-              <span class="sidebar-nav-code">BR</span>
+              <span>Booking Request</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="VGM" onclick="switchTab('VGM')">
-              <span>Xác Nhận Khối Lượng Toàn Bộ</span>
-              <span class="sidebar-nav-code">VGM</span>
+              <span>VGM</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="SHIPPING_INSTRUCTION" onclick="switchTab('SHIPPING_INSTRUCTION')">
-              <span>Hướng Dẫn Giao Hàng</span>
-              <span class="sidebar-nav-code">S/I</span>
+              <span>Shipping Instruction</span>
             </button>
           </li>
         </ul>
       </div>
 
-      <!-- III. Cơ quan chuyên ngành khác cấp -->
+      <!-- Cơ quan chuyên ngành khác cấp -->
       <div class="sidebar-group">
-        <div class="sidebar-group-title">III. Cơ quan chuyên ngành khác cấp</div>
+        <div class="sidebar-group-title">Cơ quan chuyên ngành khác cấp</div>
         <ul class="sidebar-nav-list">
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="VETERINARY_CERTIFICATE" onclick="switchTab('VETERINARY_CERTIFICATE')">
-              <span>Kiểm Dịch Động Vật</span>
-              <span class="sidebar-nav-code">VET</span>
+              <span>Veterinary Certificate</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="PHYTOSANITARY_CERTIFICATE" onclick="switchTab('PHYTOSANITARY_CERTIFICATE')">
-              <span>Kiểm Dịch Thực Vật</span>
-              <span class="sidebar-nav-code">PHYTO</span>
+              <span>Phytosanitary Certificate</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="QUALITY_CERTIFICATE" onclick="switchTab('QUALITY_CERTIFICATE')">
-              <span>Chứng Nhận Chất Lượng</span>
-              <span class="sidebar-nav-code">C/Q</span>
+              <span>Quality Certificate</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="FUMIGATION_CERTIFICATE" onclick="switchTab('FUMIGATION_CERTIFICATE')">
-              <span>Chứng Nhận Hun Trùng</span>
-              <span class="sidebar-nav-code">FUM</span>
+              <span>Fumigation Certificate</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="CERTIFICATE_OF_ORIGIN" onclick="switchTab('CERTIFICATE_OF_ORIGIN')">
-              <span>Chứng Nhận Xuất Xứ</span>
-              <span class="sidebar-nav-code">C/O</span>
+              <span>Certificate of Origin</span>
             </button>
           </li>
         </ul>
       </div>
 
-      <!-- IV. Hãng tàu / Forwarder cấp -->
+      <!-- Hãng tàu / Forwarder cấp -->
       <div class="sidebar-group">
-        <div class="sidebar-group-title">IV. Hãng tàu / Forwarder cấp</div>
+        <div class="sidebar-group-title">Hãng tàu / Forwarder cấp</div>
         <ul class="sidebar-nav-list">
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_NOTE" onclick="switchTab('BOOKING_NOTE')">
-              <span>Phiếu Đặt Chỗ</span>
-              <span class="sidebar-nav-code">BN</span>
+              <span>Booking Note</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_CONFIRMATION" onclick="switchTab('BOOKING_CONFIRMATION')">
-              <span>Xác Nhận Đặt Chỗ</span>
-              <span class="sidebar-nav-code">BC</span>
+              <span>Booking Confirmation</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="RELEASE_ORDER" onclick="switchTab('RELEASE_ORDER')">
-              <span>Lệnh Cấp Container Rỗng</span>
-              <span class="sidebar-nav-code">RO</span>
+              <span>Release Order</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="BILL_OF_LADING" onclick="switchTab('BILL_OF_LADING')">
-              <span>Vận Đơn Đường Biển</span>
-              <span class="sidebar-nav-code">B/L</span>
+              <span>Bill of Lading</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="DELIVERY_ORDER" onclick="switchTab('DELIVERY_ORDER')">
-              <span>Lệnh Giao Hàng</span>
-              <span class="sidebar-nav-code">D/O</span>
+              <span>Delivery Order</span>
             </button>
           </li>
         </ul>
       </div>
 
-      <!-- V. Hải quan & Thanh toán quốc tế -->
+      <!-- Hải quan & Thanh toán quốc tế -->
       <div class="sidebar-group">
-        <div class="sidebar-group-title">V. Hải quan &amp; Thanh toán quốc tế</div>
+        <div class="sidebar-group-title">Hải quan &amp; Thanh toán quốc tế</div>
         <ul class="sidebar-nav-list">
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="To_khai_XK" onclick="switchTab('To_khai_XK')">
-              <span>Tờ Khai Hải Quan XK</span>
-              <span class="sidebar-nav-code">TK-XK</span>
+              <span>Export Customs Declaration</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="To_khai_NK" onclick="switchTab('To_khai_NK')">
-              <span>Tờ Khai Hải Quan NK</span>
-              <span class="sidebar-nav-code">TK-NK</span>
+              <span>Import Customs Declaration</span>
             </button>
           </li>
           <li>
             <button type="button" class="sidebar-nav-btn" data-nav="LETTER_OF_CREDIT" onclick="switchTab('LETTER_OF_CREDIT')">
-              <span>Thư Tín Dụng</span>
-              <span class="sidebar-nav-code">L/C</span>
+              <span>Letter of Credit</span>
             </button>
           </li>
         </ul>

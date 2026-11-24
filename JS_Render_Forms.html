@@ -1,8 +1,8 @@
 <script>
 /**
  * JS_Render_Forms.html
- * Configuration-driven renderer for all 21 views (MASTER_PARTIES + 20 documents),
- * dynamic synced tables (items[], containers[], tax), and batch export checklist.
+ * Configuration-driven renderer for Thông tin chung + 20 documents,
+ * editable <input list="..."> comboboxes, and high-contrast synced tables.
  */
 
 /* ==========================================================================
@@ -11,24 +11,27 @@
 
 const ITEM_COLUMNS = {
   PCODE: { label: 'Mã hàng', width: '100px' },
-  PROD: { label: 'Tên hàng hóa (Product)', width: '185px' },
+  PROD: { label: 'Tên hàng hóa', width: '185px' },
   DES: { label: 'Mô tả chi tiết', width: '185px' },
   HS: { label: 'Mã HS', width: '105px' },
-  PREF: { label: 'Ưu đãi C/O', width: '95px' },
-  MARKS: { label: 'Marks & Nos', width: '125px' },
-  LOT_NO: { label: 'Số Lô (Lot No.)', width: '105px' },
+  ORG: { label: 'Xuất xứ', width: '125px', dropdown: 'QUOC_GIA' },
+  PREF: { label: 'Tiêu chí xuất xứ', width: '115px', dropdown: 'CO_CRITERIA' },
+  MARKS: { label: 'Ký mã hiệu', width: '125px' },
+  LOT_NO: { label: 'Số lô', width: '105px' },
+  UNIT: { label: 'ĐVT', width: '95px', dropdown: 'UNIT' },
   QTY: { label: 'Số lượng', width: '90px', num: true },
-  UNIT: { label: 'ĐVT (Unit)', width: '95px', dropdown: 'UNIT' },
   PRICE: { label: 'Đơn giá', width: '95px', num: true },
   AMT: { label: 'Thành tiền', width: '110px', num: true, readonly: true },
   PACK: { label: 'Số kiện', width: '85px', num: true },
+  UNIT_PACK: { label: 'ĐV đóng gói', width: '105px', dropdown: 'UNIT' },
+  CTYPE: { label: 'Loại Cont', width: '110px', dropdown: 'LOAI_CONT' },
   NW: { label: 'Net Wt (kg)', width: '95px', num: true },
   GW: { label: 'Gross Wt (kg)', width: '95px', num: true },
   CBM: { label: 'Thể tích (CBM)', width: '95px', num: true }
 };
 
 const TAX_COLUMNS = {
-  PROD: { label: 'Tên hàng (đồng bộ)', width: '165px', readonly: true },
+  PROD: { label: 'Tên hàng', width: '165px', readonly: true },
   HS: { label: 'Mã HS', width: '100px', readonly: true },
   EX_VAL: { label: 'Trị giá tính thuế', width: '120px', num: true },
   EX_TAX_RATE: { label: 'Thuế suất (%)', width: '95px', num: true },
@@ -39,299 +42,330 @@ const TAX_COLUMNS = {
 };
 
 const CONT_COLUMNS = {
-  CONT: { label: 'Số Container (ISO 6346)', width: '155px' },
-  SEAL: { label: 'Số Seal (Chì)', width: '120px' },
+  CONT: { label: 'Số Container', width: '155px' },
+  SEAL: { label: 'Số Seal', width: '120px' },
   CTYPE: { label: 'Loại Cont', width: '110px', dropdown: 'LOAI_CONT' },
-  CSIZE: { label: 'Kích thước', width: '95px' },
+  CSIZE: { label: 'Kích thước', width: '100px', dropdown: 'LOAI_CONT' },
   PACK: { label: 'Số kiện', width: '85px', num: true },
-  UNIT_PACK: { label: 'ĐV Đóng gói', width: '100px' },
+  UNIT_PACK: { label: 'ĐV đóng gói', width: '105px', dropdown: 'UNIT' },
   MAX_GW: { label: 'Max Gross (kg)', width: '110px', num: true },
   GW: { label: 'Gross Wt (kg)', width: '105px', num: true },
   VGM_WEI: { label: 'VGM Wt (kg)', width: '110px', num: true },
   CBM: { label: 'CBM', width: '85px', num: true }
 };
 
+const DATALIST_ID_MAP = {
+  POL: 'dl_POL',
+  POD: 'dl_POD',
+  QUOC_GIA: 'dl_QUOC_GIA',
+  CAR_NAME: 'dl_CAR_NAME',
+  VESSEL: 'dl_VESSEL',
+  VOYAGE: 'dl_VOYAGE',
+  LOAI_CONT: 'dl_LOAI_CONT',
+  SERVICE_TYPE: 'dl_SERVICE_TYPE',
+  INCOTERM: 'dl_INCOTERM',
+  PAY_TERM: 'dl_PAY_TERM',
+  UNIT: 'dl_UNIT',
+  CURR: 'dl_CURR',
+  CO_FORM: 'dl_CO_FORM',
+  CO_CRITERIA: 'dl_CO_CRITERIA',
+  TRADE_AGREEMENT: 'dl_TRADE_AGREEMENT',
+  XNK_XK: 'dl_XNK_XK',
+  XNK_NK: 'dl_XNK_NK',
+  FREIGHT: 'dl_FREIGHT',
+  TOTAL_CONTAINERS_TEXT: 'dl_TOTAL_CONTAINERS_TEXT'
+};
+
 /* ==========================================================================
-   21-VIEW CONFIGURATION SCHEMA (MASTER_PARTIES + 20 DOCUMENTS)
+   21-VIEW CONFIGURATION SCHEMA (Thông tin chung + 20 DOCUMENTS)
    ========================================================================== */
 
 const DOC_FORM_CONFIGS = {
   MASTER_PARTIES: {
-    title: 'Thông tin chung: Pháp nhân & Tuyến vận tải (Master Data)',
-    subtitle: 'Dữ liệu nhập tại đây tự động đồng bộ 2 chiều sang toàn bộ 20 chứng từ.',
+    title: 'Thông tin chung',
     isMaster: true,
     sections: [
       {
-        title: '1. Người xuất khẩu / Bên bán (Shipper / Exporter / Seller)',
+        title: '1. Người xuất khẩu / Bên bán',
         fields: [
           { key: 'SHIP_NAME', label: 'Tên công ty xuất khẩu', span: 2 },
-          { key: 'SELLER_TITLE', label: 'Chức danh đại diện (Seller Title)' },
-          { key: 'SHIP_REP', label: 'Người đại diện (Represented by)' },
-          { key: 'SHIP_TAX', label: 'Mã số thuế (Tax Code)' },
-          { key: 'SHIP_TEL', label: 'Điện thoại (Tel)' },
-          { key: 'SHIP_FAX', label: 'Số Fax (Shipper Fax)' },
+          { key: 'SELLER_TITLE', label: 'Chức danh đại diện' },
+          { key: 'SHIP_REP', label: 'Người đại diện' },
+          { key: 'SHIP_TAX', label: 'Mã số thuế' },
+          { key: 'SHIP_TEL', label: 'Điện thoại' },
+          { key: 'SHIP_FAX', label: 'Số Fax' },
           { key: 'SHIP_EMAIL', label: 'Email' },
-          { key: 'SHIP_ADDR', label: 'Địa chỉ trụ sở (Address)', span: 3 },
-          { key: 'BANK_NAME', label: 'Ngân hàng thụ hưởng (Bank Name)' },
-          { key: 'BANK_ACC', label: 'Số tài khoản (Account No.)' },
-          { key: 'BANK_SWIFT', label: 'Mã SWIFT (SWIFT Code)' },
-          { key: 'BANK_FAX', label: 'Fax Ngân hàng (Bank Fax)' },
-          { key: 'BANK_ADDR', label: 'Địa chỉ Ngân hàng', span: 2 }
+          { key: 'SALE_NAME', label: 'Nhân viên kinh doanh' },
+          { key: 'SHIP_ADDR', label: 'Địa chỉ trụ sở', span: 3 },
+          { key: 'BANK_NAME', label: 'Ngân hàng thụ hưởng' },
+          { key: 'BANK_ACC', label: 'Số tài khoản' },
+          { key: 'BANK_SWIFT', label: 'Mã SWIFT' },
+          { key: 'BANK_FAX', label: 'Fax ngân hàng' },
+          { key: 'BANK_ADDR', label: 'Địa chỉ ngân hàng', span: 2 },
+          { key: 'DOCS_NAME', label: 'Nhân viên chứng từ' },
+          { key: 'DOCS_TITLE', label: 'Chức vụ nhân viên' },
+          { key: 'DOCS_TEL', label: 'SĐT nhân viên' },
+          { key: 'DOCS_EMAIL', label: 'Email nhân viên', span: 2 }
         ]
       },
       {
-        title: '2. Người nhập khẩu / Bên mua (Consignee / Importer / Buyer)',
+        title: '2. Người nhập khẩu / Bên mua',
         fields: [
           { key: 'CNE_NAME', label: 'Tên công ty nhập khẩu', span: 2 },
-          { key: 'BUYER_TITLE', label: 'Chức danh đại diện (Buyer Title)' },
-          { key: 'CNE_REP', label: 'Người đại diện (Represented by)' },
-          { key: 'CNE_TAX', label: 'Mã số thuế (Tax ID)' },
-          { key: 'CNE_TEL', label: 'Điện thoại (Tel)' },
-          { key: 'CNE_FAX', label: 'Số Fax (Consignee Fax)' },
+          { key: 'BUYER_TITLE', label: 'Chức danh đại diện' },
+          { key: 'CNE_REP', label: 'Người đại diện' },
+          { key: 'CNE_TAX', label: 'Mã số thuế' },
+          { key: 'CNE_TEL', label: 'Điện thoại' },
+          { key: 'CNE_FAX', label: 'Số Fax' },
           { key: 'CNE_EMAIL', label: 'Email' },
-          { key: 'CNE_ADDR', label: 'Địa chỉ nhận hàng (Address)', span: 3 },
-          { key: 'BUYER_BANK', label: 'Ngân hàng bên mua (Issuing Bank)' },
+          { key: 'CNE_ADDR', label: 'Địa chỉ nhận hàng', span: 3 },
+          { key: 'BUYER_BANK', label: 'Ngân hàng bên mua' },
           { key: 'BUYER_ACC', label: 'Số tài khoản bên mua', span: 2 }
         ]
       },
       {
-        title: '3. Bên nhận thông báo (Notify Party)',
+        title: '3. Bên nhận thông báo',
         fields: [
           { key: 'NTF_NAME', label: 'Tên bên nhận thông báo', span: 2 },
-          { key: 'NTF_TAX', label: 'Mã số thuế (Tax ID)' },
-          { key: 'NTF_TEL', label: 'Điện thoại (Tel)' },
+          { key: 'NTF_TAX', label: 'Mã số thuế' },
+          { key: 'NTF_TEL', label: 'Điện thoại' },
           { key: 'NTF_FAX', label: 'Số Fax' },
           { key: 'NTF_EMAIL', label: 'Email' },
-          { key: 'NTF_ADDR', label: 'Địa chỉ (Notify Address)', span: 3 }
+          { key: 'NTF_ADDR', label: 'Địa chỉ', span: 3 }
         ]
       },
       {
-        title: '4. Hãng tàu, Tuyến vận tải & Điều khoản thương mại (Carrier & Route)',
+        title: '4. Tuyến vận tải, Tàu & Điều khoản thương mại',
         fields: [
-          { key: 'POL', label: 'Cảng xếp hàng (POL)', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'Cảng dỡ hàng (POD)', type: 'select', source: 'POD' },
-          { key: 'DEST_CTRY', label: 'Quốc gia đến (Destination Country)' },
-          { key: 'CAR_NAME', label: 'Tên hãng tàu / Forwarder', span: 2 },
-          { key: 'CAR_TEL', label: 'Điện thoại hãng tàu' },
-          { key: 'CAR_ADDR', label: 'Địa chỉ hãng tàu', span: 3 },
-          { key: 'VESSEL', label: 'Tên tàu (Vessel)' },
-          { key: 'VOYAGE', label: 'Số chuyến (Voyage)' },
-          { key: 'VES_VOY', label: 'Tàu / Chuyến (VES_VOY)', readonly: true },
-          { key: 'SERVICE_TYPE', label: 'Loại dịch vụ (Service Type)', type: 'select', source: 'SERVICE_TYPE' },
-          { key: 'INCOTERM', label: 'Điều kiện giao hàng (Incoterm)', type: 'select', source: 'INCOTERM' },
-          { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'select', source: 'PAY_TERM' },
-          { key: 'CURR', label: 'Đồng tiền thanh toán (Currency)', type: 'select', source: 'CURR' }
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'DEST_CTRY', label: 'Quốc gia đến', type: 'combobox', source: 'QUOC_GIA' },
+          { key: 'EXP_CTRY', label: 'Quốc gia xuất khẩu', type: 'combobox', source: 'QUOC_GIA' },
+          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
+          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
+          { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
+          { key: 'SERVICE_TYPE', label: 'Loại dịch vụ', type: 'combobox', source: 'SERVICE_TYPE' },
+          { key: 'INCOTERM', label: 'Incoterm', type: 'combobox', source: 'INCOTERM' },
+          { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'combobox', source: 'PAY_TERM' },
+          { key: 'CURR', label: 'Đồng tiền thanh toán', type: 'combobox', source: 'CURR' }
         ]
-      },
+      }
+    ],
+    tables: [
       {
-        title: '5. Nhân viên chứng từ phụ trách (Docs In-charge)',
-        fields: [
-          { key: 'DOCS_NAME', label: 'Họ tên nhân viên chứng từ' },
-          { key: 'DOCS_TITLE', label: 'Chức vụ' },
-          { key: 'DOCS_TEL', label: 'Số điện thoại liên hệ' },
-          { key: 'DOCS_EMAIL', label: 'Email liên hệ', span: 2 }
-        ]
+        type: 'items',
+        title: 'Danh sách Hàng hóa chung',
+        cols: ['PCODE', 'PROD', 'DES', 'HS', 'ORG', 'PREF', 'MARKS', 'LOT_NO', 'UNIT', 'QTY', 'PRICE', 'AMT', 'PACK', 'CTYPE', 'NW', 'GW', 'CBM']
       }
     ]
   },
 
   QUOTATION: {
-    title: 'Bảng Báo Giá (Quotation)',
-    subtitle: 'Nhóm II — Người xuất khẩu chuẩn bị',
+    title: 'Quotation',
     sections: [
       {
-        title: 'Thông tin chung Báo giá',
+        title: 'Thông tin Báo giá',
         fields: [
-          { key: 'QT_NO', label: 'Số Báo giá (Số BG / Quotation No.)' },
+          { key: 'QUOT_NO', label: 'Số báo giá' },
           { key: 'QT_DATE', label: 'Ngày báo giá', type: 'date' },
           { key: 'VALID_DATE', label: 'Hiệu lực đến ngày', type: 'date' },
-          { key: 'INCOTERM', label: 'Điều kiện Incoterm', type: 'select', source: 'INCOTERM' },
-          { key: 'PAY_TERM', label: 'Điều khoản thanh toán', type: 'select', source: 'PAY_TERM' },
-          { key: 'CURR', label: 'Tiền tệ', type: 'select', source: 'CURR' },
-          { key: 'POL', label: 'Cảng đi (POL)', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'Cảng đến (POD)', type: 'select', source: 'POD' },
-          { key: 'LEAD_TIME', label: 'Thời gian giao hàng (Lead Time)' },
-          { key: 'DOCS_NAME', label: 'Nhân viên báo giá (Ký tên)' },
-          { key: 'REMARKS', label: 'Ghi chú báo giá', type: 'textarea', span: 2 }
+          { key: 'SELLER_TITLE', label: 'Chức danh đại diện bán' },
+          { key: 'INCOTERM', label: 'Incoterm', type: 'combobox', source: 'INCOTERM' },
+          { key: 'PAY_TERM', label: 'Điều khoản thanh toán', type: 'combobox', source: 'PAY_TERM' },
+          { key: 'CURR', label: 'Tiền tệ', type: 'combobox', source: 'CURR' },
+          { key: 'POL', label: 'Cảng đi', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng đến', type: 'combobox', source: 'POD' },
+          { key: 'LEAD_TIME', label: 'Thời gian giao hàng' },
+          { key: 'SALE_NAME', label: 'Nhân viên kinh doanh' },
+          { key: 'DOCS_NAME', label: 'Nhân viên chứng từ' },
+          { key: 'REMARKS', label: 'Ghi chú báo giá', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Chi tiết sản phẩm báo giá (Không giới hạn số dòng)', cols: ['PCODE', 'PROD', 'DES', 'HS', 'QTY', 'UNIT', 'PRICE', 'AMT'] }
+      { type: 'items', title: 'Chi tiết sản phẩm báo giá', cols: ['PCODE', 'PROD', 'DES', 'HS', 'ORG', 'QTY', 'UNIT', 'PRICE', 'AMT'] }
     ],
     totals: [
       { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
-      { key: 'TOT_AMT', label: 'Tổng tiền hàng (Subtotal)', readonly: true },
-      { key: 'VAT_RATE', label: 'Thuế suất VAT (%)' },
-      { key: 'VAT_AMT', label: 'Tiền thuế VAT', readonly: true },
+      { key: 'TOT_UNIT', label: 'Đơn vị tính tổng', type: 'combobox', source: 'UNIT' },
+      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true },
+      { key: 'VAT_GST', label: 'Thuế suất VAT / GST (%)' },
+      { key: 'VAT_TOTAL', label: 'Tiền thuế VAT', readonly: true },
       { key: 'GRAND_TOTAL', label: 'Tổng cộng thanh toán', readonly: true },
-      { key: 'TOT_AMT_WORDS', label: 'Tổng tiền bằng chữ (In Words)', span: 3 }
+      { key: 'TOT_AMT_WORDS', label: 'Tổng tiền bằng chữ', span: 3 }
     ]
   },
 
   SALES_CONTRACT: {
-    title: 'Hợp Đồng Ngoại Thương (Sales Contract)',
-    subtitle: 'Nhóm II — Người xuất khẩu chuẩn bị',
+    title: 'Sales Contract',
     sections: [
       {
-        title: 'Thông tin Hợp đồng & Điều khoản thực hiện',
+        title: 'Thông tin Hợp đồng & Điều khoản',
         fields: [
-          { key: 'SC_NO', label: 'Số Hợp đồng (Contract No.)' },
-          { key: 'SC_DATE', label: 'Ngày ký Hợp đồng', type: 'date' },
+          { key: 'CTR_NO', label: 'Số hợp đồng' },
+          { key: 'SC_DATE', label: 'Ngày ký hợp đồng', type: 'date' },
           { key: 'SIGN_PLACE', label: 'Địa điểm ký kết' },
-          { key: 'INCOTERM', label: 'Incoterm', type: 'select', source: 'INCOTERM' },
-          { key: 'PAY_TERM', label: 'Thanh toán (Payment Term)', type: 'select', source: 'PAY_TERM' },
-          { key: 'CURR', label: 'Tiền tệ', type: 'select', source: 'CURR' },
-          { key: 'POL', label: 'Cảng xếp hàng (POL)', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'Cảng dỡ hàng (POD)', type: 'select', source: 'POD' },
-          { key: 'ETD', label: 'Ngày giao hàng dự kiến (ETD)', type: 'date' },
-          { key: 'PACKING', label: 'Quy cách đóng gói (Packing)' },
-          { key: 'CONT_LOADING', label: 'Container Loading' },
-          { key: 'MARKS', label: 'Ký mã hiệu (Marking)' },
-          { key: 'TOLERANCE', label: 'Dung sai (Tolerance %)' },
+          { key: 'SELLER_TITLE', label: 'Chức danh bên bán' },
+          { key: 'BUYER_TITLE', label: 'Chức danh bên mua' },
+          { key: 'INCOTERM', label: 'Incoterm', type: 'combobox', source: 'INCOTERM' },
+          { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'combobox', source: 'PAY_TERM' },
+          { key: 'CURR', label: 'Tiền tệ', type: 'combobox', source: 'CURR' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'ETD', label: 'Ngày giao hàng dự kiến', type: 'date' },
+          { key: 'PACK_SPEC', label: 'Quy cách đóng gói' },
+          { key: 'CONT_LOAD', label: 'Đóng hàng Container' },
+          { key: 'TOTAL_CONTAINERS_TEXT', label: 'Số lượng Container', type: 'combobox', source: 'TOTAL_CONTAINERS_TEXT' },
+          { key: 'MARKS', label: 'Ký mã hiệu' },
+          { key: 'TOLERANCE', label: 'Dung sai (%)' },
           { key: 'ARBITRATION', label: 'Trọng tài & Khiếu nại', span: 2 },
           { key: 'REMARKS', label: 'Điều khoản bổ sung', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Danh mục hàng hóa theo Hợp đồng', cols: ['PCODE', 'PROD', 'DES', 'HS', 'QTY', 'UNIT', 'PRICE', 'AMT'] }
+      { type: 'items', title: 'Danh mục hàng hóa', cols: ['PCODE', 'PROD', 'DES', 'HS', 'ORG', 'QTY', 'UNIT', 'PRICE', 'AMT'] }
     ],
     totals: [
       { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
-      { key: 'TOT_AMT', label: 'Tổng trị giá Hợp đồng', readonly: true },
-      { key: 'TOT_AMT_WORDS', label: 'Số tiền bằng chữ (In Words)', span: 3 }
+      { key: 'TOT_UNIT', label: 'Đơn vị tính tổng', type: 'combobox', source: 'UNIT' },
+      { key: 'TOT_AMT', label: 'Tổng trị giá hợp đồng', readonly: true },
+      { key: 'TOT_AMT_WORDS', label: 'Số tiền bằng chữ', span: 3 }
     ]
   },
 
   COMMERCIAL_INVOICE: {
-    title: 'Hóa Đơn Thương Mại (Commercial Invoice)',
-    subtitle: 'Nhóm II — Người xuất khẩu chuẩn bị',
+    title: 'Commercial Invoice',
     sections: [
       {
         title: 'Thông tin Hóa đơn',
         fields: [
-          { key: 'INV_NO', label: 'Số Hóa đơn (Invoice No.)' },
-          { key: 'INV_DATE', label: 'Ngày Hóa đơn', type: 'date' },
-          { key: 'SC_NO', label: 'Số Hợp đồng tham chiếu' },
-          { key: 'LC_NO', label: 'Số L/C tham chiếu (nếu có)' },
-          { key: 'INCOTERM', label: 'Incoterm', type: 'select', source: 'INCOTERM' },
-          { key: 'PAY_TERM', label: 'Thanh toán', type: 'select', source: 'PAY_TERM' },
-          { key: 'CURR', label: 'Tiền tệ', type: 'select', source: 'CURR' },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
-          { key: 'VESSEL', label: 'Tên tàu', },
-          { key: 'VOYAGE', label: 'Số chuyến' },
+          { key: 'INV_NO', label: 'Số hóa đơn' },
+          { key: 'INV_DATE', label: 'Ngày hóa đơn', type: 'date' },
+          { key: 'CTR_NO', label: 'Số hợp đồng tham chiếu' },
+          { key: 'LC_NO', label: 'Số thư tín dụng tham chiếu' },
+          { key: 'SELLER_TITLE', label: 'Chức danh bên bán' },
+          { key: 'INCOTERM', label: 'Incoterm', type: 'combobox', source: 'INCOTERM' },
+          { key: 'PAY_TERM', label: 'Thanh toán', type: 'combobox', source: 'PAY_TERM' },
+          { key: 'CURR', label: 'Tiền tệ', type: 'combobox', source: 'CURR' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
+          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'ETD', label: 'Ngày khởi hành (ETD)', type: 'date' },
-          { key: 'MARKS', label: 'Shipping Marks', span: 2 },
-          { key: 'REMARKS', label: 'Ghi chú Hóa đơn', type: 'textarea', span: 3 }
+          { key: 'ETD', label: 'Ngày khởi hành', type: 'date' },
+          { key: 'MARKS', label: 'Ký mã hiệu vận chuyển', span: 2 },
+          { key: 'REMARKS', label: 'Ghi chú hóa đơn', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Chi tiết hàng hóa trên Hóa đơn', cols: ['PCODE', 'PROD', 'DES', 'HS', 'MARKS', 'QTY', 'UNIT', 'PRICE', 'AMT'] }
+      { type: 'items', title: 'Chi tiết hàng hóa', cols: ['PCODE', 'PROD', 'DES', 'HS', 'ORG', 'MARKS', 'QTY', 'UNIT', 'PRICE', 'AMT'] }
     ],
     totals: [
       { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
-      { key: 'TOT_AMT', label: 'Tổng tiền hàng (Subtotal)', readonly: true },
-      { key: 'VAT_RATE', label: 'Thuế suất VAT (%)' },
-      { key: 'VAT_AMT', label: 'Tiền thuế VAT', readonly: true },
-      { key: 'GRAND_TOTAL', label: 'Tổng thanh toán (Grand Total)', readonly: true },
-      { key: 'TOT_AMT_WORDS', label: 'Tổng tiền bằng chữ (In Words)', span: 3 }
+      { key: 'TOT_UNIT', label: 'Đơn vị tính tổng', type: 'combobox', source: 'UNIT' },
+      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true },
+      { key: 'VAT_GST', label: 'Thuế suất VAT / GST (%)' },
+      { key: 'VAT_TOTAL', label: 'Tiền thuế VAT', readonly: true },
+      { key: 'GRAND_TOTAL', label: 'Tổng thanh toán', readonly: true },
+      { key: 'TOT_AMT_WORDS', label: 'Tổng tiền bằng chữ', span: 3 }
     ]
   },
 
   PACKING_LIST: {
-    title: 'Phiếu Đóng Gói Hàng Hóa (Packing List)',
-    subtitle: 'Nhóm II — Người xuất khẩu chuẩn bị',
+    title: 'Packing List',
     sections: [
       {
         title: 'Thông tin Phiếu đóng gói',
         fields: [
-          { key: 'PL_NO', label: 'Số Packing List' },
+          { key: 'PL_NO', label: 'Số phiếu đóng gói' },
           { key: 'PL_DATE', label: 'Ngày phát hành', type: 'date' },
-          { key: 'INV_NO', label: 'Số Invoice liên kết' },
-          { key: 'INV_DATE', label: 'Ngày Invoice', type: 'date' },
-          { key: 'SC_NO', label: 'Số Hợp đồng' },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
+          { key: 'INV_NO', label: 'Số hóa đơn liên kết' },
+          { key: 'INV_DATE', label: 'Ngày hóa đơn', type: 'date' },
+          { key: 'CTR_NO', label: 'Số hợp đồng' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'ETD', label: 'ETD', type: 'date' },
-          { key: 'PACKING', label: 'Quy cách đóng gói' },
-          { key: 'MARKS', label: 'Shipping Marks', span: 2 },
+          { key: 'ETD', label: 'Ngày khởi hành', type: 'date' },
+          { key: 'PACK_SPEC', label: 'Quy cách đóng gói' },
+          { key: 'MARKS', label: 'Ký mã hiệu vận chuyển', span: 2 },
           { key: 'REMARKS', label: 'Ghi chú đóng gói', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Chi tiết đóng gói & trọng lượng từng mặt hàng', cols: ['PCODE', 'PROD', 'DES', 'MARKS', 'LOT_NO', 'QTY', 'UNIT', 'PACK', 'NW', 'GW', 'CBM'] }
+      { type: 'items', title: 'Chi tiết đóng gói & trọng lượng', cols: ['PCODE', 'PROD', 'DES', 'MARKS', 'LOT_NO', 'QTY', 'UNIT', 'PACK', 'UNIT_PACK', 'NW', 'GW', 'CBM'] }
     ],
     totals: [
       { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
-      { key: 'TOT_PACK', label: 'Tổng số kiện (Total Packages)', readonly: true },
+      { key: 'TOT_UNIT', label: 'Đơn vị tính tổng', type: 'combobox', source: 'UNIT' },
+      { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
       { key: 'TOT_NW', label: 'Tổng Net Weight (kg)', readonly: true },
       { key: 'TOT_GW', label: 'Tổng Gross Weight (kg)', readonly: true },
-      { key: 'TOT_CBM', label: 'Tổng Thể tích (CBM)', readonly: true }
+      { key: 'TOT_CBM', label: 'Tổng thể tích (CBM)', readonly: true }
     ]
   },
 
   BOOKING_REQUEST: {
-    title: 'Yêu Cầu Đặt Chỗ (Booking Request)',
-    subtitle: 'Nhóm II — Người xuất khẩu chuẩn bị',
+    title: 'Booking Request',
     sections: [
       {
         title: 'Thông tin Yêu cầu đặt chỗ',
         fields: [
-          { key: 'REQ_NO', label: 'Số Yêu cầu (Request No.)' },
+          { key: 'BKR_NO', label: 'Số yêu cầu đặt chỗ' },
           { key: 'REQ_DATE', label: 'Ngày gửi yêu cầu', type: 'date' },
-          { key: 'ATT', label: 'Người nhận (ATT / Attn)' },
-          { key: 'CAR_NAME', label: 'Hãng tàu / Forwarder' },
-          { key: 'SERVICE_TYPE', label: 'Loại dịch vụ', type: 'select', source: 'SERVICE_TYPE' },
-          { key: 'CONT_TYPE', label: 'Loại Container yêu cầu', type: 'select', source: 'LOAI_CONT' },
-          { key: 'CONT_QTY', label: 'Số lượng Container' },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
-          { key: 'ETD', label: 'Ngày tàu chạy mong muốn (ETD)', type: 'date' },
+          { key: 'BK_NO', label: 'Số đặt chỗ tham chiếu' },
+          { key: 'CAR_NAME', label: 'Tên hãng tàu / Forwarder', type: 'combobox', source: 'CAR_NAME' },
+          { key: 'CAR_ATTN', label: 'Người liên hệ hãng tàu' },
+          { key: 'CAR_TEL', label: 'Điện thoại hãng tàu' },
+          { key: 'CAR_EMAIL', label: 'Email hãng tàu' },
+          { key: 'CAR_ADDR', label: 'Địa chỉ hãng tàu', span: 2 },
+          { key: 'SERVICE_TYPE', label: 'Loại dịch vụ', type: 'combobox', source: 'SERVICE_TYPE' },
+          { key: 'CTYPE', label: 'Loại Container', type: 'combobox', source: 'LOAI_CONT' },
+          { key: 'TOTAL_CONTAINERS_TEXT', label: 'Số lượng Container', type: 'combobox', source: 'TOTAL_CONTAINERS_TEXT' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'ETD', label: 'Ngày tàu chạy dự kiến', type: 'date' },
           { key: 'PROD_DESC', label: 'Mô tả chung hàng hóa', span: 2 },
           { key: 'REMARKS', label: 'Yêu cầu đặc biệt', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'containers', title: 'Danh sách Container dự kiến', cols: ['CONT', 'CTYPE', 'CSIZE', 'PACK', 'UNIT_PACK', 'GW', 'CBM'] }
+      { type: 'containers', title: 'Danh sách Container dự kiến', cols: ['CONT', 'CTYPE', 'CSIZE', 'PACK', 'UNIT_PACK', 'GW', 'CBM'] },
+      { type: 'items', title: 'Chi tiết hàng hóa đặt chỗ', cols: ['PROD', 'HS', 'QTY', 'UNIT', 'PACK', 'UNIT_PACK', 'GW', 'CBM'] }
     ],
     totals: [
       { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
       { key: 'TOT_GW', label: 'Tổng Gross Weight (kg)', readonly: true },
-      { key: 'TOT_CBM', label: 'Tổng Thể tích (CBM)', readonly: true }
+      { key: 'TOT_CBM', label: 'Tổng thể tích (CBM)', readonly: true }
     ]
   },
 
   VGM: {
-    title: 'Phiếu Xác Nhận Khối Lượng Toàn Bộ (VGM)',
-    subtitle: 'Nhóm II — Người xuất khẩu chuẩn bị',
+    title: 'VGM',
     sections: [
       {
         title: 'Thông tin Khai báo VGM',
         fields: [
           { key: 'VGM_NO', label: 'Số phiếu VGM' },
-          { key: 'VGM_DATE', label: 'Ngày cân / Khai báo', type: 'date' },
-          { key: 'BK_NO', label: 'Số Booking (Booking No.)' },
-          { key: 'VESSEL', label: 'Tên tàu' },
-          { key: 'VOYAGE', label: 'Số chuyến' },
+          { key: 'VGM_DATE', label: 'Ngày khai báo', type: 'date' },
+          { key: 'BK_NO', label: 'Số đặt chỗ' },
+          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
+          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
-          { key: 'WEIGH_METHOD', label: 'Phương pháp cân (Method 1 / 2)' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'WEIGH_METHOD', label: 'Phương pháp cân' },
           { key: 'WEIGH_STATION', label: 'Trạm cân / Đơn vị cân' },
-          { key: 'DOCS_NAME', label: 'Người đại diện ký VGM' },
-          { key: 'DOCS_TEL', label: 'SĐT liên hệ VGM' }
+          { key: 'DOCS_NAME', label: 'Người đại diện ký' },
+          { key: 'DOCS_TEL', label: 'SĐT liên hệ' }
         ]
       }
     ],
     tables: [
-      { type: 'containers', title: 'Bảng kê khối lượng VGM từng Container', cols: ['CONT', 'SEAL', 'CTYPE', 'CSIZE', 'MAX_GW', 'VGM_WEI', 'GW'] }
+      { type: 'containers', title: 'Bảng kê khối lượng VGM', cols: ['CONT', 'SEAL', 'CTYPE', 'CSIZE', 'MAX_GW', 'VGM_WEI', 'GW'] }
     ],
     totals: [
       { key: 'TOT_VGM', label: 'Tổng cộng VGM (kg)', readonly: true },
@@ -340,69 +374,69 @@ const DOC_FORM_CONFIGS = {
   },
 
   SHIPPING_INSTRUCTION: {
-    title: 'Hướng Dẫn Giao Hàng (Shipping Instruction - S/I)',
-    subtitle: 'Nhóm II — Người xuất khẩu chuẩn bị',
+    title: 'Shipping Instruction',
     sections: [
       {
-        title: 'Thông tin Hướng dẫn lập Vận đơn (S/I)',
+        title: 'Thông tin Hướng dẫn lập Vận đơn',
         fields: [
-          { key: 'SI_NO', label: 'Số S/I' },
-          { key: 'SI_DATE', label: 'Ngày gửi S/I', type: 'date' },
-          { key: 'BK_NO', label: 'Số Booking' },
-          { key: 'CAR_NAME', label: 'Hãng tàu / Forwarder' },
-          { key: 'SERVICE_TYPE', label: 'Service Type', type: 'select', source: 'SERVICE_TYPE' },
-          { key: 'BL_TYPE', label: 'Loại B/L (Original / Surrender / Seaway)' },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
+          { key: 'SI_NO', label: 'Số hướng dẫn giao hàng' },
+          { key: 'SI_DATE', label: 'Ngày gửi', type: 'date' },
+          { key: 'BK_NO', label: 'Số đặt chỗ' },
+          { key: 'CAR_NAME', label: 'Hãng tàu / Forwarder', type: 'combobox', source: 'CAR_NAME' },
+          { key: 'SERVICE_TYPE', label: 'Loại dịch vụ', type: 'combobox', source: 'SERVICE_TYPE' },
+          { key: 'BL_TYPE', label: 'Loại vận đơn' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'ETD', label: 'ETD', type: 'date' },
-          { key: 'UNIT', label: 'Đơn vị kiện / tính (Unit)', type: 'select', source: 'UNIT' },
-          { key: 'FREIGHT_TERM', label: 'Hình thức cước (Prepaid / Collect)' },
-          { key: 'PREPAID', label: 'Freight Prepaid' },
-          { key: 'COLLECT', label: 'Freight Collect' },
-          { key: 'MARKS', label: 'Marks & Numbers', span: 2 },
-          { key: 'REMARKS', label: 'Ghi chú thể hiện trên B/L', type: 'textarea', span: 3 }
+          { key: 'ETD', label: 'Ngày tàu chạy dự kiến', type: 'date' },
+          { key: 'UNIT', label: 'Đơn vị tính', type: 'combobox', source: 'UNIT' },
+          { key: 'TOTAL_CONTAINERS_TEXT', label: 'Số lượng Container', type: 'combobox', source: 'TOTAL_CONTAINERS_TEXT' },
+          { key: 'FREIGHT', label: 'Điều khoản cước', type: 'combobox', source: 'FREIGHT' },
+          { key: 'FREIGHT_PREPAID', label: 'Cước trả trước' },
+          { key: 'FREIGHT_COLLECT', label: 'Cước trả sau' },
+          { key: 'MARKS', label: 'Ký mã hiệu', span: 3 },
+          { key: 'REMARKS', label: 'Ghi chú trên vận đơn', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Mô tả hàng hóa trên S/I', cols: ['PROD', 'HS', 'MARKS', 'QTY', 'UNIT', 'PACK', 'NW', 'GW', 'CBM'] },
+      { type: 'items', title: 'Mô tả hàng hóa giao hàng', cols: ['PROD', 'HS', 'MARKS', 'QTY', 'UNIT', 'PACK', 'UNIT_PACK', 'NW', 'GW', 'CBM'] },
       { type: 'containers', title: 'Chi tiết Container / Seal', cols: ['CONT', 'SEAL', 'CTYPE', 'PACK', 'UNIT_PACK', 'GW', 'CBM'] }
     ],
     totals: [
       { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
+      { key: 'TOT_UNIT', label: 'Đơn vị tính tổng', type: 'combobox', source: 'UNIT' },
       { key: 'TOT_NW', label: 'Tổng Net Weight (kg)', readonly: true },
       { key: 'TOT_GW', label: 'Tổng Gross Weight (kg)', readonly: true },
       { key: 'TOT_CBM', label: 'Tổng CBM', readonly: true },
-      { key: 'CONTAINER_SEAL_DETAILS', label: 'Chuỗi Container / Type / Seal', type: 'textarea', span: 2, readonly: true }
+      { key: 'CONTAINER_SEAL_DETAILS', label: 'Chi tiết Container / Seal', type: 'textarea', span: 3, readonly: true }
     ]
   },
 
   VETERINARY_CERTIFICATE: {
-    title: 'Giấy Chứng Nhận Kiểm Dịch Động Vật (Veterinary Certificate)',
-    subtitle: 'Nhóm III — Cơ quan chuyên ngành khác cấp',
+    title: 'Veterinary Certificate',
     sections: [
       {
         title: 'Thông tin Chứng thư Kiểm dịch Động vật',
         fields: [
-          { key: 'VET_NO', label: 'Số Chứng thư Kiểm dịch' },
+          { key: 'VET_NO', label: 'Số chứng thư' },
           { key: 'VET_DATE', label: 'Ngày cấp', type: 'date' },
-          { key: 'AUTH_ORG', label: 'Cơ quan cấp (Authority)' },
+          { key: 'AUTH_ORG', label: 'Cơ quan cấp' },
           { key: 'ISSUE_PLACE', label: 'Nơi cấp' },
-          { key: 'INV_NO', label: 'Số Invoice' },
-          { key: 'ORIGIN_CTRY', label: 'Nước xuất xứ' },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
-          { key: 'DEST_CTRY', label: 'Quốc gia nhập khẩu' },
+          { key: 'INV_NO', label: 'Số hóa đơn' },
+          { key: 'ORIGIN_CTRY', label: 'Nước xuất xứ', type: 'combobox', source: 'QUOC_GIA' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'DEST_CTRY', label: 'Quốc gia nhập khẩu', type: 'combobox', source: 'QUOC_GIA' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'ETD', label: 'ETD', type: 'date' },
-          { key: 'MARKS', label: 'Ký mã hiệu (Marks)' },
-          { key: 'VET_STATEMENT', label: 'Kết luận / Xác nhận vệ sinh thú y', type: 'textarea', span: 3 }
+          { key: 'ETD', label: 'Ngày khởi hành', type: 'date' },
+          { key: 'MARKS', label: 'Ký mã hiệu' },
+          { key: 'VET_STATEMENT', label: 'Xác nhận vệ sinh thú y', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Danh mục sản phẩm kiểm dịch', cols: ['PROD', 'DES', 'LOT_NO', 'QTY', 'UNIT', 'PACK', 'NW', 'GW'] }
+      { type: 'items', title: 'Danh mục sản phẩm kiểm dịch', cols: ['PROD', 'DES', 'ORG', 'LOT_NO', 'QTY', 'UNIT', 'PACK', 'NW', 'GW'] }
     ],
     totals: [
       { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
@@ -413,30 +447,29 @@ const DOC_FORM_CONFIGS = {
   },
 
   PHYTOSANITARY_CERTIFICATE: {
-    title: 'Giấy Chứng Nhận Kiểm Dịch Thực Vật (Phytosanitary Certificate)',
-    subtitle: 'Nhóm III — Cơ quan chuyên ngành khác cấp',
+    title: 'Phytosanitary Certificate',
     sections: [
       {
         title: 'Thông tin Chứng thư Kiểm dịch Thực vật',
         fields: [
-          { key: 'PHYTO_NO', label: 'Số Chứng thư Phyto' },
+          { key: 'PHYTO_NO', label: 'Số chứng thư' },
           { key: 'PHYTO_DATE', label: 'Ngày cấp', type: 'date' },
-          { key: 'AUTH_ORG', label: 'Cơ quan kiểm dịch cấp' },
+          { key: 'AUTH_ORG', label: 'Cơ quan kiểm dịch' },
           { key: 'ISSUE_PLACE', label: 'Nơi cấp' },
-          { key: 'INV_NO', label: 'Số Invoice' },
-          { key: 'ORIGIN_CTRY', label: 'Nước xuất xứ' },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
-          { key: 'DEST_CTRY', label: 'Quốc gia đến' },
+          { key: 'INV_NO', label: 'Số hóa đơn' },
+          { key: 'ORIGIN_CTRY', label: 'Nước xuất xứ', type: 'combobox', source: 'QUOC_GIA' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'DEST_CTRY', label: 'Quốc gia đến', type: 'combobox', source: 'QUOC_GIA' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'BOTANICAL_NAME', label: 'Tên khoa học thực vật (Botanical Name)' },
-          { key: 'MARKS', label: 'Ký mã hiệu (Marks)' },
-          { key: 'TREATMENT', label: 'Thông tin xử lý / Khử trùng (Treatment)', type: 'textarea', span: 3 }
+          { key: 'BOTANICAL_NAME', label: 'Tên khoa học thực vật' },
+          { key: 'MARKS', label: 'Ký mã hiệu' },
+          { key: 'TREATMENT', label: 'Thông tin xử lý / Khử trùng', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Danh mục hàng hóa thực vật', cols: ['PROD', 'DES', 'LOT_NO', 'QTY', 'UNIT', 'PACK', 'NW', 'GW'] }
+      { type: 'items', title: 'Danh mục hàng hóa thực vật', cols: ['PROD', 'DES', 'ORG', 'LOT_NO', 'QTY', 'UNIT', 'PACK', 'NW', 'GW'] }
     ],
     totals: [
       { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
@@ -447,28 +480,27 @@ const DOC_FORM_CONFIGS = {
   },
 
   QUALITY_CERTIFICATE: {
-    title: 'Giấy Chứng Nhận Chất Lượng (Quality Certificate - C/Q)',
-    subtitle: 'Nhóm III — Cơ quan chuyên ngành khác cấp',
+    title: 'Quality Certificate',
     sections: [
       {
         title: 'Thông tin Chứng nhận Chất lượng',
         fields: [
-          { key: 'CQ_NO', label: 'Số Chứng nhận C/Q' },
+          { key: 'QUAL_NO', label: 'Số chứng nhận chất lượng' },
           { key: 'CQ_DATE', label: 'Ngày cấp', type: 'date' },
-          { key: 'AUTH_ORG', label: 'Tổ chức giám định / Nhà sản xuất' },
+          { key: 'AUTH_ORG', label: 'Tổ chức giám định' },
           { key: 'ISSUE_PLACE', label: 'Nơi cấp' },
-          { key: 'INV_NO', label: 'Số Invoice' },
-          { key: 'SC_NO', label: 'Số Hợp đồng' },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
+          { key: 'INV_NO', label: 'Số hóa đơn' },
+          { key: 'CTR_NO', label: 'Số hợp đồng' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'TEST_METHOD', label: 'Phương pháp / Tiêu chuẩn kiểm tra', span: 2 },
+          { key: 'TEST_METHOD', label: 'Tiêu chuẩn kiểm tra', span: 3 },
           { key: 'CONCLUSION', label: 'Kết luận chất lượng', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Chi tiết chỉ tiêu sản phẩm', cols: ['PCODE', 'PROD', 'DES', 'LOT_NO', 'QTY', 'UNIT', 'NW', 'GW'] }
+      { type: 'items', title: 'Chi tiết chỉ tiêu sản phẩm', cols: ['PCODE', 'PROD', 'DES', 'ORG', 'LOT_NO', 'QTY', 'UNIT', 'NW', 'GW'] }
     ],
     totals: [
       { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
@@ -478,26 +510,25 @@ const DOC_FORM_CONFIGS = {
   },
 
   FUMIGATION_CERTIFICATE: {
-    title: 'Giấy Chứng Nhận Hun Trùng (Fumigation Certificate)',
-    subtitle: 'Nhóm III — Cơ quan chuyên ngành khác cấp',
+    title: 'Fumigation Certificate',
     sections: [
       {
         title: 'Thông tin Hun trùng',
         fields: [
-          { key: 'FUM_NO', label: 'Số Chứng thư Hun trùng' },
-          { key: 'FUM_DATE', label: 'Ngày hun trùng / cấp', type: 'date' },
+          { key: 'FUM_NO', label: 'Số chứng thư' },
+          { key: 'FUM_DATE', label: 'Ngày hun trùng', type: 'date' },
           { key: 'AUTH_ORG', label: 'Đơn vị hun trùng' },
           { key: 'ISSUE_PLACE', label: 'Nơi cấp' },
-          { key: 'BL_NO', label: 'Số Vận đơn (B/L No.)' },
-          { key: 'INV_NO', label: 'Số Invoice' },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
+          { key: 'BL_NO', label: 'Số vận đơn' },
+          { key: 'INV_NO', label: 'Số hóa đơn' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'CHEMICAL', label: 'Hóa chất sử dụng (Chemical)' },
-          { key: 'DOSAGE', label: 'Liều lượng (Dosage)' },
-          { key: 'DURATION', label: 'Thời gian ủ thuốc (Duration)' },
-          { key: 'TEMP', label: 'Nhiệt độ (Temperature)' },
-          { key: 'MARKS', label: 'Ký mã hiệu (Marks)', span: 2 }
+          { key: 'CHEMICAL', label: 'Hóa chất sử dụng' },
+          { key: 'DOSAGE', label: 'Liều lượng' },
+          { key: 'DURATION', label: 'Thời gian ủ thuốc' },
+          { key: 'TEMP', label: 'Nhiệt độ' },
+          { key: 'MARKS', label: 'Ký mã hiệu', span: 2 }
         ]
       }
     ],
@@ -508,77 +539,79 @@ const DOC_FORM_CONFIGS = {
     totals: [
       { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
       { key: 'TOT_GW', label: 'Tổng Gross Weight (kg)', readonly: true },
-      { key: 'TOT_CBM', label: 'Tổng Thể tích (CBM)', readonly: true },
-      { key: 'CONTAINER_SEAL_DETAILS', label: 'Danh sách Cont / Seal', type: 'textarea', span: 3, readonly: true }
+      { key: 'TOT_CBM', label: 'Tổng thể tích (CBM)', readonly: true },
+      { key: 'CONTAINER_SEAL_DETAILS', label: 'Chi tiết Container / Seal', type: 'textarea', span: 3, readonly: true }
     ]
   },
 
   CERTIFICATE_OF_ORIGIN: {
-    title: 'Giấy Chứng Nhận Xuất Xứ (Certificate of Origin - C/O)',
-    subtitle: 'Nhóm III — Cơ quan chuyên ngành khác cấp',
+    title: 'Certificate of Origin',
     sections: [
       {
-        title: 'Thông tin C/O',
+        title: 'Thông tin Chứng nhận Xuất xứ',
         fields: [
-          { key: 'CO_NO', label: 'Số Tham chiếu C/O (Reference No.)' },
-          { key: 'CO_DATE', label: 'Ngày cấp C/O', type: 'date' },
-          { key: 'CO_FORM', label: 'Mẫu C/O (Form)', type: 'select', source: 'CO_FORM' },
-          { key: 'CO_CRITERIA', label: 'Tiêu chí xuất xứ (Origin Criteria)', type: 'select', source: 'CO_CRITERIA' },
-          { key: 'TRADE_AGREEMENT', label: 'Hiệp định thương mại (FTA)', type: 'select', source: 'TRADE_AGREEMENT' },
-          { key: 'ISSUE_PLACE', label: 'Nơi cấp C/O' },
-          { key: 'INV_NO', label: 'Số Invoice' },
-          { key: 'INV_DATE', label: 'Ngày Invoice', type: 'date' },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
-          { key: 'DEST_CTRY', label: 'Nước nhập khẩu' },
+          { key: 'CO_NO', label: 'Số tham chiếu chứng nhận' },
+          { key: 'CO_DATE', label: 'Ngày cấp', type: 'date' },
+          { key: 'CO_FORM_NAME', label: 'Mẫu chứng nhận xuất xứ', type: 'combobox', source: 'CO_FORM' },
+          { key: 'TRADE_AGREEMENT', label: 'Hiệp định thương mại', type: 'combobox', source: 'TRADE_AGREEMENT' },
+          { key: 'ISSUE_PLACE', label: 'Nơi cấp' },
+          { key: 'INV_NO', label: 'Số hóa đơn' },
+          { key: 'INV_DATE', label: 'Ngày hóa đơn', type: 'date' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'DEST_CTRY', label: 'Nước nhập khẩu', type: 'combobox', source: 'QUOC_GIA' },
+          { key: 'EXP_CTRY', label: 'Nước xuất khẩu', type: 'combobox', source: 'QUOC_GIA' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'ETD', label: 'Ngày khởi hành (ETD)', type: 'date' },
-          { key: 'MARKS', label: 'Marks & Number of Packages', span: 2 }
+          { key: 'ETD', label: 'Ngày khởi hành', type: 'date' },
+          { key: 'MARKS', label: 'Ký mã hiệu', span: 2 }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Danh mục hàng hóa khai báo xuất xứ', cols: ['PCODE', 'PROD', 'DES', 'HS', 'PREF', 'MARKS', 'QTY', 'UNIT', 'NW', 'GW', 'AMT'] }
+      { type: 'items', title: 'Danh mục hàng hóa khai báo xuất xứ', cols: ['PCODE', 'PROD', 'DES', 'HS', 'ORG', 'PREF', 'MARKS', 'QTY', 'UNIT', 'NW', 'GW', 'AMT'] }
     ],
     totals: [
       { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
+      { key: 'TOT_UNIT', label: 'Đơn vị tính tổng', type: 'combobox', source: 'UNIT' },
       { key: 'TOT_NW', label: 'Tổng Net Weight (kg)', readonly: true },
       { key: 'TOT_GW', label: 'Tổng Gross Weight (kg)', readonly: true },
-      { key: 'TOT_AMT', label: 'Tổng trị giá FOB/CIF', readonly: true }
+      { key: 'TOT_AMT', label: 'Tổng trị giá', readonly: true }
     ]
   },
 
   BOOKING_NOTE: {
-    title: 'Phiếu Đặt Chỗ (Booking Note)',
-    subtitle: 'Nhóm IV — Hãng tàu / Forwarder cấp',
+    title: 'Booking Note',
     sections: [
       {
-        title: 'Thông tin Booking Note',
+        title: 'Thông tin Phiếu đặt chỗ',
         fields: [
-          { key: 'BK_NO', label: 'Số Booking (Booking No.)' },
+          { key: 'BK_NO', label: 'Số đặt chỗ' },
           { key: 'BK_DATE', label: 'Ngày phát hành', type: 'date' },
-          { key: 'CAR_NAME', label: 'Hãng tàu / Forwarder' },
-          { key: 'CAR_ADDR', label: 'Địa chỉ Hãng tàu (Address)', span: 2 },
-          { key: 'CAR_TEL', label: 'Điện thoại Hãng tàu' },
-          { key: 'SERVICE_TYPE', label: 'Loại dịch vụ', type: 'select', source: 'SERVICE_TYPE' },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
-          { key: 'VESSEL', label: 'Tên tàu' },
-          { key: 'VOYAGE', label: 'Số chuyến' },
+          { key: 'CAR_NAME', label: 'Hãng tàu / Forwarder', type: 'combobox', source: 'CAR_NAME' },
+          { key: 'CAR_ATTN', label: 'Người liên hệ hãng tàu' },
+          { key: 'CAR_TEL', label: 'Điện thoại hãng tàu' },
+          { key: 'CAR_EMAIL', label: 'Email hãng tàu' },
+          { key: 'CAR_ADDR', label: 'Địa chỉ hãng tàu', span: 2 },
+          { key: 'SERVICE_TYPE', label: 'Loại dịch vụ', type: 'combobox', source: 'SERVICE_TYPE' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
+          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'ETD', label: 'ETD', type: 'date' },
-          { key: 'ETA', label: 'ETA', type: 'date' },
-          { key: 'PORT_CLOSING', label: 'Port Closing (Ngày cắt máng)', type: 'date' },
-          { key: 'CLOSING_TIME', label: 'Closing Time (Giờ cắt máng)' },
-          { key: 'SI_CUTOFF', label: 'S/I Cut-off' },
-          { key: 'VGM_CUTOFF', label: 'VGM Cut-off' },
+          { key: 'ETD', label: 'Ngày tàu chạy', type: 'date' },
+          { key: 'ETA', label: 'Ngày tàu đến', type: 'date' },
+          { key: 'PORT_CLOSING_DATE', label: 'Ngày cắt máng', type: 'date' },
+          { key: 'PORT_CLOSING_TIME', label: 'Giờ cắt máng' },
+          { key: 'SI_CUTOFF', label: 'Hạn nộp hướng dẫn giao hàng' },
+          { key: 'VGM_CUTOFF', label: 'Hạn nộp VGM' },
           { key: 'PICKUP_DEPOT', label: 'Bãi cấp Cont rỗng', span: 2 },
-          { key: 'REMARKS', label: 'Ghi chú Booking', type: 'textarea', span: 3 }
+          { key: 'REMARKS', label: 'Ghi chú đặt chỗ', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'containers', title: 'Chi tiết Container trên Booking Note', cols: ['CONT', 'CTYPE', 'CSIZE', 'PACK', 'UNIT_PACK', 'GW', 'CBM'] }
+      { type: 'containers', title: 'Chi tiết Container', cols: ['CONT', 'CTYPE', 'CSIZE', 'PACK', 'UNIT_PACK', 'GW', 'CBM'] },
+      { type: 'items', title: 'Thông tin hàng hóa', cols: ['PROD', 'QTY', 'UNIT', 'PACK', 'GW', 'CBM'] }
     ],
     totals: [
       { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
@@ -588,33 +621,37 @@ const DOC_FORM_CONFIGS = {
   },
 
   BOOKING_CONFIRMATION: {
-    title: 'Xác Nhận Đặt Chỗ (Booking Confirmation)',
-    subtitle: 'Nhóm IV — Hãng tàu / Forwarder cấp',
+    title: 'Booking Confirmation',
     sections: [
       {
-        title: 'Thông tin Xác nhận Booking',
+        title: 'Thông tin Xác nhận đặt chỗ',
         fields: [
-          { key: 'BK_NO', label: 'Số Booking' },
+          { key: 'BK_NO', label: 'Số đặt chỗ' },
           { key: 'BK_CONF_DATE', label: 'Ngày xác nhận', type: 'date' },
-          { key: 'CAR_NAME', label: 'Hãng tàu / Forwarder' },
-          { key: 'CAR_ADDR', label: 'Địa chỉ Hãng tàu', span: 2 },
-          { key: 'SERVICE_TYPE', label: 'Service Type', type: 'select', source: 'SERVICE_TYPE' },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
+          { key: 'CAR_NAME', label: 'Hãng tàu / Forwarder', type: 'combobox', source: 'CAR_NAME' },
+          { key: 'CAR_ATTN', label: 'Người liên hệ hãng tàu' },
+          { key: 'CAR_TEL', label: 'Điện thoại hãng tàu' },
+          { key: 'CAR_EMAIL', label: 'Email hãng tàu' },
+          { key: 'CAR_ADDR', label: 'Địa chỉ hãng tàu', span: 2 },
+          { key: 'SERVICE_TYPE', label: 'Loại dịch vụ', type: 'combobox', source: 'SERVICE_TYPE' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
+          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'ETD', label: 'ETD', type: 'date' },
-          { key: 'ETA', label: 'ETA', type: 'date' },
-          { key: 'PORT_CLOSING', label: 'Port Closing', type: 'date' },
-          { key: 'CLOSING_TIME', label: 'Closing Time' },
-          { key: 'CY_CUTOFF', label: 'CY Cut-off' },
-          { key: 'FREIGHT_TERM', label: 'Freight Term' },
+          { key: 'ETD', label: 'Ngày tàu chạy', type: 'date' },
+          { key: 'ETA', label: 'Ngày tàu đến', type: 'date' },
+          { key: 'PORT_CLOSING_DATE', label: 'Ngày cắt máng', type: 'date' },
+          { key: 'PORT_CLOSING_TIME', label: 'Giờ cắt máng' },
+          { key: 'CY_CUTOFF', label: 'Hạn hạ bãi Container' },
+          { key: 'FREIGHT', label: 'Điều khoản cước', type: 'combobox', source: 'FREIGHT' },
           { key: 'REMARKS', label: 'Lưu ý xác nhận', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'containers', title: 'Danh sách Container xác nhận', cols: ['CONT', 'CTYPE', 'CSIZE', 'PACK', 'GW', 'CBM'] },
-      { type: 'items', title: 'Thông tin hàng hóa & Net Weight', cols: ['PROD', 'QTY', 'UNIT', 'NW', 'GW'] }
+      { type: 'containers', title: 'Danh sách Container xác nhận', cols: ['CONT', 'CTYPE', 'CSIZE', 'PACK', 'UNIT_PACK', 'GW', 'CBM'] },
+      { type: 'items', title: 'Thông tin hàng hóa', cols: ['PROD', 'QTY', 'UNIT', 'NW', 'GW'] }
     ],
     totals: [
       { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
@@ -625,23 +662,25 @@ const DOC_FORM_CONFIGS = {
   },
 
   RELEASE_ORDER: {
-    title: 'Lệnh Cấp Container Rỗng (Release Order)',
-    subtitle: 'Nhóm IV — Hãng tàu / Forwarder cấp',
+    title: 'Release Order',
     sections: [
       {
         title: 'Thông tin Lệnh cấp Container rỗng',
         fields: [
-          { key: 'REL_NO', label: 'Số Lệnh (Release Order No.)' },
+          { key: 'RO_NO', label: 'Số lệnh cấp Container' },
           { key: 'REL_DATE', label: 'Ngày cấp lệnh', type: 'date' },
-          { key: 'BK_NO', label: 'Số Booking' },
-          { key: 'CAR_NAME', label: 'Hãng tàu cấp lệnh' },
+          { key: 'BK_NO', label: 'Số đặt chỗ' },
+          { key: 'CAR_NAME', label: 'Hãng tàu cấp lệnh', type: 'combobox', source: 'CAR_NAME' },
+          { key: 'CAR_ATTN', label: 'Người liên hệ hãng tàu' },
+          { key: 'CAR_TEL', label: 'Điện thoại hãng tàu' },
+          { key: 'CAR_EMAIL', label: 'Email hãng tàu' },
           { key: 'CAR_ADDR', label: 'Địa chỉ hãng tàu', span: 2 },
-          { key: 'DEPOT_NAME', label: 'Tên Depot / Bãi cấp Container' },
+          { key: 'DEPOT_NAME', label: 'Tên bãi cấp Container' },
           { key: 'DEPOT_ADDR', label: 'Địa chỉ bãi cấp Container', span: 2 },
           { key: 'VALID_DATE', label: 'Hiệu lực đến ngày', type: 'date' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
           { key: 'REMARKS', label: 'Ghi chú lấy rỗng', type: 'textarea', span: 2 }
         ]
       }
@@ -652,40 +691,45 @@ const DOC_FORM_CONFIGS = {
   },
 
   BILL_OF_LADING: {
-    title: 'Vận Đơn Đường Biển (Bill of Lading - B/L)',
-    subtitle: 'Nhóm IV — Hãng tàu / Forwarder cấp',
+    title: 'Bill of Lading',
     sections: [
       {
         title: 'Thông tin Vận đơn',
         fields: [
-          { key: 'BL_NO', label: 'Số Vận đơn (B/L No.)' },
-          { key: 'DOC_NO', label: 'Document No.' },
-          { key: 'BL_DATE', label: 'Ngày phát hành B/L', type: 'date' },
-          { key: 'BK_NO', label: 'Số Booking' },
-          { key: 'CAR_NAME', label: 'Hãng tàu (Carrier)' },
-          { key: 'SERVICE_TYPE', label: 'Service Type', type: 'select', source: 'SERVICE_TYPE' },
-          { key: 'POL', label: 'Port of Loading (POL)', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'Port of Discharge (POD)', type: 'select', source: 'POD' },
-          { key: 'FINAL_DEST', label: 'Place of Delivery' },
-          { key: 'VESSEL', label: 'Ocean Vessel' },
-          { key: 'VOYAGE', label: 'Voyage No.' },
-          { key: 'VES_VOY', label: 'Vessel / Voyage', readonly: true },
-          { key: 'ON_BOARD_DATE', label: 'Shipped on Board Date', type: 'date' },
-          { key: 'FREIGHT_TERM', label: 'Freight Payable At' },
-          { key: 'PREPAID', label: 'Freight Prepaid' },
-          { key: 'COLLECT', label: 'Freight Collect' },
-          { key: 'ORIGINAL_NO', label: 'Number of Original B(s)/L' },
-          { key: 'MARKS', label: 'Marks & Numbers', span: 2 },
-          { key: 'CONTAINER_SEAL_DETAILS', label: 'CONTAINER NO. / TYPE / SEAL NO.', type: 'textarea', span: 3, readonly: true }
+          { key: 'BL_NO', label: 'Số vận đơn' },
+          { key: 'DOCUMENT_NO', label: 'Số chứng từ vận đơn' },
+          { key: 'BL_DATE', label: 'Ngày phát hành', type: 'date' },
+          { key: 'BK_NO', label: 'Số đặt chỗ' },
+          { key: 'CAR_NAME', label: 'Hãng tàu', type: 'combobox', source: 'CAR_NAME' },
+          { key: 'CAR_ATTN', label: 'Người liên hệ hãng tàu' },
+          { key: 'CAR_TEL', label: 'Điện thoại hãng tàu' },
+          { key: 'CAR_EMAIL', label: 'Email hãng tàu' },
+          { key: 'CAR_ADDR', label: 'Địa chỉ hãng tàu', span: 2 },
+          { key: 'SERVICE_TYPE', label: 'Loại dịch vụ', type: 'combobox', source: 'SERVICE_TYPE' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'FINAL_DEST', label: 'Nơi giao hàng' },
+          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
+          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
+          { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
+          { key: 'ON_BOARD_DATE', label: 'Ngày xếp hàng lên tàu', type: 'date' },
+          { key: 'FREIGHT', label: 'Điều khoản cước', type: 'combobox', source: 'FREIGHT' },
+          { key: 'FREIGHT_PREPAID', label: 'Cước trả trước' },
+          { key: 'FREIGHT_COLLECT', label: 'Cước trả sau' },
+          { key: 'TOTAL_CONTAINERS_TEXT', label: 'Số lượng Container', type: 'combobox', source: 'TOTAL_CONTAINERS_TEXT' },
+          { key: 'ORIGINAL_NO', label: 'Số bản gốc vận đơn' },
+          { key: 'MARKS', label: 'Ký mã hiệu', span: 3 },
+          { key: 'CONTAINER_SEAL_DETAILS', label: 'Chi tiết Container / Seal', type: 'textarea', span: 3, readonly: true }
         ]
       }
     ],
     tables: [
-      { type: 'containers', title: 'Danh sách Container / Seal trên B/L', cols: ['CONT', 'SEAL', 'CTYPE', 'PACK', 'UNIT_PACK', 'GW', 'CBM'] },
-      { type: 'items', title: 'Mô tả hàng hóa trên B/L', cols: ['PROD', 'DES', 'HS', 'MARKS', 'QTY', 'UNIT', 'PACK', 'NW', 'GW', 'CBM'] }
+      { type: 'containers', title: 'Danh sách Container / Seal', cols: ['CONT', 'SEAL', 'CTYPE', 'PACK', 'UNIT_PACK', 'GW', 'CBM'] },
+      { type: 'items', title: 'Mô tả hàng hóa trên vận đơn', cols: ['PROD', 'DES', 'HS', 'MARKS', 'QTY', 'UNIT', 'PACK', 'UNIT_PACK', 'NW', 'GW', 'CBM'] }
     ],
     totals: [
       { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
+      { key: 'TOT_UNIT', label: 'Đơn vị tính tổng', type: 'combobox', source: 'UNIT' },
       { key: 'TOT_NW', label: 'Tổng Net Weight (kg)', readonly: true },
       { key: 'TOT_GW', label: 'Tổng Gross Weight (kg)', readonly: true },
       { key: 'TOT_CBM', label: 'Tổng CBM', readonly: true }
@@ -693,32 +737,34 @@ const DOC_FORM_CONFIGS = {
   },
 
   DELIVERY_ORDER: {
-    title: 'Lệnh Giao Hàng (Delivery Order - D/O)',
-    subtitle: 'Nhóm IV — Hãng tàu / Forwarder cấp',
+    title: 'Delivery Order',
     sections: [
       {
         title: 'Thông tin Lệnh giao hàng',
         fields: [
-          { key: 'DO_NO', label: 'Số Lệnh giao hàng (D/O No.)' },
-          { key: 'DO_DATE', label: 'Ngày cấp D/O', type: 'date' },
-          { key: 'BL_NO', label: 'Số B/L tham chiếu' },
-          { key: 'CAR_NAME', label: 'Hãng tàu / Đại lý giao hàng' },
+          { key: 'DO_NO', label: 'Số lệnh giao hàng' },
+          { key: 'DO_DATE', label: 'Ngày cấp lệnh', type: 'date' },
+          { key: 'BL_NO', label: 'Số vận đơn tham chiếu' },
+          { key: 'CAR_NAME', label: 'Hãng tàu / Đại lý', type: 'combobox', source: 'CAR_NAME' },
+          { key: 'CAR_ATTN', label: 'Người liên hệ hãng tàu' },
+          { key: 'CAR_TEL', label: 'Điện thoại hãng tàu' },
+          { key: 'CAR_EMAIL', label: 'Email hãng tàu' },
           { key: 'CAR_ADDR', label: 'Địa chỉ đại lý', span: 2 },
-          { key: 'POL', label: 'POL', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'POD', type: 'select', source: 'POD' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'ETA', label: 'Ngày tàu đến (ETA)', type: 'date' },
+          { key: 'ETA', label: 'Ngày tàu đến', type: 'date' },
           { key: 'ARRIVAL_DATE', label: 'Ngày cập cảng thực tế', type: 'date' },
-          { key: 'WAREHOUSE', label: 'Kho / Cảng dỡ hàng (CFS/CY)' },
+          { key: 'WAREHOUSE', label: 'Kho / Cảng dỡ hàng' },
           { key: 'VALID_DATE', label: 'Hạn lệnh đến ngày', type: 'date' },
-          { key: 'CONTAINER_SEAL_DETAILS', label: 'CONTAINER NO. / TYPE / SEAL NO.', type: 'textarea', span: 3, readonly: true },
+          { key: 'CONTAINER_SEAL_DETAILS', label: 'Chi tiết Container / Seal', type: 'textarea', span: 3, readonly: true },
           { key: 'REMARKS', label: 'Ghi chú giao hàng', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'containers', title: 'Container nhận hàng', cols: ['CONT', 'SEAL', 'CTYPE', 'PACK', 'GW', 'CBM'] },
-      { type: 'items', title: 'Hàng hóa theo D/O', cols: ['PROD', 'MARKS', 'QTY', 'UNIT', 'PACK', 'GW', 'CBM'] }
+      { type: 'containers', title: 'Container nhận hàng', cols: ['CONT', 'SEAL', 'CTYPE', 'PACK', 'UNIT_PACK', 'GW', 'CBM'] },
+      { type: 'items', title: 'Hàng hóa theo lệnh giao hàng', cols: ['PROD', 'MARKS', 'QTY', 'UNIT', 'PACK', 'GW', 'CBM'] }
     ],
     totals: [
       { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
@@ -728,35 +774,34 @@ const DOC_FORM_CONFIGS = {
   },
 
   To_khai_XK: {
-    title: 'Tờ Khai Hải Quan Xuất Khẩu',
-    subtitle: 'Nhóm V — Hải quan & Thanh toán quốc tế',
+    title: 'Export Customs Declaration',
     sections: [
       {
         title: 'Thông tin chung Tờ khai Xuất khẩu',
         fields: [
-          { key: 'TK_XK_NO', label: 'Số Tờ khai XK' },
+          { key: 'TK_XK_NO', label: 'Số tờ khai xuất khẩu' },
           { key: 'TK_XK_DATE', label: 'Ngày đăng ký', type: 'date' },
           { key: 'CUSTOMS_OFFICE', label: 'Chi cục Hải quan' },
-          { key: 'EXP_TYPE_CODE', label: 'Mã loại hình XK', type: 'select', source: 'XNK_XK' },
-          { key: 'EXP_TYPE_NAME', label: 'Tên loại hình XK', span: 2, readonly: true },
-          { key: 'INV_NO', label: 'Số Hóa đơn (Invoice)' },
-          { key: 'BL_NO', label: 'Số Vận đơn (B/L)' },
-          { key: 'INCOTERM', label: 'Incoterm', type: 'select', source: 'INCOTERM' },
-          { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'select', source: 'PAY_TERM' },
-          { key: 'CURR', label: 'Mã đồng tiền', type: 'select', source: 'CURR' },
-          { key: 'EX_RATE', label: 'Tỷ giá tính thuế (VND)' },
-          { key: 'POL', label: 'Địa điểm xếp hàng (POL)', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'Địa điểm đích (POD)', type: 'select', source: 'POD' },
-          { key: 'DEST_CTRY', label: 'Nước nhập khẩu' },
+          { key: 'DEC_TYPE', label: 'Loại hình xuất khẩu', type: 'combobox', source: 'XNK_XK' },
+          { key: 'EXP_TYPE_NAME', label: 'Tên loại hình xuất khẩu', span: 2, readonly: true },
+          { key: 'INV_NO', label: 'Số hóa đơn' },
+          { key: 'BL_NO', label: 'Số vận đơn' },
+          { key: 'INCOTERM', label: 'Incoterm', type: 'combobox', source: 'INCOTERM' },
+          { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'combobox', source: 'PAY_TERM' },
+          { key: 'CURR', label: 'Mã đồng tiền', type: 'combobox', source: 'CURR' },
+          { key: 'EX_RATE', label: 'Tỷ giá tính thuế' },
+          { key: 'POL', label: 'Địa điểm xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Địa điểm đích', type: 'combobox', source: 'POD' },
+          { key: 'DEST_CTRY', label: 'Nước nhập khẩu', type: 'combobox', source: 'QUOC_GIA' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
           { key: 'ETD', label: 'Ngày xuất dự kiến', type: 'date' },
-          { key: 'CONTAINER_SEAL_DETAILS', label: 'Container / Seal', type: 'textarea', span: 3, readonly: true }
+          { key: 'CONTAINER_SEAL_DETAILS', label: 'Chi tiết Container / Seal', type: 'textarea', span: 3, readonly: true }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Chi tiết dòng hàng Xuất khẩu', cols: ['PCODE', 'PROD', 'HS', 'QTY', 'UNIT', 'PRICE', 'AMT', 'NW', 'GW'] },
-      { type: 'tax', title: 'Chi tiết Thuế xuất khẩu & Lệ phí (Đồng bộ theo dòng hàng)', cols: ['PROD', 'HS', 'EX_VAL', 'EX_TAX_RATE', 'EX_AMT', 'FEE_VAL', 'FEE_RATE', 'FEE_AMT'] }
+      { type: 'items', title: 'Chi tiết dòng hàng Xuất khẩu', cols: ['PCODE', 'PROD', 'HS', 'ORG', 'QTY', 'UNIT', 'PRICE', 'AMT', 'NW', 'GW'] },
+      { type: 'tax', title: 'Chi tiết Thuế xuất khẩu & Lệ phí', cols: ['PROD', 'HS', 'EX_VAL', 'EX_TAX_RATE', 'EX_AMT', 'FEE_VAL', 'FEE_RATE', 'FEE_AMT'] }
     ],
     totals: [
       { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
@@ -769,34 +814,34 @@ const DOC_FORM_CONFIGS = {
   },
 
   To_khai_NK: {
-    title: 'Tờ Khai Hải Quan Nhập Khẩu',
-    subtitle: 'Nhóm V — Hải quan & Thanh toán quốc tế',
+    title: 'Import Customs Declaration',
     sections: [
       {
         title: 'Thông tin chung Tờ khai Nhập khẩu',
         fields: [
-          { key: 'TK_NK_NO', label: 'Số Tờ khai NK' },
+          { key: 'TK_NK_NO', label: 'Số tờ khai nhập khẩu' },
           { key: 'TK_NK_DATE', label: 'Ngày đăng ký', type: 'date' },
           { key: 'CUSTOMS_OFFICE', label: 'Chi cục Hải quan' },
-          { key: 'IMP_TYPE_CODE', label: 'Mã loại hình NK', type: 'select', source: 'XNK_NK' },
-          { key: 'IMP_TYPE_NAME', label: 'Tên loại hình NK', span: 2, readonly: true },
-          { key: 'INV_NO', label: 'Số Hóa đơn (Invoice)' },
-          { key: 'BL_NO', label: 'Số Vận đơn (B/L)' },
-          { key: 'INCOTERM', label: 'Incoterm', type: 'select', source: 'INCOTERM' },
-          { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'select', source: 'PAY_TERM' },
-          { key: 'CURR', label: 'Mã đồng tiền', type: 'select', source: 'CURR' },
-          { key: 'EX_RATE', label: 'Tỷ giá tính thuế (VND)' },
-          { key: 'POL', label: 'Địa điểm xếp hàng (POL)', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'Địa điểm dỡ hàng (POD)', type: 'select', source: 'POD' },
+          { key: 'DEC_TYPE', label: 'Loại hình nhập khẩu', type: 'combobox', source: 'XNK_NK' },
+          { key: 'IMP_TYPE_NAME', label: 'Tên loại hình nhập khẩu', span: 2, readonly: true },
+          { key: 'INV_NO', label: 'Số hóa đơn' },
+          { key: 'BL_NO', label: 'Số vận đơn' },
+          { key: 'INCOTERM', label: 'Incoterm', type: 'combobox', source: 'INCOTERM' },
+          { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'combobox', source: 'PAY_TERM' },
+          { key: 'CURR', label: 'Mã đồng tiền', type: 'combobox', source: 'CURR' },
+          { key: 'EX_RATE', label: 'Tỷ giá tính thuế' },
+          { key: 'POL', label: 'Địa điểm xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Địa điểm dỡ hàng', type: 'combobox', source: 'POD' },
+          { key: 'EXP_CTRY', label: 'Nước xuất khẩu', type: 'combobox', source: 'QUOC_GIA' },
           { key: 'VES_VOY', label: 'Tàu / Chuyến', readonly: true },
-          { key: 'ETA', label: 'Ngày hàng đến (ETA)', type: 'date' },
-          { key: 'CONTAINER_SEAL_DETAILS', label: 'Container / Seal', type: 'textarea', span: 3, readonly: true }
+          { key: 'ETA', label: 'Ngày hàng đến', type: 'date' },
+          { key: 'CONTAINER_SEAL_DETAILS', label: 'Chi tiết Container / Seal', type: 'textarea', span: 3, readonly: true }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Chi tiết dòng hàng Nhập khẩu', cols: ['PCODE', 'PROD', 'HS', 'PREF', 'QTY', 'UNIT', 'PRICE', 'AMT', 'NW', 'GW'] },
-      { type: 'tax', title: 'Chi tiết Thuế nhập khẩu & Lệ phí (Đồng bộ theo dòng hàng)', cols: ['PROD', 'HS', 'EX_VAL', 'EX_TAX_RATE', 'EX_AMT', 'FEE_VAL', 'FEE_RATE', 'FEE_AMT'] }
+      { type: 'items', title: 'Chi tiết dòng hàng Nhập khẩu', cols: ['PCODE', 'PROD', 'HS', 'ORG', 'PREF', 'QTY', 'UNIT', 'PRICE', 'AMT', 'NW', 'GW'] },
+      { type: 'tax', title: 'Chi tiết Thuế nhập khẩu & Lệ phí', cols: ['PROD', 'HS', 'EX_VAL', 'EX_TAX_RATE', 'EX_AMT', 'FEE_VAL', 'FEE_RATE', 'FEE_AMT'] }
     ],
     totals: [
       { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
@@ -809,39 +854,39 @@ const DOC_FORM_CONFIGS = {
   },
 
   LETTER_OF_CREDIT: {
-    title: 'Thư Tín Dụng (Letter of Credit - L/C)',
-    subtitle: 'Nhóm V — Hải quan & Thanh toán quốc tế',
+    title: 'Letter of Credit',
     sections: [
       {
-        title: 'Thông tin mở & Điều khoản L/C',
+        title: 'Thông tin mở & Điều khoản Thư tín dụng',
         fields: [
-          { key: 'LC_NO', label: 'Số L/C (Documentary Credit No.)' },
-          { key: 'LC_DATE', label: 'Ngày phát hành (Date of Issue)', type: 'date' },
-          { key: 'LC_TYPE', label: 'Loại L/C (Irrevocable / Confirmed)' },
-          { key: 'ISSUING_BANK', label: 'Ngân hàng phát hành (Issuing Bank)' },
-          { key: 'ADVISING_BANK', label: 'Ngân hàng thông báo (Advising Bank)' },
-          { key: 'BANK_SWIFT', label: 'SWIFT Code Ngân hàng' },
-          { key: 'BANK_FAX', label: 'Số Fax Ngân hàng (FAX)' },
-          { key: 'ADVISING_BANK_FAX', label: 'Fax NH Thông báo (FAX)' },
-          { key: 'CURR', label: 'Đồng tiền L/C', type: 'select', source: 'CURR' },
-          { key: 'TOT_AMT', label: 'Trị giá L/C (Amount)', readonly: true },
-          { key: 'TOLERANCE', label: 'Dung sai L/C (+/- %)' },
-          { key: 'INCOTERM', label: 'Incoterm', type: 'select', source: 'INCOTERM' },
-          { key: 'POL', label: 'Port of Loading', type: 'select', source: 'POL' },
-          { key: 'POD', label: 'Port of Discharge', type: 'select', source: 'POD' },
+          { key: 'LC_NO', label: 'Số thư tín dụng' },
+          { key: 'LC_DATE', label: 'Ngày phát hành', type: 'date' },
+          { key: 'LC_TYPE', label: 'Loại thư tín dụng' },
+          { key: 'CTR_NO', label: 'Số hợp đồng tham chiếu' },
+          { key: 'ISSUING_BANK', label: 'Ngân hàng phát hành' },
+          { key: 'ADVISING_BANK', label: 'Ngân hàng thông báo' },
+          { key: 'BANK_SWIFT', label: 'Mã SWIFT ngân hàng' },
+          { key: 'BANK_FAX', label: 'Fax ngân hàng phát hành' },
+          { key: 'ADVISING_BANK_FAX', label: 'Fax ngân hàng thông báo' },
+          { key: 'CURR', label: 'Đồng tiền thanh toán', type: 'combobox', source: 'CURR' },
+          { key: 'TOT_AMT', label: 'Trị giá thư tín dụng', readonly: true },
+          { key: 'TOLERANCE', label: 'Dung sai (%)' },
+          { key: 'INCOTERM', label: 'Incoterm', type: 'combobox', source: 'INCOTERM' },
+          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
+          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
           { key: 'LATEST_SHIP_DATE', label: 'Ngày giao hàng muộn nhất', type: 'date' },
-          { key: 'EXPIRY_DATE', label: 'Ngày hết hạn L/C', type: 'date' },
-          { key: 'EXPIRY_PLACE', label: 'Nơi hết hạn L/C' },
-          { key: 'PARTIAL_SHIP', label: 'Giao hàng từng phần (Allowed/Prohibited)' },
-          { key: 'TRANSSHIPMENT', label: 'Chuyển tải (Allowed/Prohibited)' },
-          { key: 'TOT_AMT_WORDS', label: 'Số tiền L/C bằng chữ', span: 3 },
-          { key: 'DOCS_REQUIRED', label: 'Chứng từ yêu cầu (Documents Required - 46A)', type: 'textarea', span: 3 },
-          { key: 'ADD_CONDITIONS', label: 'Điều kiện bổ sung (Additional Conditions - 47A)', type: 'textarea', span: 3 }
+          { key: 'EXPIRY_DATE', label: 'Ngày hết hạn', type: 'date' },
+          { key: 'EXPIRY_PLACE', label: 'Nơi hết hạn' },
+          { key: 'PARTIAL_SHIP', label: 'Giao hàng từng phần' },
+          { key: 'TRANSSHIPMENT', label: 'Chuyển tải' },
+          { key: 'TOT_AMT_WORDS', label: 'Số tiền bằng chữ', span: 3 },
+          { key: 'DOCS_REQUIRED', label: 'Chứng từ yêu cầu', type: 'textarea', span: 3 },
+          { key: 'ADD_CONDITIONS', label: 'Điều kiện bổ sung', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Mô tả hàng hóa theo L/C (45A)', cols: ['PCODE', 'PROD', 'DES', 'HS', 'QTY', 'UNIT', 'PRICE', 'AMT'] }
+      { type: 'items', title: 'Mô tả hàng hóa', cols: ['PCODE', 'PROD', 'DES', 'HS', 'ORG', 'QTY', 'UNIT', 'PRICE', 'AMT'] }
     ]
   }
 };
@@ -862,8 +907,8 @@ function renderAllFormViews() {
   });
   container.innerHTML = html;
 
-  // Populate dropdowns & sync all values from APP_STATE
-  populateAllDropdownSelects();
+  // Populate shared <datalist> elements for all editable comboboxes
+  populateAllDatalists();
   syncAllStateValuesToDOM();
   validateContainerInputsInDOM();
   renderBatchExportChecklist();
@@ -899,20 +944,22 @@ function buildPanelHtml(docKey, cfg) {
   html += '<div class="doc-panel-header">';
   html += '<div>';
   html += '<h2 class="doc-panel-title">' + escapeHtml(cfg.title) + '</h2>';
-  html += '<p class="doc-panel-meta">' + escapeHtml(cfg.subtitle) + '</p>';
   html += '</div>';
   if (!cfg.isMaster) {
-    html += '<button type="button" class="btn btn-primary" onclick="handleExportSingle(\'' + docKey + '\')">Xuất chứng từ này</button>';
+    html += '<div class="doc-panel-actions">';
+    html += '<button type="button" class="btn btn-secondary" onclick="handlePreviewDocument(\'' + docKey + '\')">Review Document</button>';
+    html += '<button type="button" class="btn btn-primary" onclick="handleExportSingle(\'' + docKey + '\')">Export This Document</button>';
+    html += '</div>';
   }
   html += '</div>';
 
-  // Compact Context Banner for all 20 Document Tabs (Hiding SHIP_* & CNE_* inputs)
+  // Compact Context Banner (SHIP_NAME ➔ CNE_NAME) for all 20 Document Tabs
   if (!cfg.isMaster) {
     const ship = String(APP_STATE.shared.SHIP_NAME || '').trim() || 'Chưa nhập Shipper';
     const cne = String(APP_STATE.shared.CNE_NAME || '').trim() || 'Chưa nhập Consignee';
     html += '<div class="context-banner">';
-    html += '<div class="context-banner-parties">Pháp nhân đang áp dụng: <strong>' + escapeHtml(ship) + '</strong> &#10132; <strong>' + escapeHtml(cne) + '</strong></div>';
-    html += '<button type="button" class="context-banner-link" onclick="switchTab(\'MASTER_PARTIES\')">Sửa Pháp nhân</button>';
+    html += '<div class="context-banner-parties"><strong>' + escapeHtml(ship) + '</strong> &#10132; <strong>' + escapeHtml(cne) + '</strong></div>';
+    html += '<button type="button" class="context-banner-link" onclick="switchTab(\'MASTER_PARTIES\')">Sửa Thông tin chung</button>';
     html += '</div>';
   }
 
@@ -935,17 +982,16 @@ function buildPanelHtml(docKey, cfg) {
   // Dynamic Tables
   (cfg.tables || []).forEach(function (tbl) {
     const logicalType = tbl.type === 'tax' ? 'items' : tbl.type;
-    html += '<div class="card">';
-    html += '<div class="card-header">';
-    html += '<div><h3 class="card-title">' + escapeHtml(tbl.title) + '</h3>';
-    html += '<span class="card-subtitle">Đồng bộ tự động trên tất cả các tab chứng từ</span></div>';
+    html += '<div class="card table-card dynamic-table-wrapper">';
+    html += '<div class="card-header table-card-header">';
+    html += '<div><h3 class="card-title">' + escapeHtml(tbl.title) + '</h3></div>';
     if (logicalType === 'items') {
-      html += '<button type="button" class="btn btn-secondary btn-sm btn-add-row" onclick="addItemRow()">+ Thêm sản phẩm</button>';
+      html += '<button type="button" class="btn btn-table-add btn-sm btn-add-row" onclick="addItemRow()">+ Thêm sản phẩm</button>';
     } else {
-      html += '<button type="button" class="btn btn-secondary btn-sm btn-add-row" onclick="addContainerRow()">+ Thêm Container</button>';
+      html += '<button type="button" class="btn btn-table-add btn-sm btn-add-row" onclick="addContainerRow()">+ Thêm Container</button>';
     }
     html += '</div>';
-    html += '<div class="card-body" style="padding:12px;">';
+    html += '<div class="card-body table-card-body" style="padding:12px;">';
     html += '<div class="table-scroll" data-synced-table="' + tbl.type + '" data-table-cols="' + tbl.cols.join(',') + '">';
     html += buildTableHtml(tbl.type, tbl.cols);
     html += '</div></div></div>';
@@ -954,7 +1000,7 @@ function buildPanelHtml(docKey, cfg) {
   // Totals Section
   if (cfg.totals && cfg.totals.length > 0) {
     html += '<div class="card">';
-    html += '<div class="card-header"><h3 class="card-title">Tổng hợp &amp; Quy đổi bằng chữ (Tự động tính toán)</h3></div>';
+    html += '<div class="card-header"><h3 class="card-title">Tổng hợp &amp; Quy đổi bằng chữ</h3></div>';
     html += '<div class="card-body"><div class="form-grid-3">';
     cfg.totals.forEach(function (field) {
       html += buildFieldHtml(docKey, field);
@@ -966,20 +1012,21 @@ function buildPanelHtml(docKey, cfg) {
   return html;
 }
 
+function getDatalistIdForSource(source) {
+  return DATALIST_ID_MAP[source] || ('dl_' + source);
+}
+
 function buildFieldHtml(docKey, field) {
   const spanClass = field.span === 3 ? ' span-3' : (field.span === 2 ? ' span-2' : '');
   const id = 'field_' + docKey + '_' + field.key;
   const roAttr = field.readonly ? ' readonly' : '';
-  const sourceAttr = field.source ? ' data-source="' + escapeHtml(field.source) + '"' : '';
 
   let html = '<div class="form-group' + spanClass + '">';
-  html += '<label class="form-label" for="' + id + '">';
-  html += '<span>' + escapeHtml(field.label) + '</span>';
-  html += '<span class="tag-hint">{{' + escapeHtml(field.key) + '}}</span>';
-  html += '</label>';
+  html += '<label class="form-label" for="' + id + '">' + escapeHtml(field.label) + '</label>';
 
-  if (field.type === 'select') {
-    html += '<select id="' + id + '" class="form-control" data-sync="' + escapeHtml(field.key) + '"' + sourceAttr + '></select>';
+  if (field.type === 'combobox' || field.type === 'select') {
+    const listId = getDatalistIdForSource(field.source);
+    html += '<input id="' + id + '" type="text" class="form-control form-combobox" list="' + escapeHtml(listId) + '" data-sync="' + escapeHtml(field.key) + '" data-source="' + escapeHtml(field.source || '') + '" placeholder="Chọn hoặc nhập..." autocomplete="off"' + roAttr + ' />';
   } else if (field.type === 'textarea') {
     html += '<textarea id="' + id + '" class="form-control" data-sync="' + escapeHtml(field.key) + '"' + roAttr + '></textarea>';
   } else {
@@ -998,14 +1045,14 @@ function buildTableHtml(tableMode, cols) {
   const logicalType = isContainer ? 'containers' : 'items';
 
   if (!rows || rows.length === 0) {
-    return '<div class="empty-table-note">Chưa có dòng dữ liệu (Phù hợp hàng LCL nếu không có Container). Bấm nút thêm dòng ở góc trên bên phải nếu cần.</div>';
+    return '<div class="empty-table-note">Chưa có dòng dữ liệu. Bấm nút thêm dòng ở góc trên bên phải nếu cần.</div>';
   }
 
   let html = '<table class="data-table"><thead><tr>';
   html += '<th style="width:36px; text-align:center;">#</th>';
   cols.forEach(function (colKey) {
     const meta = colMetaMap[colKey] || { label: colKey, width: '100px' };
-    html += '<th style="min-width:' + meta.width + ';">' + escapeHtml(meta.label) + ' <span class="tag-hint">{{' + colKey + '}}</span></th>';
+    html += '<th style="min-width:' + meta.width + ';">' + escapeHtml(meta.label) + '</th>';
   });
   html += '<th style="width:44px; text-align:center;">Xóa</th>';
   html += '</tr></thead><tbody>';
@@ -1022,9 +1069,8 @@ function buildTableHtml(tableMode, cols) {
 
       html += '<td>';
       if (meta.dropdown) {
-        html += '<select class="table-input" data-table-type="' + logicalType + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '" data-source="' + meta.dropdown + '">';
-        html += buildDropdownOptionsHtml(meta.dropdown, val);
-        html += '</select>';
+        const listId = getDatalistIdForSource(meta.dropdown);
+        html += '<input type="text" class="table-input" list="' + escapeHtml(listId) + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '" data-source="' + escapeHtml(meta.dropdown) + '" placeholder="Chọn hoặc nhập..." autocomplete="off"' + roAttr + ' />';
       } else {
         html += '<input type="text" class="table-input' + numClass + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '"' + roAttr + ' />';
       }
@@ -1057,23 +1103,29 @@ function rerenderAllSyncedTables(logicalType) {
 }
 
 /* ==========================================================================
-   DROPDOWN POPULATION & STATE VALUE HYDRATION
+   EDITABLE COMBOBOX DATALISTS & STATE VALUE HYDRATION
    ========================================================================== */
+
+function getUniqueCuocTauColumn_(fieldName) {
+  const cuocTau = (APP_STATE.dropdowns && APP_STATE.dropdowns.cuocTau) || [];
+  const seen = {};
+  const list = [];
+  cuocTau.forEach(function (r) {
+    const val = String(r && r[fieldName] ? r[fieldName] : '').trim();
+    if (val && !seen[val]) {
+      seen[val] = true;
+      list.push({ value: val, label: val });
+    }
+  });
+  return list;
+}
 
 function getDropdownOptionsList(source) {
   const dd = APP_STATE.dropdowns || {};
   const dm = dd.danhMucChung || {};
 
   if (source === 'POL') {
-    const seen = {};
-    const list = [];
-    (dd.cuocTau || []).forEach(function (r) {
-      if (r.POL && !seen[r.POL]) {
-        seen[r.POL] = true;
-        list.push({ value: r.POL, label: r.POL });
-      }
-    });
-    return list;
+    return getUniqueCuocTauColumn_('POL');
   }
 
   if (source === 'POD') {
@@ -1088,7 +1140,26 @@ function getDropdownOptionsList(source) {
         }
       }
     });
+    if (list.length === 0) {
+      return getUniqueCuocTauColumn_('POD');
+    }
     return list;
+  }
+
+  if (source === 'QUOC_GIA') {
+    return getUniqueCuocTauColumn_('Quoc_Gia');
+  }
+
+  if (source === 'CAR_NAME') {
+    return getUniqueCuocTauColumn_('Ten_hang_tau');
+  }
+
+  if (source === 'VESSEL') {
+    return getUniqueCuocTauColumn_('Ten_tau');
+  }
+
+  if (source === 'VOYAGE') {
+    return getUniqueCuocTauColumn_('So_chuyen');
   }
 
   if (source === 'XNK_XK') {
@@ -1103,45 +1174,62 @@ function getDropdownOptionsList(source) {
     });
   }
 
+  if (source === 'FREIGHT') {
+    return [
+      { value: 'FREIGHT PREPAID', label: 'FREIGHT PREPAID' },
+      { value: 'FREIGHT COLLECT', label: 'FREIGHT COLLECT' }
+    ];
+  }
+
+  if (source === 'TOTAL_CONTAINERS_TEXT') {
+    const nums = [];
+    for (let i = 1; i <= 10; i++) {
+      nums.push({ value: String(i), label: String(i) });
+    }
+    return nums;
+  }
+
   const colList = dm[source] || [];
   return colList.map(function (val) {
     return { value: val, label: val };
   });
 }
 
-function buildDropdownOptionsHtml(source, currentVal) {
-  const options = getDropdownOptionsList(source);
-  let html = '<option value="">-- Chọn --</option>';
-  let matched = false;
+function populateAllDatalists() {
+  let holder = document.getElementById('sharedDatalists');
+  if (!holder) {
+    holder = document.createElement('div');
+    holder.id = 'sharedDatalists';
+    holder.className = 'hidden';
+    document.body.appendChild(holder);
+  }
 
-  options.forEach(function (opt) {
-    const selected = opt.value === currentVal ? ' selected' : '';
-    if (selected) matched = true;
-    html += '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.label) + '</option>';
+  let html = '';
+  Object.keys(DATALIST_ID_MAP).forEach(function (sourceKey) {
+    const listId = DATALIST_ID_MAP[sourceKey];
+    const options = getDropdownOptionsList(sourceKey);
+    html += '<datalist id="' + escapeHtml(listId) + '">';
+    options.forEach(function (opt) {
+      if (opt.label && opt.label !== opt.value) {
+        html += '<option value="' + escapeHtml(opt.value) + '" label="' + escapeHtml(opt.label) + '">' + escapeHtml(opt.label) + '</option>';
+      } else {
+        html += '<option value="' + escapeHtml(opt.value) + '"></option>';
+      }
+    });
+    html += '</datalist>';
   });
 
-  if (currentVal && !matched) {
-    html += '<option value="' + escapeHtml(currentVal) + '" selected>' + escapeHtml(currentVal) + '</option>';
-  }
-  return html;
+  holder.innerHTML = html;
 }
 
 function populateAllDropdownSelects() {
-  document.querySelectorAll('select[data-sync][data-source]').forEach(function (sel) {
-    const source = sel.getAttribute('data-source');
-    const syncKey = sel.getAttribute('data-sync');
-    const val = APP_STATE.shared[syncKey] || '';
-    sel.innerHTML = buildDropdownOptionsHtml(source, val);
-  });
+  populateAllDatalists();
 }
 
 function syncAllStateValuesToDOM() {
   document.querySelectorAll('[data-sync]').forEach(function (el) {
     const key = el.getAttribute('data-sync');
     const val = APP_STATE.shared[key] == null ? '' : String(APP_STATE.shared[key]);
-    if (el.tagName === 'SELECT') {
-      ensureSelectHasOption(el, val);
-    }
     el.value = val;
   });
 }

@@ -62,3 +62,40 @@
     </div>
   </div>
 </div>
+
+<!-- ========================================================================
+     DOCUMENT PREVIEW MODAL (Review Document)
+     ======================================================================== -->
+<div id="docPreviewModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="docPreviewModalTitle">
+  <div class="modal-dialog modal-preview">
+    <div class="modal-header">
+      <div>
+        <h2 id="docPreviewModalTitle" class="modal-title">Document Preview</h2>
+        <div id="docPreviewModalSubtitle" class="modal-subtitle"></div>
+      </div>
+      <button type="button" class="modal-close" onclick="closeDocPreviewModal()" aria-label="Close">&times;</button>
+    </div>
+
+    <div class="modal-body modal-preview-body">
+      <div id="docPreviewLoading" class="preview-loading hidden">
+        <div class="spinner"></div>
+        <div class="loading-text">Đang tạo bản xem trước trực tiếp từ Google Docs mẫu...</div>
+      </div>
+      <div id="docPreviewError" class="preview-error-wrap hidden">
+        <div id="docPreviewErrorText" class="login-error" style="margin:0;"></div>
+      </div>
+      <div id="docPreviewCanvasWrap" class="preview-canvas-wrap hidden"></div>
+      <iframe id="docPreviewFrame" class="preview-frame hidden" title="Live Document Preview"></iframe>
+    </div>
+
+    <div class="modal-footer" style="justify-content:space-between;">
+      <div>
+        <a id="btnPreviewDownloadPdf" class="btn btn-secondary hidden" href="#" download="preview.pdf">Tải PDF xem trước</a>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button type="button" class="btn btn-secondary" onclick="closeDocPreviewModal()">Close</button>
+        <button id="btnPreviewExportOfficial" type="button" class="btn btn-primary" onclick="handleExportFromPreview()">Export Official File</button>
+      </div>
+    </div>
+  </div>
+</div>
