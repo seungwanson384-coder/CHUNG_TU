@@ -77,6 +77,18 @@ function createEmptyItem() {
     EX_VAL: '',
     EX_TAX_RATE: '',
     EX_AMT: '',
+    IM_VAL: '',
+    IM_RATE: '',
+    IM_AMT: '',
+    SCT_VAL: '',
+    SCT_RATE: '',
+    SCT_AMT: '',
+    EPT_VAL: '',
+    EPT_RATE: '',
+    EPT_AMT: '',
+    VAT_VAL: '',
+    VAT_RATE: '',
+    VAT_AMT: '',
     FEE_VAL: '',
     FEE_RATE: '',
     FEE_AMT: ''
@@ -254,22 +266,18 @@ function initDefaultDocumentNumbers(forceOverwrite) {
     QUOT_NO: 'QT-' + yymmdd + '-01',
     CTR_NO: 'SC-' + yymmdd + '-01',
     INV_NO: 'INV-' + yymmdd + '-01',
-    PL_NO: 'PL-' + yymmdd + '-01',
     BKR_NO: 'BKR-' + yymmdd + '-01',
-    VGM_NO: 'VGM-' + yymmdd + '-01',
-    SI_NO: 'SI-' + yymmdd + '-01',
-    VET_NO: 'VET-' + yymmdd + '-01',
-    PHYTO_NO: 'PHYTO-' + yymmdd + '-01',
-    QUAL_NO: 'QUAL-' + yymmdd + '-01',
-    FUM_NO: 'FUM-' + yymmdd + '-01',
-    CO_NO: 'CO-' + yymmdd + '-01',
+    VET_CERT_NO: 'VET-' + yymmdd + '-01',
+    PHYTO_CERT_NO: 'PHYTO-' + yymmdd + '-01',
+    QUAL_CERT_NO: 'QUAL-' + yymmdd + '-01',
+    FUM_CERT_NO: 'FUM-' + yymmdd + '-01',
+    CO_REF_NO: 'CO-' + yymmdd + '-01',
     BK_NO: 'BK-' + yymmdd + '-01',
     RO_NO: 'RO-' + yymmdd + '-01',
     BL_NO: 'BL-' + yymmdd + '-01',
     DOCUMENT_NO: 'DOC-' + yymmdd + '-01',
     DO_NO: 'DO-' + yymmdd + '-01',
-    TK_XK_NO: 'DEC-' + yymmdd + '-01',
-    TK_NK_NO: 'DEC-' + yymmdd + '-02',
+    DEC_NO: 'DEC-' + yymmdd + '-01',
     LC_NO: 'LC-' + yymmdd + '-01'
   };
 
@@ -824,7 +832,7 @@ function handleExportBatch() {
       boxEl.classList.remove('hidden');
 
       if (res.errors && res.errors.length > 0) {
-        showToast('Đã xuất ' + res.results.length + ' chứng từ. Có ' + res.errors.length + ' chứng từ lỗi/chưa có Template ID.', 'warning');
+        showToast('Đã xuất ' + res.results.length + ' chứng từ. Có ' + res.errors.length + ' chứng từ lỗi hoặc chưa có file mẫu.', 'warning');
       } else {
         showToast('Đã xuất thành công ' + res.results.length + ' chứng từ!', 'success');
       }
@@ -844,8 +852,8 @@ function handleWorkspaceFieldChange(target) {
   const key = target.getAttribute('data-sync');
   if (!key) return;
 
-  // Preserve leading zeros by storing raw string value verbatim
-  const value = target.value;
+  // Preserve leading zeros by storing raw string value verbatim (or checkbox symbol)
+  const value = target.type === 'checkbox' ? (target.checked ? '☑' : '') : target.value;
   APP_STATE.shared[key] = value;
 
   // Mirror across all other views without disturbing active focus
@@ -867,7 +875,37 @@ function handleWorkspaceFieldChange(target) {
     updateAllContextBanners();
   }
 
-  if (key === 'VAT_GST' || key === 'VAT_RATE' || key === 'CURR') {
+  // Import Customs Declaration shared tax fields
+  if (key === 'IM_VAL' || key === 'IM_RATE') {
+    const imVal = parseNum(APP_STATE.shared.IM_VAL);
+    const imRate = parseNum(APP_STATE.shared.IM_RATE);
+    const imAmt = (APP_STATE.shared.IM_VAL !== '' && APP_STATE.shared.IM_RATE !== '') ? formatNum((imVal * imRate) / 100, 2) : '';
+    setSharedFieldAndSync('IM_AMT', imAmt);
+  } else if (key === 'SCT_VAL' || key === 'SCT_RATE') {
+    const sctVal = parseNum(APP_STATE.shared.SCT_VAL);
+    const sctRate = parseNum(APP_STATE.shared.SCT_RATE);
+    const sctAmt = (APP_STATE.shared.SCT_VAL !== '' && APP_STATE.shared.SCT_RATE !== '') ? formatNum((sctVal * sctRate) / 100, 2) : '';
+    setSharedFieldAndSync('SCT_AMT', sctAmt);
+  } else if (key === 'EPT_VAL' || key === 'EPT_RATE') {
+    const eptVal = parseNum(APP_STATE.shared.EPT_VAL);
+    const eptRate = parseNum(APP_STATE.shared.EPT_RATE);
+    const eptAmt = (APP_STATE.shared.EPT_VAL !== '' && APP_STATE.shared.EPT_RATE !== '') ? formatNum((eptVal * eptRate) / 100, 2) : '';
+    setSharedFieldAndSync('EPT_AMT', eptAmt);
+  } else if (key === 'VAT_VAL' || key === 'VAT_RATE') {
+    const vatVal = parseNum(APP_STATE.shared.VAT_VAL);
+    const vatRate = parseNum(APP_STATE.shared.VAT_RATE);
+    const vatAmt = (APP_STATE.shared.VAT_VAL !== '' && APP_STATE.shared.VAT_RATE !== '') ? formatNum((vatVal * vatRate) / 100, 2) : '';
+    setSharedFieldAndSync('VAT_AMT', vatAmt);
+  }
+
+  if (
+    key === 'VAT_GST' ||
+    key === 'CURR' ||
+    key === 'IM_VAL' || key === 'IM_RATE' || key === 'IM_AMT' ||
+    key === 'SCT_VAL' || key === 'SCT_RATE' || key === 'SCT_AMT' ||
+    key === 'EPT_VAL' || key === 'EPT_RATE' || key === 'EPT_AMT' ||
+    key === 'VAT_VAL' || key === 'VAT_RATE' || key === 'VAT_AMT'
+  ) {
     recalculateAllTotals(true);
   }
 }
@@ -875,6 +913,10 @@ function handleWorkspaceFieldChange(target) {
 function syncSharedFieldToDOM(key, value, sourceElement) {
   document.querySelectorAll('[data-sync="' + key + '"]').forEach(function (el) {
     if (el === sourceElement) return;
+    if (el.type === 'checkbox') {
+      el.checked = (value === '☑' || value === 'true' || value === 'X' || value === '1');
+      return;
+    }
     if (el.tagName === 'SELECT') {
       ensureSelectHasOption(el, value);
     }
@@ -1096,6 +1138,34 @@ function handleTableCellChange(target) {
       syncTableCellToDOM('items', rowIdx, 'EX_AMT', item.EX_AMT, null);
     }
 
+    if (colKey === 'IM_VAL' || colKey === 'IM_RATE') {
+      const imVal = parseNum(item.IM_VAL);
+      const imRate = parseNum(item.IM_RATE);
+      item.IM_AMT = (item.IM_VAL !== '' && item.IM_RATE !== '') ? formatNum((imVal * imRate) / 100, 2) : '';
+      syncTableCellToDOM('items', rowIdx, 'IM_AMT', item.IM_AMT, null);
+    }
+
+    if (colKey === 'SCT_VAL' || colKey === 'SCT_RATE') {
+      const sctVal = parseNum(item.SCT_VAL);
+      const sctRate = parseNum(item.SCT_RATE);
+      item.SCT_AMT = (item.SCT_VAL !== '' && item.SCT_RATE !== '') ? formatNum((sctVal * sctRate) / 100, 2) : '';
+      syncTableCellToDOM('items', rowIdx, 'SCT_AMT', item.SCT_AMT, null);
+    }
+
+    if (colKey === 'EPT_VAL' || colKey === 'EPT_RATE') {
+      const eptVal = parseNum(item.EPT_VAL);
+      const eptRate = parseNum(item.EPT_RATE);
+      item.EPT_AMT = (item.EPT_VAL !== '' && item.EPT_RATE !== '') ? formatNum((eptVal * eptRate) / 100, 2) : '';
+      syncTableCellToDOM('items', rowIdx, 'EPT_AMT', item.EPT_AMT, null);
+    }
+
+    if (colKey === 'VAT_VAL' || colKey === 'VAT_RATE') {
+      const vatVal = parseNum(item.VAT_VAL);
+      const vatRate = parseNum(item.VAT_RATE);
+      item.VAT_AMT = (item.VAT_VAL !== '' && item.VAT_RATE !== '') ? formatNum((vatVal * vatRate) / 100, 2) : '';
+      syncTableCellToDOM('items', rowIdx, 'VAT_AMT', item.VAT_AMT, null);
+    }
+
     if (colKey === 'FEE_VAL' || colKey === 'FEE_RATE') {
       const feeVal = parseNum(item.FEE_VAL);
       const feeRate = parseNum(item.FEE_RATE);
@@ -1112,7 +1182,7 @@ function handleTableCellChange(target) {
     validateContainerInputsInDOM();
   }
 
-  recalculateAllTotals(true);
+  recalculateAllTotals(true, tableType === 'containers');
 }
 
 function syncTableCellToDOM(tableType, rowIdx, colKey, value, sourceElement) {
@@ -1142,13 +1212,13 @@ function deleteItemRow(rowIdx) {
 
 function addContainerRow() {
   APP_STATE.containers.push(createEmptyContainer());
-  recalculateAllTotals(true);
+  recalculateAllTotals(true, true);
   rerenderAllSyncedTables('containers');
 }
 
 function deleteContainerRow(rowIdx) {
   APP_STATE.containers.splice(rowIdx, 1);
-  recalculateAllTotals(true);
+  recalculateAllTotals(true, true);
   rerenderAllSyncedTables('containers');
 }
 
@@ -1214,7 +1284,11 @@ function formatNum(num, maxDecimals) {
   return String(rounded);
 }
 
-function recalculateAllTotals(syncDom) {
+function recalculateTotals(syncDom, updateContainerCount) {
+  recalculateAllTotals(syncDom !== false, updateContainerCount);
+}
+
+function recalculateAllTotals(syncDom, updateContainerCount) {
   const items = APP_STATE.items || [];
   const containers = APP_STATE.containers || [];
 
@@ -1224,6 +1298,8 @@ function recalculateAllTotals(syncDom) {
   let totNw = 0;
   let totItemGw = 0;
   let totItemCbm = 0;
+  let totExTax = 0;
+  let totFee = 0;
   let totTax = 0;
   let firstUnit = '';
 
@@ -1235,8 +1311,22 @@ function recalculateAllTotals(syncDom) {
     totNw += parseNum(it.NW);
     totItemGw += parseNum(it.GW);
     totItemCbm += parseNum(it.CBM);
-    totTax += parseNum(it.EX_AMT) + parseNum(it.FEE_AMT);
+    const exAmt = parseNum(it.EX_AMT);
+    const feeAmt = parseNum(it.FEE_AMT);
+    totExTax += exAmt;
+    totFee += feeAmt;
+    totTax += exAmt + feeAmt + parseNum(it.IM_AMT) + parseNum(it.SCT_AMT) + parseNum(it.EPT_AMT) + parseNum(it.VAT_AMT);
   });
+
+  const rowTaxTotal = totExTax + totFee + items.reduce(function (acc, it) {
+    return acc + parseNum(it.IM_AMT) + parseNum(it.SCT_AMT) + parseNum(it.EPT_AMT) + parseNum(it.VAT_AMT);
+  }, 0);
+  const sharedNkTax =
+    parseNum(APP_STATE.shared.IM_AMT) +
+    parseNum(APP_STATE.shared.SCT_AMT) +
+    parseNum(APP_STATE.shared.EPT_AMT) +
+    parseNum(APP_STATE.shared.VAT_AMT);
+  totTax = rowTaxTotal + sharedNkTax;
 
   let totContPack = 0;
   let totContGw = 0;
@@ -1256,10 +1346,7 @@ function recalculateAllTotals(syncDom) {
   const totGw = totItemGw > 0 ? totItemGw : totContGw;
   const totCbm = totItemCbm > 0 ? totItemCbm : totContCbm;
 
-  const vatRateVal = APP_STATE.shared.VAT_GST != null && APP_STATE.shared.VAT_GST !== ''
-    ? APP_STATE.shared.VAT_GST
-    : APP_STATE.shared.VAT_RATE;
-  const vatRate = parseNum(vatRateVal);
+  const vatRate = parseNum(APP_STATE.shared.VAT_GST);
   const vatAmt = vatRate > 0 ? (totAmt * vatRate) / 100 : 0;
   const grandTotal = totAmt + vatAmt;
 
@@ -1270,13 +1357,14 @@ function recalculateAllTotals(syncDom) {
     TOT_QTY: totQty > 0 ? formatNum(totQty, 3) : (items.length ? '0' : ''),
     TOT_AMT: totAmt > 0 ? formatNum(totAmt, 2) : (items.length ? '0' : ''),
     VAT_TOTAL: vatRate > 0 ? formatNum(vatAmt, 2) : '',
-    VAT_AMT: vatRate > 0 ? formatNum(vatAmt, 2) : '',
     GRAND_TOTAL: grandTotal > 0 ? formatNum(grandTotal, 2) : (items.length ? '0' : ''),
     TOT_PACK: totPack > 0 ? formatNum(totPack, 2) : '',
     TOT_NW: totNw > 0 ? formatNum(totNw, 3) : '',
     TOT_GW: totGw > 0 ? formatNum(totGw, 3) : '',
     TOT_CBM: totCbm > 0 ? formatNum(totCbm, 3) : '',
     TOT_VGM: totVgm > 0 ? formatNum(totVgm, 3) : '',
+    TOT_EX_TAX: totExTax > 0 ? formatNum(totExTax, 2) : '',
+    TOT_FEE: totFee > 0 ? formatNum(totFee, 2) : '',
     TOT_TAX: totTax > 0 ? formatNum(totTax, 2) : '',
     TOT_AMT_WORDS: amtForWords > 0
       ? (curr === 'VND'
@@ -1285,6 +1373,10 @@ function recalculateAllTotals(syncDom) {
       : '',
     TOT_TAX_WORDS: totTax > 0 ? numberToVietnameseWords(totTax, 'VND') : ''
   };
+
+  if (updateContainerCount || !APP_STATE.shared.TOTAL_CONTAINERS_TEXT) {
+    updates.TOTAL_CONTAINERS_TEXT = containers.length > 0 ? String(containers.length) : '';
+  }
 
   if (!APP_STATE.shared.TOT_UNIT && firstUnit) {
     updates.TOT_UNIT = firstUnit;
@@ -1377,7 +1469,7 @@ function numberToEnglishWords(amount, currencyCode) {
   };
 
   const curr = currNames[currencyCode] || { major: currencyCode || 'US DOLLARS', minor: 'CENTS' };
-  let result = 'SAY TOTAL ' + curr.major + ' ' + convertInt(intPart);
+  let result = 'SAY TOTAL: ' + curr.major + ' ' + convertInt(intPart);
   if (decPart > 0) {
     result += ' AND ' + convertInt(decPart) + ' ' + curr.minor;
   }

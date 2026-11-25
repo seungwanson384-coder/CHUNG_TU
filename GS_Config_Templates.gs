@@ -9,7 +9,13 @@
  * ID duy nhất của file Google Docs tổng hợp ("Chứng từ") chứa 20 Tab mẫu chứng từ.
  * Thay 'YOUR_MASTER_CHUNG_TU_DOC_ID' bằng ID thực tế của file Google Docs tổng hợp.
  */
-const MASTER_TEMPLATE_DOC_ID = 'YOUR_MASTER_CHUNG_TU_DOC_ID';
+const MASTER_TEMPLATE_DOC_ID = '1K5inyPgajLfmskTSv5h0HcryiNk8JpD0';
+
+/**
+ * ID & URL logo thương hiệu trên Google Drive.
+ */
+const BRAND_LOGO_ID = '1EOJF-nYJdWkcUGOEUVlfW1Wc5SlOHWdk';
+const BRAND_LOGO_URL = 'https://drive.google.com/thumbnail?id=1EOJF-nYJdWkcUGOEUVlfW1Wc5SlOHWdk&sz=w300';
 
 /**
  * ID Google Sheet dữ liệu chính (chứa Danh_sach_SV, Cuoc_Tau, Loai_hinh_XNK, Danh_Muc_chung).
@@ -124,8 +130,12 @@ const ITEM_TAGS = [
   'UNIT',
   'PRICE',
   'AMT',
+  'PACK',
+  'UNIT_PACK',
   'CTYPE',
-  'NW'
+  'NW',
+  'GW',
+  'CBM'
 ];
 
 /**
@@ -148,6 +158,18 @@ const TAX_TAGS = [
   'EX_VAL',
   'EX_TAX_RATE',
   'EX_AMT',
+  'IM_VAL',
+  'IM_RATE',
+  'IM_AMT',
+  'SCT_VAL',
+  'SCT_RATE',
+  'SCT_AMT',
+  'EPT_VAL',
+  'EPT_RATE',
+  'EPT_AMT',
+  'VAT_VAL',
+  'VAT_RATE',
+  'VAT_AMT',
   'FEE_VAL',
   'FEE_RATE',
   'FEE_AMT'

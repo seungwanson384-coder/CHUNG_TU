@@ -28,7 +28,6 @@ export default function App() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lastGenerated, setLastGenerated] = useState<GeneratedPreviewPayload | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
-  const [inspectedDocKey, setInspectedDocKey] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const previewHtml = useMemo(() => buildLivePreviewHtml(), []);
@@ -40,9 +39,7 @@ export default function App() {
       if (!ev.data || typeof ev.data !== 'object') return;
       if (ev.data.type === 'GAS_PREVIEW_GENERATED') {
         setLastGenerated(ev.data.payload);
-        setInspectedDocKey(ev.data.payload?.docKeys?.[0] || null);
       } else if (ev.data.type === 'GAS_PREVIEW_OPEN_DOC') {
-        setInspectedDocKey(ev.data.docKey || null);
         setInspectorOpen(true);
       }
     };
@@ -148,7 +145,7 @@ export default function App() {
               NV003
             </code>
             <span className="text-[#0B261C] font-medium hidden sm:inline">
-              (Môi trường chạy thử dùng dữ liệu giả lập Cuoc_Tau, Loai_hinh_XNK, Danh_Muc_chung)
+              (Môi trường chạy thử dùng dữ liệu danh mục mẫu)
             </span>
           </div>
 
@@ -378,11 +375,10 @@ export default function App() {
             <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-bold text-slate-900">
-                  Kiểm tra dữ liệu Merge Tags gửi sang GS_Doc_Engine.gs
-                  {inspectedDocKey ? ` (${inspectedDocKey})` : ''}
+                  Kiểm tra dữ liệu chứng từ đã xuất
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Khi triển khai trên Google Apps Script thật, các tag này sẽ tự động điền vào Google Docs &amp; xuất PDF.
+                  Khi triển khai trên Google Apps Script thật, dữ liệu này sẽ tự động điền vào Google Docs &amp; xuất PDF.
                 </p>
               </div>
               <button
@@ -404,7 +400,7 @@ export default function App() {
                       className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-between"
                     >
                       <span className="font-semibold text-emerald-900">{r.docName}</span>
-                      <span className="font-mono text-[11px] text-emerald-700">{r.docKey}</span>
+                      <span className="text-[11px] font-medium text-emerald-700">Sẵn sàng xuất</span>
                     </div>
                   ))}
                 </div>
@@ -412,7 +408,7 @@ export default function App() {
 
               <div>
                 <div className="font-bold text-slate-800 mb-2">
-                  Tag đơn (payload.shared — bao gồm VES_VOY &amp; CONTAINER_SEAL_DETAILS):
+                  Dữ liệu chung của lô hàng:
                 </div>
                 <pre className="p-3 rounded-lg bg-slate-950 text-slate-100 font-mono overflow-x-auto max-h-56">
                   {JSON.stringify(lastGenerated.shared, null, 2)}
@@ -422,7 +418,7 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <div className="font-bold text-slate-800 mb-2">
-                    Dòng hàng hóa nhân bản (items: {lastGenerated.items.length} dòng):
+                    Danh sách dòng hàng hóa ({lastGenerated.items.length} dòng):
                   </div>
                   <pre className="p-3 rounded-lg bg-slate-950 text-slate-100 font-mono overflow-x-auto max-h-48">
                     {JSON.stringify(lastGenerated.items, null, 2)}
@@ -430,7 +426,7 @@ export default function App() {
                 </div>
                 <div>
                   <div className="font-bold text-slate-800 mb-2">
-                    Dòng Container nhân bản (containers: {lastGenerated.containers.length} dòng):
+                    Danh sách dòng Container ({lastGenerated.containers.length} dòng):
                   </div>
                   <pre className="p-3 rounded-lg bg-slate-950 text-slate-100 font-mono overflow-x-auto max-h-48">
                     {JSON.stringify(lastGenerated.containers, null, 2)}

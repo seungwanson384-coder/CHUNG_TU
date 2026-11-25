@@ -94,19 +94,22 @@
     margin-bottom: 24px;
   }
 
-  .login-logo {
+  .brand-logo-circle {
     width: 44px;
     height: 44px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, var(--primary) 0%, var(--forest-accent) 100%);
-    color: #FFFFFF;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 17px;
-    letter-spacing: 0.5px;
+    border-radius: 50%;
+    background: #FFFFFF !important;
+    padding: 4px;
+    object-fit: contain;
+    border: 2px solid #1B4D3E;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
     flex-shrink: 0;
+    display: block;
+  }
+
+  .brand-logo-circle.brand-logo-header {
+    width: 38px;
+    height: 38px;
   }
 
   .login-title {
@@ -170,20 +173,6 @@
     align-items: center;
     gap: 12px;
     min-width: 0;
-  }
-
-  .header-logo {
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
-    background: linear-gradient(135deg, var(--primary) 0%, var(--forest-accent) 100%);
-    color: #FFFFFF;
-    font-weight: 700;
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
   }
 
   .header-title-wrap {
@@ -487,16 +476,20 @@
   .card,
   .form-card,
   .section-box,
+  .table-card,
+  .dynamic-table-wrapper,
   .modal-content,
   .login-card,
   .modal-dialog {
     background: #FFFFFF !important;
-    border: 1px solid #7EB89A !important;
+    border: 2px solid #1B4D3E !important;
     box-shadow: 0 8px 24px rgba(13, 43, 32, 0.16) !important;
   }
 
-  .card {
-    border-radius: var(--radius-md);
+  .card,
+  .form-card,
+  .section-box {
+    border-radius: 10px !important;
     margin-bottom: 18px;
     overflow: hidden;
   }
@@ -590,9 +583,78 @@
     font-weight: 600;
   }
 
+  .checkbox-field-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 38px;
+    padding: 7px 11px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: #F7FCF9;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .checkbox-field-wrap:hover {
+    background: #ECF7F1;
+    border-color: #1B4D3E;
+  }
+
+  .checkbox-field-wrap input[type="checkbox"] {
+    width: 17px;
+    height: 17px;
+    accent-color: #1B4D3E;
+    cursor: pointer;
+    margin: 0;
+  }
+
+  .checkbox-field-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0B261C;
+  }
+
+  /* =========================================================================
+     CUSTOM JADE-GREEN TRANSLUCENT COMBOBOX DROPDOWN POPUP
+     ========================================================================= */
+  .custom-combo-dropdown {
+    position: fixed;
+    z-index: 9999;
+    background: rgba(92, 168, 134, 0.80) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1.5px solid #1B4D3E !important;
+    border-radius: 8px;
+    box-shadow: 0 8px 20px rgba(11, 38, 28, 0.22);
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 4px;
+  }
+
+  .custom-combo-option {
+    color: #082419 !important;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    line-height: 1.35;
+    transition: background-color 0.12s ease, color 0.12s ease;
+  }
+
+  .custom-combo-option:hover,
+  .custom-combo-option.active {
+    background: rgba(27, 77, 62, 0.88) !important;
+    color: #FFFFFF !important;
+  }
+
   /* =========================================================================
      DYNAMIC TABLES & VALIDATION BADGES (HIGH-CONTRAST FOREST GREEN)
      ========================================================================= */
+  .card:has(table),
+  .form-card:has(table),
+  .section-box:has(table),
   .table-card,
   .dynamic-table-wrapper {
     border: 2px solid #1B4D3E !important;
@@ -602,6 +664,9 @@
     box-shadow: 0 8px 24px rgba(13, 43, 32, 0.16) !important;
   }
 
+  .card:has(table) > .card-header,
+  .form-card:has(table) > .card-header,
+  .section-box:has(table) > .card-header,
   .table-card > .card-header,
   .dynamic-table-wrapper > .card-header,
   .table-card-header {
@@ -611,6 +676,9 @@
     border-bottom: 1px solid #143D30 !important;
   }
 
+  .card:has(table) > .card-header .card-title,
+  .form-card:has(table) > .card-header .card-title,
+  .section-box:has(table) > .card-header .card-title,
   .table-card > .card-header .card-title,
   .dynamic-table-wrapper > .card-header .card-title,
   .table-card-header .card-title {
@@ -646,6 +714,9 @@
   }
 
   .data-table thead,
+  .card:has(table) thead,
+  .form-card:has(table) thead,
+  .section-box:has(table) thead,
   .table-card thead,
   .dynamic-table-wrapper thead {
     background: #1B4D3E !important;
@@ -654,6 +725,9 @@
   }
 
   .data-table th,
+  .card:has(table) th,
+  .form-card:has(table) th,
+  .section-box:has(table) th,
   .table-card th,
   .dynamic-table-wrapper th {
     background: #1B4D3E !important;
@@ -669,6 +743,9 @@
   }
 
   .data-table td,
+  .card:has(table) td,
+  .form-card:has(table) td,
+  .section-box:has(table) td,
   .table-card td,
   .dynamic-table-wrapper td {
     padding: 7px 6px;
@@ -687,6 +764,16 @@
 
   table input,
   table select,
+  .card:has(table) input,
+  .card:has(table) select,
+  .form-card:has(table) input,
+  .form-card:has(table) select,
+  .section-box:has(table) input,
+  .section-box:has(table) select,
+  .table-card input,
+  .table-card select,
+  .dynamic-table-wrapper input,
+  .dynamic-table-wrapper select,
   .data-table input,
   .data-table select,
   .table-input {
@@ -705,6 +792,16 @@
 
   table input:focus,
   table select:focus,
+  .card:has(table) input:focus,
+  .card:has(table) select:focus,
+  .form-card:has(table) input:focus,
+  .form-card:has(table) select:focus,
+  .section-box:has(table) input:focus,
+  .section-box:has(table) select:focus,
+  .table-card input:focus,
+  .table-card select:focus,
+  .dynamic-table-wrapper input:focus,
+  .dynamic-table-wrapper select:focus,
   .data-table input:focus,
   .data-table select:focus,
   .table-input:focus {
