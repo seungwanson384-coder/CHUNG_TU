@@ -14,30 +14,50 @@ import {
   X,
 } from 'lucide-react';
 import { GAS_FILES, GasSourceFile, buildLivePreviewHtml } from './gasPreviewHelper';
+import codeGs from '../Code.gs?raw';
+import gsDocEngineGs from '../GS_Doc_Engine.gs?raw';
 import indexHtml from '../Index.html?raw';
 import cssStyleHtml from '../CSS_Style.html?raw';
+import viewLoginSidebarHtml from '../View_Login_Sidebar.html?raw';
 import jsRenderFormsHtml from '../JS_Render_Forms.html?raw';
 import jsAppStateHtml from '../JS_App_State.html?raw';
-import gsDocEngineGs from '../GS_Doc_Engine.gs?raw';
 
 const MODIFIED_FILE_IDS = [
+  'Code.gs',
+  'GS_Doc_Engine.gs',
   'Index.html',
   'CSS_Style.html',
+  'View_Login_Sidebar.html',
   'JS_Render_Forms.html',
   'JS_App_State.html',
-  'GS_Doc_Engine.gs',
 ] as const;
 
 const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
   const byId = new Map<string, GasSourceFile>();
   GAS_FILES.forEach((f) => byId.set(f.id, f));
 
+  byId.set('Code.gs', {
+    id: 'Code.gs',
+    filename: 'Code.gs',
+    gasType: 'gs',
+    category: 'Backend (.gs)',
+    description: 'Deployment guidance for "Execute as: User accessing the web app" to isolate Drive storage per user',
+    content: codeGs,
+  });
+  byId.set('GS_Doc_Engine.gs', {
+    id: 'GS_Doc_Engine.gs',
+    filename: 'GS_Doc_Engine.gs',
+    gasType: 'gs',
+    category: 'Backend (.gs)',
+    description: 'Max 5 docs/batch enforcement, save exports to signed-in user Drive (XNK_Documents) & clean preview temp files',
+    content: gsDocEngineGs,
+  });
   byId.set('Index.html', {
     id: 'Index.html',
     filename: 'Index.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Updated #previewModal header with uppercase REVIEW: <DOC NAME> title & red close button',
+    description: 'Initialize forest-green batch export modal UI & Web App deployment comment',
     content: indexHtml,
   });
   byId.set('CSS_Style.html', {
@@ -45,15 +65,23 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'CSS_Style.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Strict background scroll lock, uniform 20px 3-side gray desk margins, full-width A4 white container & nowrap tax cells',
+    description: 'Bare red sequential-lock arrow left of label & forest-green batch export modal styling',
     content: cssStyleHtml,
+  });
+  byId.set('View_Login_Sidebar.html', {
+    id: 'View_Login_Sidebar.html',
+    filename: 'View_Login_Sidebar.html',
+    gasType: 'html',
+    category: 'Frontend (.html)',
+    description: 'Moved bare red sequential-lock arrow directly to the left of each document label',
+    content: viewLoginSidebarHtml,
   });
   byId.set('JS_Render_Forms.html', {
     id: 'JS_Render_Forms.html',
     filename: 'JS_Render_Forms.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Dot-separated HS placeholders, SELLER_REP/BUYER_REP, 6 Fumigation inputs, Phyto treatment & 13 Quality lab inputs, C/O & L/C Totals',
+    description: 'Batch export checklist with live max-5 change guard and modal UI hook',
     content: jsRenderFormsHtml,
   });
   byId.set('JS_App_State.html', {
@@ -61,16 +89,8 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'JS_App_State.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Scroll lock & preview modal, live XXXX.XX.XX HS formatter, ETD/SHIPMENT_DEADLINE sync, SAY: prefix cleanup, 2-decimal CBM/VGM/totals & full sample data',
+    description: 'Max 5 batch export limit, live selection counter, forest-green modal UI normalizer & top-right close button',
     content: jsAppStateHtml,
-  });
-  byId.set('GS_Doc_Engine.gs', {
-    id: 'GS_Doc_Engine.gs',
-    filename: 'GS_Doc_Engine.gs',
-    gasType: 'gs',
-    category: 'Backend (.gs)',
-    description: 'Strict NTF empty state, SAY: deduplication, HS dots, 2-decimal totals, BC colon findText fix, Sales Contract/Quotation/PL/Vet/Phyto/Qual/CO/DO/BL & Customs XK/NK fixes',
-    content: gsDocEngineGs,
   });
 
   return MODIFIED_FILE_IDS.map((id) => byId.get(id)).filter(

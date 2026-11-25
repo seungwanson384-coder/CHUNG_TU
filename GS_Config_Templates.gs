@@ -119,6 +119,7 @@ const TEMPLATE_MAP = {
  */
 const ITEM_TAGS = [
   'PROD',
+  'BOTANICAL_NAME',
   'PCODE',
   'DES',
   'HS',
@@ -135,6 +136,7 @@ const ITEM_TAGS = [
   'CTYPE',
   'NW',
   'GW',
+  'WEIGHT_UNIT',
   'CBM'
 ];
 

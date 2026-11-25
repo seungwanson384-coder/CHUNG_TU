@@ -95,12 +95,71 @@
     </div>
   </div>
 
+  <!-- Import-Export Declaration Type (DEC_TYPE) Lookup Modal -->
+  <div id="decTypeLookupModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="decTypeLookupTitle">
+    <div class="modal-card lookup-modal-card">
+      <div class="modal-header-bar">
+        <h3 id="decTypeLookupTitle" class="modal-header-title">&#128269; Tra cứu Mã loại hình Xuất Nhập Khẩu</h3>
+        <button type="button" class="modal-close-x" onclick="closeDecTypeLookupModal()" aria-label="Đóng">&times;</button>
+      </div>
+      <div class="modal-body-pad">
+        <div class="lookup-toolbar dec-type-toolbar">
+          <div class="lookup-search-wrap">
+            <label class="form-label" for="decTypeSearchInput">Tìm kiếm theo mã, tên loại hình hoặc mục đích áp dụng</label>
+            <input
+              id="decTypeSearchInput"
+              type="text"
+              class="form-control"
+              placeholder="Nhập mã (B11, A11, E62...) hoặc từ khóa..."
+              oninput="renderDecTypeLookupRows_()"
+            />
+          </div>
+          <div class="lookup-row-select-wrap">
+            <label class="form-label" for="decTypeDirectionSelect">Phân loại</label>
+            <select id="decTypeDirectionSelect" class="form-control" onchange="renderDecTypeLookupRows_()">
+              <option value="Xuất khẩu">Xuất khẩu</option>
+              <option value="Nhập khẩu">Nhập khẩu</option>
+              <option value="ALL">Tất cả</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="decTypeModalContextNote" class="lookup-context-note" style="margin-bottom:10px;"></div>
+
+        <div class="table-scroll lookup-table-scroll">
+          <table class="data-table lookup-data-table">
+            <thead>
+              <tr>
+                <th style="width:46px;">STT</th>
+                <th style="width:120px;">Mã loại hình</th>
+                <th style="min-width:210px;">Tên loại hình</th>
+                <th style="min-width:280px;">Mục đích / Phạm vi áp dụng</th>
+              </tr>
+            </thead>
+            <tbody id="decTypeLookupTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer-bar">
+        <button type="button" class="btn btn-secondary" onclick="closeDecTypeLookupModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Redesigned Review Document Modal (Desk-Style Multi-Page A4 Viewer) -->
   <div id="previewModal" class="preview-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle" onclick="if (event.target === this) closeDocPreviewModal()">
     <div class="preview-modal-container">
       <div class="preview-modal-header-strip">
         <h3 id="previewModalTitle" class="preview-modal-title">REVIEW: DOCUMENT</h3>
-        <button type="button" id="btnPreviewModalClose" class="preview-modal-close-btn" onclick="closeDocPreviewModal()" aria-label="Đóng">&#10005;</button>
+        <div class="preview-header-right">
+          <div class="preview-zoom-group" role="group" aria-label="Thu phóng bản xem trước">
+            <button type="button" class="preview-zoom-btn" data-preview-zoom="0.75" onclick="setPreviewZoomScale(0.75)">75%</button>
+            <button type="button" class="preview-zoom-btn active" data-preview-zoom="0.9" onclick="setPreviewZoomScale(0.9)">90%</button>
+            <button type="button" class="preview-zoom-btn" data-preview-zoom="1" onclick="setPreviewZoomScale(1)">100%</button>
+            <button type="button" class="preview-zoom-btn" data-preview-zoom="fit" onclick="setPreviewZoomScale('fit')">Fit</button>
+          </div>
+          <button type="button" id="btnPreviewModalClose" class="preview-modal-close-btn" onclick="closeDocPreviewModal()" aria-label="Đóng">&#10005;</button>
+        </div>
       </div>
       <div id="previewModalViewport" class="preview-modal-viewport">
         <div id="previewModalLoading" class="preview-loading-card hidden">
@@ -132,10 +191,17 @@
   <!-- Schema-Driven Form Renderer for All Views -->
   <?!= include('JS_Render_Forms'); ?>
 
+  <!--
+    Deployment Note: Deploy Web App with "Execute as: User accessing the web app"
+    so Preview and Export files are saved in the signed-in user's own Google Drive.
+  -->
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       if (typeof loadBrandLogoOnStart === 'function') {
         loadBrandLogoOnStart();
+      }
+      if (typeof initBatchExportModalUi_ === 'function') {
+        initBatchExportModalUi_();
       }
     });
   </script>

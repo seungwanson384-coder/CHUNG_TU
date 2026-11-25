@@ -3,6 +3,14 @@
  * Entry point, Web App routing, authentication, reference dropdown loading, draft persistence,
  * and Admin Account Management with external sheet scan and safe student bulk delete.
  * Runtime: Google Apps Script (V8)
+ *
+ * IMPORTANT DEPLOYMENT NOTE (Prevent Admin Drive Bloat):
+ * Deploy this Web App with:
+ *   - "Execute as: User accessing the web app" (Người dùng truy cập ứng dụng web)
+ *   - "Who has access: Anyone with Google account" (hoặc trong tổ chức/miền trường)
+ * Running as the accessing user ensures DriveApp.getRootFolder() in GS_Doc_Engine.gs
+ * creates/saves exported and previewed documents in each signed-in user's own Google Drive
+ * (folder "XNK_Documents"), instead of accumulating student files in the Admin's Drive.
  */
 
 const NEW_BRAND_LOGO_ID = '1Hjf2eCislKARBB8twtPHunvKviVJS6vq';
@@ -544,11 +552,7 @@ function getInitialDropdownData() {
       };
     });
 
-    const loaiHinhXNK = readTableRecords_(ss, 'Loai_hinh_XNK', [
-      'Phan_loai',
-      'Ma_loai_hinh',
-      'Ten_loai_hinh'
-    ]);
+    const loaiHinhXNK = readLoaiHinhXnkRecords_(ss, 'Loai_hinh_XNK');
 
     const danhMucChung = readIndependentColumns_(ss, 'Danh_Muc_chung', [
       'LOAI_CONT',
@@ -815,4 +819,127 @@ function readContSealPairs_(ss, sheetName) {
 
   return pairs;
 }
+
+function normalizeSheetHeaderText_(val) {
+  return String(val == null ? '' : val)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/[_\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function readLoaiHinhXnkRecords_(ss, sheetName) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    throw new Error('Không tìm thấy sheet "' + sheetName + '".');
+  }
+
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) {
+    return [];
+  }
+
+  const values = sheet.getRange(1, 1, lastRow, lastCol).getDisplayValues();
+  let headerRowIdx = -1;
+  let colMap = {
+    category: 0,
+    code: 1,
+    name: 2,
+    purpose: 3
+  };
+
+  const maxScan = Math.min(10, values.length - 1);
+  for (let r = 0; r <= maxScan; r++) {
+    const row = values[r] || [];
+    let nonEmptyCount = 0;
+    for (let k = 0; k < row.length; k++) {
+      if (String(row[k] || '').trim() !== '') nonEmptyCount++;
+    }
+    if (nonEmptyCount < 2) {
+      continue;
+    }
+
+    let catIdx = -1;
+    let codeIdx = -1;
+    let nameIdx = -1;
+    let purposeIdx = -1;
+
+    for (let c = 0; c < row.length; c++) {
+      const h = normalizeSheetHeaderText_(row[c]);
+      if (!h) continue;
+      if (catIdx === -1 && (h.indexOf('phan loai') !== -1 || h === 'loai' || h === 'category' || h.indexOf('xuat nhap') !== -1)) {
+        catIdx = c;
+      } else if (codeIdx === -1 && (h.indexOf('ma loai hinh') !== -1 || h === 'ma' || h === 'code')) {
+        codeIdx = c;
+      } else if (nameIdx === -1 && (h.indexOf('ten loai hinh') !== -1 || h === 'ten' || h === 'name')) {
+        nameIdx = c;
+      } else if (purposeIdx === -1 && (h.indexOf('muc dich') !== -1 || h.indexOf('pham vi') !== -1 || h.indexOf('purpose') !== -1)) {
+        purposeIdx = c;
+      }
+    }
+
+    const matchedCols =
+      (catIdx !== -1 ? 1 : 0) +
+      (codeIdx !== -1 ? 1 : 0) +
+      (nameIdx !== -1 ? 1 : 0) +
+      (purposeIdx !== -1 ? 1 : 0);
+
+    if (codeIdx !== -1 && matchedCols >= 2) {
+      headerRowIdx = r;
+      colMap = {
+        category: catIdx,
+        code: codeIdx,
+        name: nameIdx !== -1 ? nameIdx : (codeIdx + 1 < lastCol ? codeIdx + 1 : 2),
+        purpose: purposeIdx !== -1 ? purposeIdx : (codeIdx + 2 < lastCol ? codeIdx + 2 : 3)
+      };
+      break;
+    }
+  }
+
+  if (headerRowIdx === -1) {
+    headerRowIdx = 0;
+  }
+
+  const records = [];
+  let lastCategory = '';
+
+  for (let r = headerRowIdx + 1; r < values.length; r++) {
+    const row = values[r] || [];
+    const rawCat = colMap.category >= 0 && colMap.category < row.length ? String(row[colMap.category] || '').trim() : '';
+    const code = colMap.code >= 0 && colMap.code < row.length ? String(row[colMap.code] || '').trim() : '';
+    const name = colMap.name >= 0 && colMap.name < row.length ? String(row[colMap.name] || '').trim() : '';
+    const purpose = colMap.purpose >= 0 && colMap.purpose < row.length ? String(row[colMap.purpose] || '').trim() : '';
+
+    if (rawCat) {
+      lastCategory = rawCat;
+    }
+
+    if (!code && !name && !purpose) {
+      continue;
+    }
+    if (!code) {
+      continue;
+    }
+
+    const effectiveCategory = rawCat || lastCategory;
+    records.push({
+      category: effectiveCategory,
+      code: code,
+      name: name,
+      purpose: purpose,
+      Phan_loai: effectiveCategory,
+      Ma_loai_hinh: code,
+      Ten_loai_hinh: name,
+      Muc_dich: purpose
+    });
+  }
+
+  return records;
+}
+
 

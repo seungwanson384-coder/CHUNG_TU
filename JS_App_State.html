@@ -143,6 +143,7 @@ function createEmptyItem() {
   return {
     PROD: '',
     PCODE: '',
+    BOTANICAL_NAME: '',
     DES: '',
     HS: '',
     ORG: '',
@@ -151,6 +152,7 @@ function createEmptyItem() {
     LOT_NO: '',
     QTY: '',
     UNIT: '',
+    WEIGHT_UNIT: 'KGS',
     PRICE: '',
     AMT: '',
     PACK: '',
@@ -195,11 +197,30 @@ function createEmptyContainer() {
   };
 }
 
+const INSPECTION_CERT_KEYS = [
+  'VETERINARY_CERTIFICATE',
+  'PHYTOSANITARY_CERTIFICATE',
+  'QUALITY_CERTIFICATE'
+];
+
+function createDefaultInspectionEnabled_() {
+  return {
+    VETERINARY_CERTIFICATE: false,
+    PHYTOSANITARY_CERTIFICATE: false,
+    QUALITY_CERTIFICATE: false
+  };
+}
+
 const APP_STATE = {
   user: null,
   activeTab: 'MASTER_PARTIES',
   unlockedStepIndex: 0,
   adminUnlockAllSteps: false,
+  sequentialLock: true,
+  inspectionEnabled: createDefaultInspectionEnabled_(),
+  visitedTabs: {},
+  previewZoomMode: '0.9',
+  previewBasePages: [],
   lookupTargetDocKey: '',
   lookupTargetRowIdx: 0,
   dropdowns: {
@@ -353,6 +374,40 @@ function isAdminTab_(tabKey) {
   return tabKey === 'ADMIN_PANEL' || tabKey === 'ADMIN_ACCOUNTS';
 }
 
+function isInspectionDocKey_(docKey) {
+  return INSPECTION_CERT_KEYS.indexOf(String(docKey || '')) !== -1;
+}
+
+function isInspectionDocEnabled_(docKey) {
+  if (!isInspectionDocKey_(docKey)) return true;
+  return Boolean(APP_STATE.inspectionEnabled && APP_STATE.inspectionEnabled[docKey]);
+}
+
+function toggleInspectionDocEnabled(docKey, checked, ev) {
+  if (ev && typeof ev.stopPropagation === 'function') {
+    ev.stopPropagation();
+  }
+  if (!isInspectionDocKey_(docKey)) return;
+  if (!APP_STATE.inspectionEnabled) {
+    APP_STATE.inspectionEnabled = createDefaultInspectionEnabled_();
+  }
+  const nextVal = Boolean(checked);
+  APP_STATE.inspectionEnabled[docKey] = nextVal;
+
+  updateSidebarLockState_();
+  updateFieldAndTableLocksInDOM_();
+
+  const titleLabel = (typeof DOC_FORM_CONFIGS !== 'undefined' && DOC_FORM_CONFIGS[docKey] && DOC_FORM_CONFIGS[docKey].title)
+    ? DOC_FORM_CONFIGS[docKey].title
+    : docKey;
+  showToast(
+    nextVal
+      ? ('Đã chọn & mở khóa nhập liệu: ' + titleLabel)
+      : ('Đã bỏ chọn & khóa nhập liệu: ' + titleLabel),
+    'info'
+  );
+}
+
 function isStepLocked_(tabKey) {
   if (!tabKey || tabKey === 'MASTER_PARTIES' || isAdminTab_(tabKey)) {
     return false;
@@ -451,15 +506,18 @@ function isStepComplete_(docKey) {
         hasFilledVal_(firstCont.CONT) &&
         hasFilledVal_(firstCont.SEAL);
     case 'VETERINARY_CERTIFICATE':
-      return hasFilledVal_(s.VET_CERT_NO) &&
+      return isInspectionDocEnabled_('VETERINARY_CERTIFICATE') &&
+        hasFilledVal_(s.VET_CERT_NO) &&
         hasFilledVal_(s.VET_CERT_DT) &&
         hasFilledVal_(s.ANIMAL_ORIGIN);
     case 'PHYTOSANITARY_CERTIFICATE':
-      return hasFilledVal_(s.PHYTO_CERT_NO) &&
+      return isInspectionDocEnabled_('PHYTOSANITARY_CERTIFICATE') &&
+        hasFilledVal_(s.PHYTO_CERT_NO) &&
         hasFilledVal_(s.PHYTO_CERT_DT) &&
         hasFilledVal_(s.PLANT_ORIGIN);
     case 'QUALITY_CERTIFICATE':
-      return hasFilledVal_(s.QUAL_CERT_NO) &&
+      return isInspectionDocEnabled_('QUALITY_CERTIFICATE') &&
+        hasFilledVal_(s.QUAL_CERT_NO) &&
         hasFilledVal_(s.QUAL_CERT_DT) &&
         hasFilledVal_(s.INSPECTING_BODY) &&
         hasFilledVal_(s.TEST_RESULT);
@@ -528,10 +586,20 @@ function isStepComplete_(docKey) {
         hasFilledVal_(s.CUS_REG) &&
         hasFilledVal_(s.DEC_NO) &&
         hasFilledVal_(s.DEC_TYPE) &&
+        hasFilledVal_(s.BL_NO) &&
         hasFilledVal_(s.CURR) &&
         hasFilledVal_(s.EX_RATE) &&
         hasFilledVal_(firstCont.CONT) &&
-        hasFilledVal_(firstCont.SEAL);
+        hasFilledVal_(firstCont.SEAL) &&
+        (
+          hasFilledVal_(s.IM_RATE) ||
+          hasFilledVal_(s.VAT_RATE) ||
+          hasFilledVal_(s.SCT_RATE) ||
+          hasFilledVal_(s.EPT_RATE) ||
+          hasFilledVal_(s.TRANS_MODE) ||
+          hasFilledVal_(s.ETA_DT) ||
+          hasFilledVal_(s.NK_CLEARANCE_RESULT)
+        );
     case 'LETTER_OF_CREDIT':
       return hasFilledVal_(s.LC_NO) &&
         hasFilledVal_(s.LC_DT) &&
@@ -542,36 +610,72 @@ function isStepComplete_(docKey) {
   }
 }
 
+function isStepSatisfiedForChain_(docKey) {
+  if (isInspectionDocKey_(docKey) && !isInspectionDocEnabled_(docKey)) {
+    return true;
+  }
+  return isStepComplete_(docKey);
+}
+
 function recomputeUnlockedStepIndex_() {
   let chainIdx = 0;
   for (let i = 0; i < DOC_STEP_ORDER.length - 1; i++) {
-    if (isStepComplete_(DOC_STEP_ORDER[i])) {
+    if (isStepSatisfiedForChain_(DOC_STEP_ORDER[i])) {
       chainIdx = i + 1;
     } else {
       break;
     }
   }
-  const activeIdx = DOC_STEP_ORDER.indexOf(APP_STATE.activeTab);
-  let nextIdx = Math.max(APP_STATE.unlockedStepIndex || 0, chainIdx);
-  if (activeIdx >= 0 && activeIdx <= nextIdx && activeIdx < DOC_STEP_ORDER.length - 1 && isStepComplete_(DOC_STEP_ORDER[activeIdx])) {
-    nextIdx = Math.max(nextIdx, activeIdx + 1);
+  APP_STATE.unlockedStepIndex = Math.max(
+    APP_STATE.unlockedStepIndex || 0,
+    Math.min(DOC_STEP_ORDER.length - 1, chainIdx)
+  );
+  if (APP_STATE.unlockedStepIndex > DOC_STEP_ORDER.length - 1) {
+    APP_STATE.unlockedStepIndex = DOC_STEP_ORDER.length - 1;
   }
-  APP_STATE.unlockedStepIndex = Math.min(DOC_STEP_ORDER.length - 1, nextIdx);
+}
+
+function getCurrentProgressStepKey_() {
+  if (APP_STATE.adminUnlockAllSteps) return '';
+  const maxIdx = Math.max(0, Math.min(DOC_STEP_ORDER.length - 1, APP_STATE.unlockedStepIndex || 0));
+  for (let i = 0; i <= maxIdx; i++) {
+    const k = DOC_STEP_ORDER[i];
+    if (!isStepSatisfiedForChain_(k)) {
+      return k;
+    }
+  }
+  return DOC_STEP_ORDER[maxIdx];
 }
 
 function updateSidebarLockState_() {
   recomputeUnlockedStepIndex_();
   const prevBlUnlocked = APP_STATE._lastBlUnlockedState;
   const nowBlUnlocked = isBillOfLadingReached_();
+  const seqLockOn = !APP_STATE.adminUnlockAllSteps;
+  APP_STATE.sequentialLock = seqLockOn;
+  const currentProgressKey = seqLockOn ? getCurrentProgressStepKey_() : '';
 
   document.querySelectorAll('.sidebar-nav-btn[data-nav]').forEach(function (btn) {
     const navKey = btn.getAttribute('data-nav');
     const locked = isStepLocked_(navKey);
+    const isCurrentStep = Boolean(seqLockOn && currentProgressKey && navKey === currentProgressKey);
     btn.classList.toggle('locked', locked);
+    btn.classList.toggle('progress-current', isCurrentStep);
     btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
+    const arrowSpan = btn.querySelector('.nav-progress-arrow');
+    if (arrowSpan) {
+      arrowSpan.classList.toggle('hidden', !isCurrentStep);
+    }
     const iconSpan = btn.querySelector('.nav-lock-icon');
     if (iconSpan) {
       iconSpan.textContent = locked ? '\uD83D\uDD12' : '';
+    }
+  });
+
+  INSPECTION_CERT_KEYS.forEach(function (docKey) {
+    const cb = document.querySelector('.nav-inspect-checkbox[data-inspect-doc="' + docKey + '"]');
+    if (cb) {
+      cb.checked = isInspectionDocEnabled_(docKey);
     }
   });
 
@@ -586,10 +690,10 @@ function updateSidebarLockState_() {
   if (adminUnlockBtn) {
     adminUnlockBtn.classList.toggle('hidden', !isAdmin);
     if (APP_STATE.adminUnlockAllSteps) {
-      adminUnlockBtn.textContent = '\uD83D\uDD13 Đã mở';
+      adminUnlockBtn.textContent = '\uD83D\uDD13 Khóa theo tiến độ: TẮT';
       adminUnlockBtn.classList.add('unlocked-active');
     } else {
-      adminUnlockBtn.textContent = '\uD83D\uDD12 Đang khóa';
+      adminUnlockBtn.textContent = '\uD83D\uDD12 Khóa theo tiến độ: BẬT';
       adminUnlockBtn.classList.remove('unlocked-active');
     }
   }
@@ -608,12 +712,13 @@ function updateSidebarLockState_() {
 function toggleAdminUnlockAllSteps() {
   if (!isAdminUser_()) return;
   APP_STATE.adminUnlockAllSteps = !APP_STATE.adminUnlockAllSteps;
+  APP_STATE.sequentialLock = !APP_STATE.adminUnlockAllSteps;
   updateSidebarLockState_();
   updateFieldAndTableLocksInDOM_();
   showToast(
     APP_STATE.adminUnlockAllSteps
-      ? 'Đã mở khóa toàn bộ 21 chứng từ (Chế độ Admin).'
-      : 'Đã bật lại chế độ khóa tuần tự theo tiến độ.',
+      ? 'Đã tắt Khóa theo tiến độ (Mở khóa toàn bộ 21 chứng từ).'
+      : 'Đã bật Khóa theo tiến độ (Mũi tên đỏ chỉ mục hiện tại).',
     'info'
   );
 }
@@ -720,6 +825,11 @@ function buildFullSampleDataset_() {
       SI_NO: 'SI-' + yymmdd + '-01',
       SI_DT: '2026-11-29',
       DESCRIPTION_OF_GOODS: 'VIETNAMESE LONG GRAIN WHITE RICE 5% BROKEN & ROBUSTA GREEN COFFEE BEANS G1',
+      WEIGHT_UNIT: 'KGS',
+      INSPECTION_CONTENT: 'Kiểm tra lâm sàng, cảm quan và điều kiện vệ sinh thú y lô hàng',
+      INSPECTION_METHOD: 'Lấy mẫu ngẫu nhiên & kiểm tra hồ sơ theo TCVN',
+      INSPECTION_RESULT: 'Đạt yêu cầu vệ sinh thú y, không phát hiện dịch bệnh',
+      VALIDITY_PERIOD: '30 ngày kể từ ngày cấp',
       VET_CERT_NO: 'VET-' + yymmdd + '-01',
       VET_CERT_DT: '2026-11-29',
       ANIMAL_ORIGIN: 'N/A (Plant-based agricultural commodity)',
@@ -791,8 +901,10 @@ function buildFullSampleDataset_() {
       SUB_DTM: '25/11/2026 09:30',
       DEC_NO: '306812345670',
       REG_DTM: '25/11/2026 10:15',
-      DEC_TYPE: 'B11 - Xuất kinh doanh',
+      DEC_TYPE: 'B11',
       INSPECTION_CODE: '1 - Luồng Xanh',
+      XK_CLEARANCE_RESULT: 'Đã thông quan xuất khẩu (Luồng Xanh)',
+      NK_CLEARANCE_RESULT: 'Đã thông quan nhập khẩu (Luồng Xanh)',
       LIC_NO: 'LIC-' + yymmdd + '-01',
       LIC_DT: '2026-11-01',
       LIC_EXP: '2026-12-31',
@@ -814,6 +926,7 @@ function buildFullSampleDataset_() {
       Object.assign(createEmptyItem(), {
         PCODE: 'RICE-5B',
         PROD: 'VIETNAMESE WHITE RICE 5% BROKEN',
+        BOTANICAL_NAME: 'Oryza sativa',
         DES: 'Crop 2025/2026, moisture max 14%, packed in 50kg PP bags',
         HS: '1006.30.99',
         ORG: 'VIETNAM',
@@ -821,6 +934,7 @@ function buildFullSampleDataset_() {
         MARKS: 'MEKONG AGRI - USLAX',
         LOT_NO: 'LOT-RICE-01',
         UNIT: 'MTS',
+        WEIGHT_UNIT: 'KGS',
         QTY: '25',
         PRICE: '620.00',
         AMT: '15,500.00',
@@ -843,6 +957,7 @@ function buildFullSampleDataset_() {
       Object.assign(createEmptyItem(), {
         PCODE: 'CAF-G1',
         PROD: 'ROBUSTA GREEN COFFEE BEANS G1',
+        BOTANICAL_NAME: 'Coffea canephora',
         DES: 'Screen 18, moisture max 12.5%, export standard',
         HS: '0901.11.10',
         ORG: 'VIETNAM',
@@ -850,6 +965,7 @@ function buildFullSampleDataset_() {
         MARKS: 'PACIFIC RIM - G1',
         LOT_NO: 'LOT-COF-02',
         UNIT: 'MTS',
+        WEIGHT_UNIT: 'KGS',
         QTY: '18',
         PRICE: '4,250.00',
         AMT: '76,500.00',
@@ -907,6 +1023,11 @@ function handleAdminFillSampleData() {
     APP_STATE.shared = Object.assign({}, APP_STATE.shared, sample.shared);
     APP_STATE.items = sample.items.map(function (row) { return Object.assign(createEmptyItem(), row); });
     APP_STATE.containers = sample.containers.map(function (row) { return Object.assign(createEmptyContainer(), row); });
+    APP_STATE.inspectionEnabled = {
+      VETERINARY_CERTIFICATE: true,
+      PHYTOSANITARY_CERTIFICATE: true,
+      QUALITY_CERTIFICATE: true
+    };
     APP_STATE.unlockedStepIndex = DOC_STEP_ORDER.length - 1;
     APP_STATE.manualFlags = {
       IM_VAL: false,
@@ -938,6 +1059,13 @@ function handleAdminFillSampleData() {
     APP_STATE.activeTab = targetTab;
   }
 
+  if (isInspectionDocKey_(targetTab)) {
+    if (!APP_STATE.inspectionEnabled) {
+      APP_STATE.inspectionEnabled = createDefaultInspectionEnabled_();
+    }
+    APP_STATE.inspectionEnabled[targetTab] = true;
+  }
+
   const cfg = (typeof DOC_FORM_CONFIGS !== 'undefined' && DOC_FORM_CONFIGS[targetTab]) ? DOC_FORM_CONFIGS[targetTab] : null;
   if (cfg && Array.isArray(cfg.sections)) {
     cfg.sections.forEach(function (sec) {
@@ -953,10 +1081,10 @@ function handleAdminFillSampleData() {
   }
 
   if (targetTab === 'To_khai_NK') {
-    APP_STATE.shared.DEC_TYPE = 'A11 - Nhập kinh doanh tiêu dùng';
+    APP_STATE.shared.DEC_TYPE = 'A11';
     APP_STATE.lastTaxTab = 'To_khai_NK';
   } else if (targetTab === 'To_khai_XK') {
-    APP_STATE.shared.DEC_TYPE = 'B11 - Xuất kinh doanh';
+    APP_STATE.shared.DEC_TYPE = 'B11';
     APP_STATE.lastTaxTab = 'To_khai_XK';
   }
 
@@ -1053,6 +1181,50 @@ function updateFieldAndTableLocksInDOM_() {
       badge.classList.toggle('hidden', blUnlocked);
     }
   });
+
+  INSPECTION_CERT_KEYS.forEach(function (docKey) {
+    const panel = document.querySelector('.doc-panel[data-tab-panel="' + docKey + '"]');
+    if (!panel) return;
+    const enabled = isInspectionDocEnabled_(docKey);
+    const banner = document.getElementById('inspectLockBanner_' + docKey);
+    if (banner) {
+      banner.classList.toggle('hidden', enabled);
+    }
+
+    panel.querySelectorAll('input, textarea, select, .btn-add-row, .btn-del-row').forEach(function (el) {
+      if (!enabled) {
+        if (el.getAttribute('data-inspect-locked') !== 'true') {
+          el.setAttribute('data-prev-disabled', el.disabled ? '1' : '0');
+          el.setAttribute('data-prev-readonly', el.readOnly ? '1' : '0');
+          el.setAttribute('data-inspect-locked', 'true');
+        }
+        el.disabled = true;
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+          el.readOnly = true;
+          el.classList.add('field-locked-input');
+        }
+      } else if (el.getAttribute('data-inspect-locked') === 'true') {
+        const wasDisabled = el.getAttribute('data-prev-disabled') === '1';
+        const wasReadOnly = el.getAttribute('data-prev-readonly') === '1';
+        el.removeAttribute('data-inspect-locked');
+        el.removeAttribute('data-prev-disabled');
+        el.removeAttribute('data-prev-readonly');
+        if (el.getAttribute('data-sync') === 'BL_NO' && docKey === 'PHYTOSANITARY_CERTIFICATE') {
+          el.disabled = !blUnlocked;
+          el.readOnly = !blUnlocked;
+          el.classList.toggle('field-locked-input', !blUnlocked);
+        } else {
+          el.disabled = wasDisabled;
+          if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+            el.readOnly = wasReadOnly;
+            if (!wasReadOnly) {
+              el.classList.remove('field-locked-input');
+            }
+          }
+        }
+      }
+    });
+  });
 }
 
 function switchTab(tabKey) {
@@ -1062,6 +1234,8 @@ function switchTab(tabKey) {
   }
 
   APP_STATE.activeTab = tabKey;
+  if (!APP_STATE.visitedTabs) APP_STATE.visitedTabs = {};
+  APP_STATE.visitedTabs[tabKey] = true;
 
   if (tabKey === 'To_khai_XK' || tabKey === 'To_khai_NK') {
     APP_STATE.lastTaxTab = tabKey;
@@ -1440,7 +1614,8 @@ function initDefaultDocumentNumbers(forceOverwrite) {
     DO_NO: 'DO-' + yymmdd + '-01',
     DEC_NO: 'DEC-' + yymmdd + '-01',
     LC_NO: 'LC-' + yymmdd + '-01',
-    CURR: 'USD'
+    CURR: 'USD',
+    WEIGHT_UNIT: 'KGS'
   };
 
   Object.keys(defaults).forEach(function (k) {
@@ -1484,6 +1659,8 @@ function restoreDraftState(draftJson) {
   APP_STATE.items = [createEmptyItem()];
   APP_STATE.containers = [createEmptyContainer()];
   APP_STATE.unlockedStepIndex = 0;
+  APP_STATE.inspectionEnabled = createDefaultInspectionEnabled_();
+  APP_STATE.visitedTabs = {};
 
   if (draftJson && typeof draftJson === 'string' && draftJson.trim() !== '') {
     try {
@@ -1512,6 +1689,25 @@ function restoreDraftState(draftJson) {
         }
         if (typeof parsed.unlockedStepIndex === 'number' && !isNaN(parsed.unlockedStepIndex)) {
           APP_STATE.unlockedStepIndex = Math.max(0, Math.min(DOC_STEP_ORDER.length - 1, Math.floor(parsed.unlockedStepIndex)));
+        }
+        if (parsed.inspectionEnabled && typeof parsed.inspectionEnabled === 'object') {
+          INSPECTION_CERT_KEYS.forEach(function (k) {
+            APP_STATE.inspectionEnabled[k] = Boolean(parsed.inspectionEnabled[k]);
+          });
+        } else {
+          const s = APP_STATE.shared || {};
+          if (hasFilledVal_(s.VET_CERT_DT) || hasFilledVal_(s.ANIMAL_ORIGIN)) {
+            APP_STATE.inspectionEnabled.VETERINARY_CERTIFICATE = true;
+          }
+          if (hasFilledVal_(s.PHYTO_CERT_DT) || hasFilledVal_(s.PLANT_ORIGIN)) {
+            APP_STATE.inspectionEnabled.PHYTOSANITARY_CERTIFICATE = true;
+          }
+          if (hasFilledVal_(s.QUAL_CERT_DT) || hasFilledVal_(s.TEST_RESULT)) {
+            APP_STATE.inspectionEnabled.QUALITY_CERTIFICATE = true;
+          }
+        }
+        if (parsed.visitedTabs && typeof parsed.visitedTabs === 'object') {
+          APP_STATE.visitedTabs = parsed.visitedTabs;
         }
       }
     } catch (e) {
@@ -1599,7 +1795,9 @@ function handleSaveDraft() {
     shared: APP_STATE.shared,
     items: APP_STATE.items,
     containers: APP_STATE.containers,
-    unlockedStepIndex: APP_STATE.unlockedStepIndex || 0
+    unlockedStepIndex: APP_STATE.unlockedStepIndex || 0,
+    inspectionEnabled: APP_STATE.inspectionEnabled || createDefaultInspectionEnabled_(),
+    visitedTabs: APP_STATE.visitedTabs || {}
   };
 
   showLoading('Loading...');
@@ -1665,6 +1863,8 @@ function confirmClearData() {
   APP_STATE.containers = [createEmptyContainer()];
   APP_STATE.exportResults = {};
   APP_STATE.unlockedStepIndex = 0;
+  APP_STATE.inspectionEnabled = createDefaultInspectionEnabled_();
+  APP_STATE.visitedTabs = {};
   APP_STATE.activeTab = 'MASTER_PARTIES';
   APP_STATE.manualFlags = {
     IM_VAL: false,
@@ -1705,6 +1905,7 @@ function confirmClearData() {
 function handleLogout() {
   closeGuideModal();
   closeContSealLookupModal();
+  closeDecTypeLookupModal();
   closeClearConfirmModal();
   closeBatchExportModal();
   closeDocPreviewModal();
@@ -1715,6 +1916,9 @@ function handleLogout() {
   APP_STATE.exportResults = {};
   APP_STATE.unlockedStepIndex = 0;
   APP_STATE.adminUnlockAllSteps = false;
+  APP_STATE.sequentialLock = true;
+  APP_STATE.inspectionEnabled = createDefaultInspectionEnabled_();
+  APP_STATE.visitedTabs = {};
 
   const adminGroup = document.getElementById('adminSidebarGroup');
   if (adminGroup) {
@@ -1851,6 +2055,48 @@ function bindPreviewModalWheelLock_() {
       e.preventDefault();
     }
   }, { passive: false });
+
+  previewModal.addEventListener('touchmove', function (e) {
+    const viewportEl = document.getElementById('previewModalViewport');
+    if (!viewportEl || !viewportEl.contains(e.target)) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+}
+
+function setPreviewZoomScale(mode) {
+  const nextMode = mode === 'fit' ? 'fit' : String(mode || '0.9');
+  APP_STATE.previewZoomMode = nextMode;
+  applyPreviewZoomToDom_();
+}
+
+function applyPreviewZoomToDom_() {
+  const mode = APP_STATE.previewZoomMode || '0.9';
+  document.querySelectorAll('#previewZoomGroup .preview-zoom-btn').forEach(function (btn) {
+    const btnMode = String(btn.getAttribute('data-zoom-mode') || '');
+    btn.classList.toggle('active', btnMode === String(mode));
+  });
+
+  const viewportEl = document.getElementById('previewModalViewport');
+  const sheets = document.querySelectorAll('#previewModalCanvasWrap .preview-a4-sheet');
+  if (!sheets || sheets.length === 0) return;
+
+  const vpWidth = viewportEl && viewportEl.clientWidth ? Math.max(300, viewportEl.clientWidth - 48) : 920;
+  const vpHeight = viewportEl && viewportEl.clientHeight ? Math.max(320, viewportEl.clientHeight - 72) : 640;
+
+  sheets.forEach(function (sheet) {
+    if (mode === 'fit') {
+      const aspect = parseFloat(sheet.getAttribute('data-aspect-ratio') || '0.707') || 0.707;
+      const targetW = Math.max(320, Math.min(vpWidth, Math.floor(vpHeight * aspect)));
+      sheet.style.width = targetW + 'px';
+      sheet.style.maxWidth = '100%';
+    } else {
+      const pctNum = parseFloat(mode);
+      const scalePct = (!isNaN(pctNum) && pctNum > 0) ? Math.round(pctNum * 100) : 90;
+      sheet.style.width = scalePct + '%';
+      sheet.style.maxWidth = scalePct + '%';
+    }
+  });
 }
 
 async function renderPdfBase64ToCanvases_(base64Str, containerEl) {
@@ -1863,18 +2109,19 @@ async function renderPdfBase64ToCanvases_(base64Str, containerEl) {
 
   const viewportEl = document.getElementById('previewModalViewport') || containerEl.parentNode;
   const viewportWidth = viewportEl && viewportEl.clientWidth ? viewportEl.clientWidth : 980;
-  const availableWidth = Math.max(320, viewportWidth - 120);
+  const availableWidth = Math.max(420, viewportWidth - 80);
   const outputScale = Math.min(window.devicePixelRatio || 1, 2);
   const fragment = document.createDocumentFragment();
 
   for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
     const page = await pdfDoc.getPage(pageNum);
     const baseViewport = page.getViewport({ scale: 1 });
-    const cssScale = Math.min(2.0, Math.max(0.75, availableWidth / baseViewport.width));
+    const cssScale = Math.min(2.0, Math.max(0.85, availableWidth / baseViewport.width));
     const viewport = page.getViewport({ scale: cssScale });
 
     const sheet = document.createElement('div');
     sheet.className = 'preview-a4-sheet preview-page-card';
+    sheet.setAttribute('data-aspect-ratio', String(baseViewport.width / Math.max(1, baseViewport.height)));
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -1896,6 +2143,7 @@ async function renderPdfBase64ToCanvases_(base64Str, containerEl) {
 
   containerEl.appendChild(fragment);
   containerEl.classList.remove('hidden');
+  applyPreviewZoomToDom_();
   return pdfDoc.numPages;
 }
 
@@ -1913,6 +2161,9 @@ function handlePreviewDocument(docKey) {
   }
 
   APP_STATE.previewDocKey = docKey;
+  if (!APP_STATE.previewZoomMode) {
+    APP_STATE.previewZoomMode = '0.9';
+  }
 
   const previewModal = document.getElementById('previewModal');
   const legacyModal = document.getElementById('docPreviewModal');
@@ -1963,6 +2214,7 @@ function handlePreviewDocument(docKey) {
     viewportEl.scrollTop = 0;
   }
 
+  applyPreviewZoomToDom_();
   setPreviewBackgroundScrollLock_(true);
   bindPreviewModalWheelLock_();
   if (modal) modal.classList.remove('hidden');
@@ -2107,19 +2359,36 @@ function buildExportPayload(targetDocKey) {
     sharedClone[k] = APP_STATE.shared[k];
   });
 
-  ['INS_TERM', 'CO_FORM_NAME', 'CTYPE', 'UNIT', 'TOT_UNIT', 'CURR'].forEach(function (k) {
+  ['INS_TERM', 'CO_FORM_NAME', 'CTYPE', 'UNIT', 'TOT_UNIT', 'CURR', 'WEIGHT_UNIT'].forEach(function (k) {
     if (sharedClone[k] != null && String(sharedClone[k]).trim() !== '') {
       sharedClone[k] = extractShortCodeForExport_(sharedClone[k], k);
+    }
+  });
+
+  ['NTF_NAME', 'NTF_ADDR', 'NTF_TEL', 'NTF_EMAIL'].forEach(function (ntfKey) {
+    if (sharedClone[ntfKey] == null) {
+      sharedClone[ntfKey] = '';
+    }
+  });
+
+  ['TOTAL_CONTAINERS_TEXT', 'TOT_AMT_WORDS', 'TOT_AMT_WORDS_VI', 'TOT_AMT_WORDS_SC', 'TOT_AMT_WORDS_CI', 'TOT_TAX_WORDS'].forEach(function (sayKey) {
+    if (sharedClone[sayKey] != null && String(sharedClone[sayKey]).trim() !== '') {
+      sharedClone[sayKey] = String(sharedClone[sayKey]).replace(/^\s*SAY\s*:\s*/i, '').trim();
     }
   });
 
   if (!sharedClone.CURR || String(sharedClone.CURR).trim() === '') {
     sharedClone.CURR = 'USD';
   }
+  sharedClone.WEIGHT_UNIT = 'KGS';
 
   Object.keys(NUMERIC_SHARED_FIELD_MAP).forEach(function (numKey) {
     if (sharedClone[numKey] != null && String(sharedClone[numKey]).trim() !== '') {
-      sharedClone[numKey] = normalizeFormattedNumberString_(sharedClone[numKey]);
+      if (isWeightFieldKey_(numKey)) {
+        sharedClone[numKey] = convertWeightValueToKgs_(sharedClone[numKey], 'KGS').value;
+      } else {
+        sharedClone[numKey] = normalizeFormattedNumberString_(sharedClone[numKey]);
+      }
     }
   });
 
@@ -2133,11 +2402,17 @@ function buildExportPayload(targetDocKey) {
         copy[col] = extractShortCodeForExport_(copy[col], col);
       }
     });
+    const rowMult = getWeightUnitMultiplierToKgs_(copy.WEIGHT_UNIT || 'KGS') || 1;
     Object.keys(NUMERIC_TABLE_COL_MAP).forEach(function (col) {
       if (copy[col] != null && String(copy[col]).trim() !== '') {
-        copy[col] = normalizeFormattedNumberString_(copy[col]);
+        if (isWeightFieldKey_(col)) {
+          copy[col] = convertWeightValueToKgs_(copy[col], rowMult > 1 ? copy.WEIGHT_UNIT : 'KGS').value;
+        } else {
+          copy[col] = normalizeFormattedNumberString_(copy[col]);
+        }
       }
     });
+    copy.WEIGHT_UNIT = 'KGS';
     return copy;
   });
 
@@ -2150,7 +2425,11 @@ function buildExportPayload(targetDocKey) {
     });
     Object.keys(NUMERIC_TABLE_COL_MAP).forEach(function (col) {
       if (copy[col] != null && String(copy[col]).trim() !== '') {
-        copy[col] = normalizeFormattedNumberString_(copy[col]);
+        if (isWeightFieldKey_(col)) {
+          copy[col] = convertWeightValueToKgs_(copy[col], 'KGS').value;
+        } else {
+          copy[col] = normalizeFormattedNumberString_(copy[col]);
+        }
       }
     });
     return copy;
@@ -2210,6 +2489,202 @@ function validateBatchContainers_(selectedKeys) {
   return validateContainerAndSealRows(APP_STATE.activeTab || 'MASTER_PARTIES');
 }
 
+const MAX_BATCH_EXPORT_DOCS = 5;
+
+function initBatchExportModalUi_() {
+  normalizeBatchExportModalUi_();
+  updateBatchSelectionCounter_();
+}
+
+function normalizeBatchExportModalUi_() {
+  const modal = document.getElementById('batchExportModal');
+  if (!modal) return;
+  const card = modal.firstElementChild;
+  if (!card) return;
+  card.classList.add('batch-modal-card');
+
+  if (!modal.dataset.backdropBound) {
+    modal.dataset.backdropBound = '1';
+    modal.addEventListener('click', function (ev) {
+      if (ev.target === modal) {
+        closeBatchExportModal();
+      }
+    });
+  }
+
+  if (card.dataset.batchUiNormalized !== '1') {
+    card.dataset.batchUiNormalized = '1';
+
+    const resultsBox = document.getElementById('batchExportResults');
+    const checklistEl = document.getElementById('batchExportChecklist');
+
+    // Remove stray small x/close buttons and duplicate bottom-left close buttons
+    Array.prototype.slice.call(card.querySelectorAll('button')).forEach(function (btn) {
+      if (resultsBox && resultsBox.contains(btn)) return;
+      const onclickAttr = String(btn.getAttribute('onclick') || '');
+      const txt = String(btn.textContent || '').trim();
+      const isCloseBtn =
+        onclickAttr.indexOf('closeBatchExportModal') !== -1 ||
+        /^[x×✕✖]$/i.test(txt) ||
+        /^đóng$/i.test(txt) ||
+        /^hủy$/i.test(txt);
+      if (isCloseBtn) {
+        btn.parentNode.removeChild(btn);
+      }
+    });
+
+    // Header bar with crisp white title & single top-right close button (✕)
+    let headerEl = card.querySelector('.batch-modal-header, .modal-header-bar, .modal-header');
+    let titleEl = card.querySelector('h1, h2, h3, h4, .modal-header-title, .modal-title');
+    if (!headerEl) {
+      headerEl = document.createElement('div');
+      if (titleEl && titleEl.parentElement && titleEl.parentElement !== card) {
+        const oldHeaderWrap = titleEl.parentElement;
+        headerEl = oldHeaderWrap;
+      } else {
+        card.insertBefore(headerEl, card.firstChild);
+        if (titleEl) {
+          headerEl.appendChild(titleEl);
+        }
+      }
+    }
+    headerEl.classList.add('batch-modal-header');
+    if (!titleEl) {
+      titleEl = document.createElement('h3');
+      headerEl.insertBefore(titleEl, headerEl.firstChild);
+    }
+    titleEl.classList.add('batch-modal-title');
+    titleEl.textContent = 'Xuất chứng từ hàng loạt (Tối đa 5 / lần)';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.id = 'btnBatchModalCloseX';
+    closeBtn.className = 'batch-modal-close-btn';
+    closeBtn.setAttribute('aria-label', 'Đóng');
+    closeBtn.title = 'Đóng';
+    closeBtn.innerHTML = '&#10005;';
+    closeBtn.setAttribute('onclick', 'closeBatchExportModal()');
+    headerEl.appendChild(closeBtn);
+
+    // Toolbar ("Chọn 5 chứng từ đầu" + "Bỏ chọn tất cả" + live counter)
+    const selectFirstBtn = card.querySelector('button[onclick*="toggleAllBatchCheckboxes(true)"]');
+    const deselectAllBtn = card.querySelector('button[onclick*="toggleAllBatchCheckboxes(false)"]');
+    let toolbarEl = null;
+    if (selectFirstBtn) {
+      selectFirstBtn.textContent = 'Chọn 5 chứng từ đầu';
+      selectFirstBtn.title = 'Tối đa 5 / lần';
+      selectFirstBtn.classList.add('btn', 'btn-sm', 'batch-toolbar-btn');
+      toolbarEl = selectFirstBtn.parentElement;
+    }
+    if (deselectAllBtn) {
+      deselectAllBtn.textContent = 'Bỏ chọn tất cả';
+      deselectAllBtn.classList.add('btn', 'btn-sm', 'batch-toolbar-btn-outline');
+      if (!toolbarEl) toolbarEl = deselectAllBtn.parentElement;
+    }
+    if (!toolbarEl || toolbarEl === card) {
+      toolbarEl = document.createElement('div');
+      if (headerEl.nextSibling) {
+        card.insertBefore(toolbarEl, headerEl.nextSibling);
+      } else {
+        card.appendChild(toolbarEl);
+      }
+      if (selectFirstBtn) toolbarEl.appendChild(selectFirstBtn);
+      if (deselectAllBtn) toolbarEl.appendChild(deselectAllBtn);
+    }
+    toolbarEl.classList.add('batch-toolbar-bar');
+
+    if (!document.getElementById('batchSelectionCounter')) {
+      const counterEl = document.createElement('span');
+      counterEl.id = 'batchSelectionCounter';
+      counterEl.className = 'batch-selection-counter';
+      counterEl.textContent = 'Đã chọn: 0 / ' + MAX_BATCH_EXPORT_DOCS + ' chứng từ';
+      toolbarEl.appendChild(counterEl);
+    }
+
+    // Body wrapper containing checklist & results
+    if (checklistEl) {
+      let bodyEl = checklistEl.parentElement;
+      if (!bodyEl || bodyEl === card) {
+        bodyEl = document.createElement('div');
+        card.insertBefore(bodyEl, checklistEl);
+        bodyEl.appendChild(checklistEl);
+        if (resultsBox && resultsBox.parentElement === card) {
+          bodyEl.appendChild(resultsBox);
+        }
+      }
+      bodyEl.classList.add('batch-modal-body');
+    }
+
+    // Footer bar with single green primary action button (no bottom-left close clutter)
+    const exportBtn = card.querySelector('button[onclick*="handleExportBatch"]');
+    let footerEl = exportBtn ? exportBtn.parentElement : null;
+    if (!footerEl || footerEl === card) {
+      footerEl = document.createElement('div');
+      card.appendChild(footerEl);
+      if (exportBtn) footerEl.appendChild(exportBtn);
+    }
+    footerEl.classList.add('batch-modal-footer');
+    if (exportBtn) {
+      exportBtn.classList.add('btn', 'btn-primary', 'batch-export-submit-btn');
+    }
+    if (!footerEl.querySelector('.batch-footer-hint')) {
+      const hintSpan = document.createElement('span');
+      hintSpan.className = 'batch-footer-hint';
+      hintSpan.textContent = 'Tối đa 5 chứng từ / lần — Lưu vào Drive cá nhân (XNK_Documents)';
+      footerEl.insertBefore(hintSpan, footerEl.firstChild);
+    }
+
+    // Clean any empty orphan wrappers directly under card
+    Array.prototype.slice.call(card.children).forEach(function (child) {
+      if (
+        child !== headerEl &&
+        child !== toolbarEl &&
+        child !== footerEl &&
+        !child.classList.contains('batch-modal-body') &&
+        child.id !== 'batchExportChecklist' &&
+        child.id !== 'batchExportResults' &&
+        String(child.textContent || '').trim() === '' &&
+        child.querySelectorAll('input, button, select').length === 0
+      ) {
+        child.parentNode.removeChild(child);
+      }
+    });
+  }
+}
+
+function updateBatchSelectionCounter_() {
+  const checkboxes = document.querySelectorAll('#batchExportChecklist input[type="checkbox"]');
+  let checkedCount = 0;
+  checkboxes.forEach(function (cb) {
+    const label = cb.closest('.batch-check-item');
+    if (cb.checked) {
+      checkedCount++;
+      if (label) label.classList.add('is-checked');
+    } else if (label) {
+      label.classList.remove('is-checked');
+    }
+  });
+
+  const counterEl = document.getElementById('batchSelectionCounter');
+  if (counterEl) {
+    counterEl.textContent = 'Đã chọn: ' + checkedCount + ' / ' + MAX_BATCH_EXPORT_DOCS + ' chứng từ';
+    counterEl.classList.toggle('at-limit', checkedCount >= MAX_BATCH_EXPORT_DOCS);
+  }
+}
+
+function handleBatchDocCheckboxChange(cb) {
+  if (!cb) return;
+  const checkedBoxes = document.querySelectorAll('#batchExportChecklist input[type="checkbox"]:checked');
+  if (cb.checked && checkedBoxes.length > MAX_BATCH_EXPORT_DOCS) {
+    cb.checked = false;
+    showToast(
+      'Mỗi lần chỉ được chọn tối đa ' + MAX_BATCH_EXPORT_DOCS + ' chứng từ để tránh quá tải hệ thống khi nhiều người cùng xuất.',
+      'warning'
+    );
+  }
+  updateBatchSelectionCounter_();
+}
+
 function openBatchExportModal() {
   const contCheck = validateContainerAndSealRows(APP_STATE.activeTab || 'MASTER_PARTIES');
   if (contCheck.hasErrors) {
@@ -2218,6 +2693,7 @@ function openBatchExportModal() {
     return;
   }
 
+  initBatchExportModalUi_();
   const resultsBox = document.getElementById('batchExportResults');
   if (resultsBox) resultsBox.classList.add('hidden');
   document.getElementById('batchExportModal').classList.remove('hidden');
@@ -2228,9 +2704,33 @@ function closeBatchExportModal() {
 }
 
 function toggleAllBatchCheckboxes(checked) {
-  document.querySelectorAll('#batchExportChecklist input[type="checkbox"]').forEach(function (cb) {
-    cb.checked = checked;
+  const boxes = Array.prototype.slice.call(
+    document.querySelectorAll('#batchExportChecklist input[type="checkbox"]')
+  );
+  if (!checked) {
+    boxes.forEach(function (cb) {
+      cb.checked = false;
+    });
+    updateBatchSelectionCounter_();
+    return;
+  }
+
+  let selectedCount = 0;
+  boxes.forEach(function (cb) {
+    if (selectedCount < MAX_BATCH_EXPORT_DOCS) {
+      cb.checked = true;
+      selectedCount++;
+    } else {
+      cb.checked = false;
+    }
   });
+  updateBatchSelectionCounter_();
+  if (boxes.length > MAX_BATCH_EXPORT_DOCS) {
+    showToast(
+      'Đã chọn ' + MAX_BATCH_EXPORT_DOCS + ' chứng từ đầu tiên (tối đa ' + MAX_BATCH_EXPORT_DOCS + ' chứng từ / lần xuất).',
+      'info'
+    );
+  }
 }
 
 function handleExportBatch() {
@@ -2246,6 +2746,14 @@ function handleExportBatch() {
 
   if (selectedKeys.length === 0) {
     showToast('Vui lòng chọn ít nhất một chứng từ để xuất hàng loạt.', 'warning');
+    return;
+  }
+
+  if (selectedKeys.length > MAX_BATCH_EXPORT_DOCS) {
+    showToast(
+      'Mỗi lần chỉ được chọn tối đa ' + MAX_BATCH_EXPORT_DOCS + ' chứng từ để tránh quá tải hệ thống khi nhiều người cùng xuất.',
+      'warning'
+    );
     return;
   }
 
@@ -2286,7 +2794,7 @@ function handleExportBatch() {
       });
 
       boxEl.classList.remove('hidden');
-      showToast('Đã xuất thành công ' + res.results.length + ' chứng từ!', 'success');
+      showToast('Đã xuất thành công ' + res.results.length + ' chứng từ vào Drive cá nhân!', 'success');
     })
     .withFailureHandler(function (err) {
       hideLoading();
@@ -2371,14 +2879,114 @@ const NUMERIC_TABLE_COL_MAP = {
   FEE_AMT: true
 };
 
-function handleWorkspaceFieldChange(target) {
+const WEIGHT_FIELD_KEY_MAP = {
+  NW: true,
+  GW: true,
+  MAX_GW: true,
+  VGM_WEI: true,
+  TOT_NW: true,
+  TOT_GW: true,
+  TOT_VGM: true
+};
+
+function isWeightFieldKey_(key) {
+  return Boolean(WEIGHT_FIELD_KEY_MAP[String(key || '').trim()]);
+}
+
+function getWeightUnitMultiplierToKgs_(unitStr) {
+  const raw = String(unitStr == null ? '' : unitStr).trim().toLowerCase();
+  if (!raw) return 1;
+  const noAccent = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
+  if (noAccent === 'ton' || noAccent === 'tons' || noAccent === 'mt' || noAccent === 'mts' || noAccent === 'tne' || noAccent === 'metricton' || noAccent === 'metrictons' || noAccent === 'tan') {
+    return 1000;
+  }
+  if (noAccent === 'ta' || noAccent === 'quintal' || noAccent === 'quintals') {
+    return 100;
+  }
+  if (noAccent === 'yen') {
+    return 10;
+  }
+  if (noAccent === 'kg' || noAccent === 'kgs' || noAccent === 'kilogram' || noAccent === 'kilograms') {
+    return 1;
+  }
+  return 0;
+}
+
+function convertWeightValueToKgs_(rawVal, fallbackUnit) {
+  const str = String(rawVal == null ? '' : rawVal).trim();
+  if (!str) return { value: '', converted: false };
+  const m = str.match(/^(-?[\d,]+(?:\.\d+)?)\s*([A-Za-z\u00C0-\u1EF9]+)?\s*$/);
+  if (!m) return { value: str, converted: false };
+  const num = Number(String(m[1]).replace(/,/g, ''));
+  if (isNaN(num)) return { value: str, converted: false };
+  const inlineUnit = m[2] ? m[2].trim() : '';
+  const unitToUse = inlineUnit || fallbackUnit || 'KGS';
+  const mult = getWeightUnitMultiplierToKgs_(unitToUse);
+  if (!mult) return { value: str, converted: false };
+  const kgsNum = num * mult;
+  return {
+    value: formatNumMin2Decimals_(kgsNum, 2),
+    converted: Boolean(inlineUnit) || mult !== 1
+  };
+}
+
+function convertAllWeightsByUnitToKgs_(unitValue) {
+  const mult = getWeightUnitMultiplierToKgs_(unitValue);
+  let didConvert = false;
+  if (mult > 1) {
+    (APP_STATE.items || []).forEach(function (it, idx) {
+      ['NW', 'GW'].forEach(function (col) {
+        if (it[col] != null && String(it[col]).trim() !== '') {
+          const parsed = parseNum(it[col]);
+          const converted = formatNumMin2Decimals_(parsed * mult, 2);
+          it[col] = converted;
+          syncTableCellToDOM('items', idx, col, converted, null);
+          didConvert = true;
+        }
+      });
+      it.WEIGHT_UNIT = 'KGS';
+      syncTableCellToDOM('items', idx, 'WEIGHT_UNIT', 'KGS', null);
+    });
+    (APP_STATE.containers || []).forEach(function (c, idx) {
+      ['MAX_GW', 'GW', 'VGM_WEI'].forEach(function (col) {
+        if (c[col] != null && String(c[col]).trim() !== '') {
+          const parsed = parseNum(c[col]);
+          const converted = formatNumMin2Decimals_(parsed * mult, 2);
+          c[col] = converted;
+          syncTableCellToDOM('containers', idx, col, converted, null);
+          didConvert = true;
+        }
+      });
+    });
+  }
+  APP_STATE.shared.WEIGHT_UNIT = 'KGS';
+  syncSharedFieldToDOM('WEIGHT_UNIT', 'KGS', null);
+  if (didConvert) {
+    recalculateAllTotals(true, false, { sourceKey: 'WEIGHT_UNIT' });
+    showToast('Đã tự động quy đổi đơn vị trọng lượng sang KGS.', 'success');
+  }
+}
+
+function handleWorkspaceFieldChange(target, ev) {
   const key = target.getAttribute('data-sync');
   if (!key) return;
+  const isCommitEvent = Boolean(ev && ev.type === 'change');
 
   let value = target.type === 'checkbox' ? (target.checked ? '\u2611' : '\u2610') : target.value;
   if (target.type !== 'checkbox') {
     if (key === 'HS') {
       value = formatLiveHsCodeInput_(value, target);
+    } else if (isWeightFieldKey_(key)) {
+      if (isCommitEvent) {
+        const res = convertWeightValueToKgs_(value, APP_STATE.shared.WEIGHT_UNIT || 'KGS');
+        value = res.value;
+        if (target.value !== value) target.value = value;
+        if (res.converted) {
+          setSharedFieldAndSync('WEIGHT_UNIT', 'KGS');
+        }
+      } else if (!/[A-Za-z\u00C0-\u1EF9]/.test(value)) {
+        value = formatLiveNumericInput_(value, target);
+      }
     } else if (target.getAttribute('data-num') === 'true' || NUMERIC_SHARED_FIELD_MAP[key]) {
       value = formatLiveNumericInput_(value, target);
     }
@@ -2415,7 +3023,9 @@ function handleWorkspaceFieldChange(target) {
 
   syncSharedFieldToDOM(key, value, target);
 
-  if (key === 'SERVICE_TYPE') {
+  if (key === 'WEIGHT_UNIT' && isCommitEvent) {
+    convertAllWeightsByUnitToKgs_(value);
+  } else if (key === 'SERVICE_TYPE') {
     handleServiceTypeChanged(value);
   } else if (key === 'POL') {
     handlePolChanged(value);
@@ -2714,10 +3324,14 @@ function positionCustomComboMenu_(inputEl, menu) {
   menu.style.top = Math.round(top) + 'px';
 }
 
+let lastComboSelectionInput_ = null;
+let lastComboSelectionAt_ = 0;
+
 function closeCustomComboDropdown_() {
   const menu = document.getElementById('customComboMenu');
   if (menu) {
     menu.classList.add('hidden');
+    menu.style.display = 'none';
     menu.innerHTML = '';
   }
   if (typeof activeComboInput !== 'undefined') {
@@ -2731,13 +3345,15 @@ function closeCustomComboDropdown_() {
 function selectCustomComboOption_(value) {
   if (typeof activeComboInput === 'undefined' || !activeComboInput) return;
   const inp = activeComboInput;
+  lastComboSelectionInput_ = inp;
+  lastComboSelectionAt_ = Date.now();
   inp.value = value;
   closeCustomComboDropdown_();
 
   if (inp.hasAttribute('data-sync')) {
-    handleWorkspaceFieldChange(inp);
+    handleWorkspaceFieldChange(inp, { type: 'change' });
   } else if (inp.hasAttribute('data-table-type')) {
-    handleTableCellChange(inp);
+    handleTableCellChange(inp, { type: 'change' });
   }
 }
 
@@ -2762,14 +3378,27 @@ function renderCustomComboMenu_(inputEl, filterQuery) {
   const source = inputEl.getAttribute('data-combo') || '';
   if (!source) return;
 
-  const allOptions = typeof getComboboxOptionsForSource === 'function'
+  const allOptionsRaw = typeof getComboboxOptionsForSource === 'function'
     ? getComboboxOptionsForSource(source)
     : [];
+
+  const allOptions = (allOptionsRaw || []).map(function (opt) {
+    if (opt && typeof opt === 'object') {
+      return {
+        value: String(opt.value == null ? '' : opt.value),
+        label: String(opt.label == null ? (opt.value == null ? '' : opt.value) : opt.label)
+      };
+    }
+    const str = String(opt == null ? '' : opt);
+    return { value: str, label: str };
+  });
 
   const q = String(filterQuery == null ? '' : filterQuery).trim().toLowerCase();
   const isCurrField = source === 'CURR';
   const filtered = q
-    ? allOptions.filter(function (opt) { return String(opt || '').toLowerCase().indexOf(q) !== -1; })
+    ? allOptions.filter(function (opt) {
+        return opt.label.toLowerCase().indexOf(q) !== -1 || opt.value.toLowerCase().indexOf(q) !== -1;
+      })
     : allOptions;
 
   // For CURR, never collapse to empty/single if query was empty or matched current value
@@ -2783,14 +3412,16 @@ function renderCustomComboMenu_(inputEl, filterQuery) {
     menu.innerHTML = '<div class="combo-dropdown-empty">Không có gợi ý khớp — bạn vẫn có thể nhập tự do.</div>';
   } else {
     menu.innerHTML = finalOptions.map(function (opt, idx) {
-      const optStr = String(opt == null ? '' : opt);
-      const isSelected = currentVal && optStr.toUpperCase() === currentVal.toUpperCase();
+      const isSelected = currentVal && (
+        opt.value.toUpperCase() === currentVal.toUpperCase() ||
+        opt.label.toUpperCase() === currentVal.toUpperCase()
+      );
       if (isSelected && comboActiveIndex === -1) {
         comboActiveIndex = idx;
       }
       return (
-        '<button type="button" class="combo-dropdown-item' + (isSelected ? ' active' : '') + '" role="option" data-combo-val="' + escapeHtml(optStr) + '">' +
-          '<span>' + escapeHtml(optStr) + '</span>' +
+        '<button type="button" class="combo-dropdown-item' + (isSelected ? ' active' : '') + '" role="option" data-combo-val="' + escapeHtml(opt.value) + '">' +
+          '<span>' + escapeHtml(opt.label) + '</span>' +
           (isSelected ? '<span style="font-size:11px; opacity:0.9;">&#10003;</span>' : '') +
         '</button>'
       );
@@ -2798,11 +3429,15 @@ function renderCustomComboMenu_(inputEl, filterQuery) {
   }
 
   menu.classList.remove('hidden');
+  menu.style.display = 'block';
   positionCustomComboMenu_(inputEl, menu);
 }
 
 function openCustomComboDropdown_(inputEl, opts) {
   if (!inputEl || inputEl.disabled || inputEl.readOnly) return;
+  if (lastComboSelectionInput_ === inputEl && (Date.now() - lastComboSelectionAt_) < 380) {
+    return;
+  }
   const options = opts || {};
   activeComboInput = inputEl;
   const query = options.filterByValue ? String(inputEl.value || '') : '';
@@ -2823,6 +3458,12 @@ function bindCustomComboGlobalListeners_() {
   });
 
   document.addEventListener('click', function (e) {
+    const itemBtn = e.target && e.target.closest ? e.target.closest('#customComboMenu .combo-dropdown-item') : null;
+    if (itemBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     const inp = e.target && e.target.closest ? e.target.closest('input[data-combo]') : null;
     if (inp) {
       openCustomComboDropdown_(inp, { filterByValue: false });
@@ -2841,6 +3482,11 @@ function bindCustomComboGlobalListeners_() {
       const pModal = document.getElementById('previewModal');
       if (pModal && !pModal.classList.contains('hidden')) {
         closeDocPreviewModal();
+        return;
+      }
+      const dModal = document.getElementById('decTypeLookupModal');
+      if (dModal && !dModal.classList.contains('hidden')) {
+        closeDecTypeLookupModal();
         return;
       }
       closeCustomComboDropdown_();
@@ -2874,6 +3520,7 @@ function bindCustomComboGlobalListeners_() {
     const itemBtn = e.target && e.target.closest ? e.target.closest('#customComboMenu .combo-dropdown-item') : null;
     if (itemBtn) {
       e.preventDefault();
+      e.stopPropagation();
       const chosen = itemBtn.getAttribute('data-combo-val') || '';
       selectCustomComboOption_(chosen);
       return;
@@ -3031,11 +3678,14 @@ function updateVesVoyDerived() {
 
 function getFilteredLoaiHinhXnk(direction) {
   const all = APP_STATE.dropdowns.loaiHinhXNK || [];
-  const normDir = direction.toLowerCase();
-  const isExport = normDir.indexOf('xuất') !== -1 || normDir.indexOf('xuat') !== -1;
+  const normDir = String(direction || '').trim().toLowerCase();
+  if (!normDir || normDir === 'all') {
+    return all;
+  }
+  const isExport = normDir.indexOf('xuất') !== -1 || normDir.indexOf('xuat') !== -1 || normDir === 'xk';
 
   return all.filter(function (row) {
-    const p = String(row.Phan_loai || '').toLowerCase();
+    const p = String((row && (row.category || row.Phan_loai)) || '').trim().toLowerCase();
     if (isExport) {
       return p.indexOf('xuất') !== -1 || p.indexOf('xuat') !== -1 || p === 'xk';
     }
@@ -3052,11 +3702,12 @@ function updateAllContextBanners() {
   });
 }
 
-function handleTableCellChange(target) {
+function handleTableCellChange(target, ev) {
   const tableType = target.getAttribute('data-table-type');
   const rowIdx = parseInt(target.getAttribute('data-row-idx'), 10);
   const colKey = target.getAttribute('data-col-key');
   if (!tableType || isNaN(rowIdx) || !colKey) return;
+  const isCommitEvent = Boolean(ev && ev.type === 'change');
 
   const targetArray = tableType === 'containers' ? APP_STATE.containers : APP_STATE.items;
   if (!targetArray[rowIdx]) return;
@@ -3067,6 +3718,24 @@ function handleTableCellChange(target) {
     if (target.value !== rawVal) target.value = rawVal;
   } else if (colKey === 'HS') {
     rawVal = formatLiveHsCodeInput_(rawVal, target);
+  } else if (isWeightFieldKey_(colKey)) {
+    if (isCommitEvent) {
+      const rowUnit = tableType === 'items'
+        ? (targetArray[rowIdx].WEIGHT_UNIT || APP_STATE.shared.WEIGHT_UNIT || 'KGS')
+        : (APP_STATE.shared.WEIGHT_UNIT || 'KGS');
+      const res = convertWeightValueToKgs_(rawVal, rowUnit);
+      rawVal = res.value;
+      if (target.value !== rawVal) target.value = rawVal;
+      if (res.converted) {
+        if (tableType === 'items') {
+          targetArray[rowIdx].WEIGHT_UNIT = 'KGS';
+          syncTableCellToDOM('items', rowIdx, 'WEIGHT_UNIT', 'KGS', null);
+        }
+        setSharedFieldAndSync('WEIGHT_UNIT', 'KGS');
+      }
+    } else if (!/[A-Za-z\u00C0-\u1EF9]/.test(rawVal)) {
+      rawVal = formatLiveNumericInput_(rawVal, target);
+    }
   } else if (target.getAttribute('data-num') === 'true' || NUMERIC_TABLE_COL_MAP[colKey]) {
     rawVal = formatLiveNumericInput_(rawVal, target);
   }
@@ -3075,7 +3744,21 @@ function handleTableCellChange(target) {
 
   if (tableType === 'items') {
     const item = targetArray[rowIdx];
-    if (colKey === 'QTY' || colKey === 'PRICE') {
+    if (colKey === 'WEIGHT_UNIT' && isCommitEvent) {
+      const mult = getWeightUnitMultiplierToKgs_(rawVal);
+      if (mult > 1) {
+        ['NW', 'GW'].forEach(function (wCol) {
+          if (item[wCol] != null && String(item[wCol]).trim() !== '') {
+            item[wCol] = formatNumMin2Decimals_(parseNum(item[wCol]) * mult, 2);
+            syncTableCellToDOM('items', rowIdx, wCol, item[wCol], null);
+          }
+        });
+        showToast('Đã tự động quy đổi khối lượng dòng hàng sang KGS.', 'success');
+      }
+      rawVal = 'KGS';
+      item.WEIGHT_UNIT = 'KGS';
+      if (target.value !== 'KGS') target.value = 'KGS';
+    } else if (colKey === 'QTY' || colKey === 'PRICE') {
       const qty = parseNum(item.QTY);
       const price = parseNum(item.PRICE);
       item.AMT = (item.QTY !== '' || item.PRICE !== '') ? formatNumMin2Decimals_(qty * price, 2) : '';
@@ -3393,6 +4076,94 @@ function applyContSealPrefixSelection_(ownerPrefix, sealPrefix) {
     if (targetInput && !targetInput.disabled) {
       targetInput.focus();
     }
+  }
+}
+
+function openDecTypeLookupModal(docKey) {
+  const modal = document.getElementById('decTypeLookupModal');
+  if (!modal) return;
+
+  const targetDoc = docKey || APP_STATE.activeTab || 'To_khai_XK';
+  APP_STATE.decTypeLookupDocKey = targetDoc;
+
+  const dirSelect = document.getElementById('decTypeDirectionSelect');
+  if (dirSelect) {
+    dirSelect.value = targetDoc === 'To_khai_NK' ? 'Nhập khẩu' : 'Xuất khẩu';
+  }
+
+  const searchInp = document.getElementById('decTypeSearchInput');
+  if (searchInp) searchInp.value = '';
+
+  const noteEl = document.getElementById('decTypeModalContextNote');
+  if (noteEl) {
+    noteEl.textContent = targetDoc === 'To_khai_NK'
+      ? 'Đang lọc danh mục Nhập khẩu. Bấm vào một dòng bất kỳ để điền nhanh Mã loại hình vào Tờ khai Nhập khẩu.'
+      : 'Đang lọc danh mục Xuất khẩu. Bấm vào một dòng bất kỳ để điền nhanh Mã loại hình vào Tờ khai Xuất khẩu.';
+  }
+
+  renderDecTypeLookupRows_();
+  modal.classList.remove('hidden');
+}
+
+function closeDecTypeLookupModal() {
+  const modal = document.getElementById('decTypeLookupModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function renderDecTypeLookupRows_() {
+  const tbody = document.getElementById('decTypeLookupTableBody');
+  if (!tbody) return;
+
+  const dirSelect = document.getElementById('decTypeDirectionSelect');
+  const dir = dirSelect ? dirSelect.value : 'ALL';
+  const query = String((document.getElementById('decTypeSearchInput') || {}).value || '').trim().toLowerCase();
+
+  const rows = getFilteredLoaiHinhXnk(dir).filter(function (row) {
+    const code = String(row.code || row.Ma_loai_hinh || '').trim();
+    const name = String(row.name || row.Ten_loai_hinh || '').trim();
+    const purpose = String(row.purpose || row.Muc_dich || '').trim();
+    if (!query) return true;
+    const hay = (code + ' ' + name + ' ' + purpose).toLowerCase();
+    return hay.indexOf(query) !== -1;
+  });
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-table-note">Không tìm thấy mã loại hình phù hợp.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(function (row, idx) {
+    const code = String(row.code || row.Ma_loai_hinh || '').trim();
+    const rawName = String(row.name || row.Ten_loai_hinh || '').trim();
+    const cleanName = rawName.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    const purpose = String(row.purpose || row.Muc_dich || '').trim();
+
+    return (
+      '<tr class="lookup-clickable-row" onclick="applyDecTypeSelection_(\'' + escapeHtml(code) + '\')">' +
+        '<td class="table-row-num">' + (idx + 1) + '</td>' +
+        '<td style="text-align:center;"><span class="dec-code-badge">' + escapeHtml(code) + '</span></td>' +
+        '<td><strong>' + escapeHtml(cleanName || rawName) + '</strong></td>' +
+        '<td style="font-size:12.5px; color:#1E293B; line-height:1.45;">' + escapeHtml(purpose || '—') + '</td>' +
+      '</tr>'
+    );
+  }).join('');
+}
+
+function applyDecTypeSelection_(code) {
+  const cleanCode = String(code || '').trim();
+  if (!cleanCode) return;
+
+  setSharedFieldAndSync('DEC_TYPE', cleanCode);
+  updateSidebarLockState_();
+  closeDecTypeLookupModal();
+  showToast('Đã chọn mã loại hình: ' + cleanCode, 'success');
+
+  const activeDoc = APP_STATE.activeTab || APP_STATE.decTypeLookupDocKey || '';
+  const targetInp = document.querySelector('[data-tab-panel="' + activeDoc + '"] [data-sync="DEC_TYPE"]');
+  if (targetInp) {
+    lastComboSelectionInput_ = targetInp;
+    lastComboSelectionAt_ = Date.now();
+    targetInp.focus();
   }
 }
 
@@ -4192,15 +4963,15 @@ function recalculateAllTotals(syncDom, updateContainerCount, options) {
       ? formatNumMin2Decimals_(vatTotalNum, 2)
       : (totAmt > 0 ? '0.00' : ''),
     GRAND_TOTAL: grandTotalNum > 0 ? formatNumMin2Decimals_(grandTotalNum, 2) : (items.length ? '0.00' : ''),
-    TOT_AMT_WORDS: activeAmtWords,
-    TOT_AMT_WORDS_VI: wordsVi,
-    TOT_AMT_WORDS_SC: wordsSc,
-    TOT_AMT_WORDS_CI: wordsCi,
+    TOT_AMT_WORDS: String(activeAmtWords || '').replace(/^\s*SAY\s*:\s*/i, '').trim(),
+    TOT_AMT_WORDS_VI: String(wordsVi || '').replace(/^\s*SAY\s*:\s*/i, '').trim(),
+    TOT_AMT_WORDS_SC: String(wordsSc || '').replace(/^\s*SAY\s*:\s*/i, '').trim(),
+    TOT_AMT_WORDS_CI: String(wordsCi || '').replace(/^\s*SAY\s*:\s*/i, '').trim(),
     TOT_PACK: totPack > 0 ? formatNum(totPack, 2) : '',
-    TOT_NW: totNw > 0 ? formatNumMin2Decimals_(totNw, 3) : '',
-    TOT_GW: totGw > 0 ? formatNumMin2Decimals_(totGw, 3) : '',
-    TOT_CBM: totCbm > 0 ? formatNumMin2Decimals_(totCbm, 3) : '',
-    TOT_VGM: totVgm > 0 ? formatNumMin2Decimals_(totVgm, 3) : '',
+    TOT_NW: totNw > 0 ? formatNumMin2Decimals_(totNw, 2) : '',
+    TOT_GW: totGw > 0 ? formatNumMin2Decimals_(totGw, 2) : '',
+    TOT_CBM: totCbm > 0 ? formatNumMin2Decimals_(totCbm, 2) : '',
+    TOT_VGM: totVgm > 0 ? formatNumMin2Decimals_(totVgm, 2) : '',
     TOT_EX_TAX: formatNumMin2Decimals_(totExTax, 2),
     TOT_FEE: formatNumMin2Decimals_(totFee, 2),
     IM_AMT: (imValNum > 0 || imRateNum > 0) ? formatNumMin2Decimals_(imAmtNum, 2) : '',
@@ -4208,7 +4979,7 @@ function recalculateAllTotals(syncDom, updateContainerCount, options) {
     EPT_AMT: (eptValNum > 0 || eptRateNum > 0) ? formatNumMin2Decimals_(eptAmtNum, 2) : '',
     VAT_AMT: (vatValNkNum > 0 || vatRateNkNum > 0) ? formatNumMin2Decimals_(vatAmtNkNum, 2) : '',
     TOT_TAX: hasAnyTaxActivity ? formatNumMin2Decimals_(activeTotTax, 2) : '',
-    TOT_TAX_WORDS: activeTotTax > 0 ? numberToVietnameseWords(activeTotTax, 'đồng') : ''
+    TOT_TAX_WORDS: activeTotTax > 0 ? String(numberToVietnameseWords(activeTotTax, 'đồng') || '').replace(/^\s*SAY\s*:\s*/i, '').trim() : ''
   };
 
   if (shouldAutoImVal) {

@@ -7,6 +7,7 @@
 const ITEM_COLUMNS = {
   PCODE: { label: 'Mã hàng', width: '100px' },
   PROD: { label: 'Tên hàng', width: '185px' },
+  BOTANICAL_NAME: { label: 'Tên khoa học', width: '130px' },
   DES: { label: 'Mô tả hàng hóa', width: '205px' },
   HS: { label: 'Mã HS', width: '105px' },
   ORG: { label: 'Xuất xứ', width: '130px', dropdown: 'QUOC_GIA' },
@@ -14,6 +15,7 @@ const ITEM_COLUMNS = {
   MARKS: { label: 'Ký mã hiệu', width: '125px' },
   LOT_NO: { label: 'Số lô', width: '105px' },
   UNIT: { label: 'Đơn vị tính', width: '105px', dropdown: 'UNIT' },
+  WEIGHT_UNIT: { label: 'Đơn vị KL', width: '85px', dropdown: 'WEIGHT_UNIT' },
   QTY: { label: 'Số lượng', width: '90px', num: true },
   PRICE: { label: 'Đơn giá', width: '95px', num: true },
   AMT: { label: 'Thành tiền', width: '110px', num: true, readonly: true },
@@ -223,7 +225,8 @@ const DOC_FORM_CONFIGS = {
           { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
           { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
           { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
-          { key: 'ETD_DT', label: 'Ngày tàu chạy dự kiến', type: 'date' }
+          { key: 'ETD_DT', label: 'Ngày tàu chạy dự kiến', type: 'date' },
+          { key: 'WEIGHT_UNIT', label: 'Đơn vị trọng lượng (tự quy đổi KGS)', type: 'combobox', source: 'WEIGHT_UNIT' }
         ]
       }
     ],
@@ -288,7 +291,8 @@ const DOC_FORM_CONFIGS = {
           { key: 'WEI_STATION', label: 'Trạm cân' },
           { key: 'BK_NO', label: 'Số Booking' },
           { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
-          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' }
+          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
+          { key: 'WEIGHT_UNIT', label: 'Đơn vị trọng lượng (tự quy đổi KGS)', type: 'combobox', source: 'WEIGHT_UNIT' }
         ]
       }
     ],
@@ -337,7 +341,18 @@ const DOC_FORM_CONFIGS = {
           { key: 'VET_CERT_DT', label: 'Ngày cấp', type: 'date' },
           { key: 'ANIMAL_ORIGIN', label: 'Nguồn gốc động vật' },
           { key: 'SLAUGHTER_HOUSE', label: 'Cơ sở giết mổ / chế biến' },
-          { key: 'VET_INSPECTOR', label: 'Cán bộ kiểm dịch thú y' }
+          { key: 'VET_INSPECTOR', label: 'Cán bộ kiểm dịch thú y' },
+          { key: 'WEIGHT_UNIT', label: 'Đơn vị trọng lượng (tự quy đổi KGS)', type: 'combobox', source: 'WEIGHT_UNIT' }
+        ]
+      },
+      {
+        title: 'Mục V. Kiểm tra & Kết luận kiểm dịch',
+        fields: [
+          { key: 'INSPECTION_CONTENT', label: 'Nội dung kiểm dịch', span: 2 },
+          { key: 'INSPECTION_METHOD', label: 'Phương pháp kiểm dịch' },
+          { key: 'INSPECTION_RESULT', label: 'Kết quả kiểm dịch', span: 2 },
+          { key: 'VALIDITY_PERIOD', label: 'Thời hạn hiệu lực' },
+          { key: 'INSPECTION_CONCLUSION', label: 'Kết luận kiểm dịch', span: 3 }
         ]
       }
     ],
@@ -360,12 +375,13 @@ const DOC_FORM_CONFIGS = {
           { key: 'CHEMICAL_NAME', label: 'Tên hóa chất xử lý' },
           { key: 'TREAT_CHEMICAL', label: 'Hóa chất xử lý (Treat Chemical)' },
           { key: 'TREAT_DURATION_TEMP', label: 'Thời gian & nhiệt độ xử lý' },
-          { key: 'ADDITIVE_RATIO', label: 'Tỷ lệ phụ gia (Additive Ratio)' }
+          { key: 'ADDITIVE_RATIO', label: 'Tỷ lệ phụ gia (Additive Ratio)' },
+          { key: 'WEIGHT_UNIT', label: 'Đơn vị trọng lượng (tự quy đổi KGS)', type: 'combobox', source: 'WEIGHT_UNIT' }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Sản phẩm thực vật kiểm dịch', cols: ['PROD', 'HS', 'PACK', 'NW', 'GW', 'MARKS'] }
+      { type: 'items', title: 'Sản phẩm thực vật kiểm dịch', cols: ['PROD', 'BOTANICAL_NAME', 'HS', 'PACK', 'NW', 'GW', 'MARKS'] }
     ]
   },
 
@@ -639,7 +655,8 @@ const DOC_FORM_CONFIGS = {
           { key: 'INCOTERM', label: 'Điều kiện giao hàng', type: 'combobox', source: 'INCOTERM' },
           { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'combobox', source: 'PAY_TERM' },
           { key: 'CURR', label: 'Đồng tiền thanh toán', type: 'combobox', source: 'CURR' },
-          { key: 'EX_RATE', label: 'Tỷ giá tính thuế', num: true }
+          { key: 'EX_RATE', label: 'Tỷ giá tính thuế', num: true },
+          { key: 'XK_CLEARANCE_RESULT', label: 'Kết quả thông quan Xuất khẩu (Ô 28)', span: 2 }
         ]
       }
     ],
@@ -692,7 +709,8 @@ const DOC_FORM_CONFIGS = {
           { key: 'INCOTERM', label: 'Điều kiện giao hàng', type: 'combobox', source: 'INCOTERM' },
           { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'combobox', source: 'PAY_TERM' },
           { key: 'CURR', label: 'Đồng tiền thanh toán', type: 'combobox', source: 'CURR' },
-          { key: 'EX_RATE', label: 'Tỷ giá tính thuế', num: true }
+          { key: 'EX_RATE', label: 'Tỷ giá tính thuế', num: true },
+          { key: 'NK_CLEARANCE_RESULT', label: 'Kết quả thông quan Nhập khẩu (Ô 34)', span: 2 }
         ]
       },
       {
@@ -788,9 +806,14 @@ function getComboboxOptionsForSource(source) {
     const dir = key === 'XNK_XK' ? 'Xuất' : 'Nhập';
     const rows = typeof getFilteredLoaiHinhXnk === 'function' ? getFilteredLoaiHinhXnk(dir) : [];
     return rows.map(function (r) {
-      const code = String(r.Ma_loai_hinh || r.ma || r.code || '').trim();
-      const name = String(r.Ten_loai_hinh || r.ten || r.name || '').trim();
-      return code && name ? (code + ' - ' + name) : (code || name);
+      const code = String(r.code || r.Ma_loai_hinh || r.ma || '').trim();
+      const rawName = String(r.name || r.Ten_loai_hinh || r.ten || '').trim();
+      const cleanName = rawName.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+      if (!code && !cleanName) return null;
+      return {
+        value: code || cleanName,
+        label: code && cleanName ? (code + ' - ' + cleanName) : (code || cleanName)
+      };
     }).filter(Boolean);
   }
 
@@ -805,6 +828,10 @@ function getComboboxOptionsForSource(source) {
   if (key === 'UNIT') {
     // Strict binding ONLY to dropdowns.UNIT (Col E)
     return Array.isArray(dm.UNIT) ? dm.UNIT.slice() : [];
+  }
+
+  if (key === 'WEIGHT_UNIT') {
+    return ['KGS', 'TON', 'MT', 'MTS', 'TNE', 'Tấn', 'Tạ', 'Yến'];
   }
 
   if (key === 'INSPECTION_CODE') {
@@ -875,9 +902,9 @@ function onWorkspaceInputOrChange(event) {
   if (!target) return;
 
   if (target.hasAttribute('data-sync')) {
-    handleWorkspaceFieldChange(target);
+    handleWorkspaceFieldChange(target, event);
   } else if (target.hasAttribute('data-table-type')) {
-    handleTableCellChange(target);
+    handleTableCellChange(target, event);
   }
 }
 
@@ -972,6 +999,13 @@ function buildPanelHtml(docKey, cfg) {
     html += '<div class="context-banner">';
     html += '<button type="button" class="btn-guide-prominent" onclick="openGuideModal()">HƯỚNG DẪN &amp; LƯU Ý</button>';
     html += '<button type="button" class="context-banner-link" onclick="switchTab(\'MASTER_PARTIES\')">Sửa Thông tin chung</button>';
+    html += '</div>';
+  }
+
+  if (docKey === 'VETERINARY_CERTIFICATE' || docKey === 'PHYTOSANITARY_CERTIFICATE' || docKey === 'QUALITY_CERTIFICATE') {
+    html += '<div id="inspectLockBanner_' + docKey + '" class="inspect-locked-banner hidden">';
+    html += '<span>&#128274; Chứng từ kiểm dịch / chất lượng này đang bị khóa nhập liệu. Tích vào ô checkbox bên cạnh tên chứng từ ở thanh điều hướng bên trái để mở khóa và nhập dữ liệu.</span>';
+    html += '<button type="button" class="inspect-locked-banner-btn" onclick="toggleInspectionDocEnabled(\'' + docKey + '\', true)">Chọn &amp; Mở khóa ngay</button>';
     html += '</div>';
   }
 
@@ -1075,7 +1109,15 @@ function getFieldPlaceholder_(key, meta) {
   if (k === 'TREAT_CHEMICAL') return 'VD: Methyl Bromide (CH3Br)';
   if (k === 'TREAT_DURATION_TEMP') return 'VD: 24 hours at 28°C';
   if (k === 'ADDITIVE_RATIO') return 'VD: N/A';
+  if (k === 'BOTANICAL_NAME') return 'VD: Oryza sativa';
+  if (k === 'WEIGHT_UNIT') return 'KGS';
+  if (k === 'INSPECTION_CONTENT') return 'VD: Kiểm tra lâm sàng, cảm quan và điều kiện vệ sinh thú y lô hàng';
+  if (k === 'INSPECTION_METHOD') return 'VD: Lấy mẫu ngẫu nhiên & kiểm tra hồ sơ theo TCVN';
+  if (k === 'INSPECTION_RESULT') return 'VD: Đạt yêu cầu vệ sinh thú y, không phát hiện dịch bệnh';
+  if (k === 'VALIDITY_PERIOD') return 'VD: 30 ngày kể từ ngày cấp';
   if (k === 'INSPECTION_CONCLUSION') return 'VD: Conforms to contract standard';
+  if (k === 'XK_CLEARANCE_RESULT') return 'VD: Đã thông quan xuất khẩu (Luồng Xanh)';
+  if (k === 'NK_CLEARANCE_RESULT') return 'VD: Đã thông quan nhập khẩu (Luồng Xanh)';
   if (k === 'DESCRIPTION_OF_GOODS') return 'VD: VIETNAMESE LONG GRAIN WHITE RICE 5% BROKEN...';
   if (m.type === 'date' || /(_DT|_DATE|_DTM)$/.test(k)) return 'VD: 25/11/2026';
 
@@ -1090,6 +1132,11 @@ function getFieldPlaceholder_(key, meta) {
     return 'Chọn hoặc nhập...';
   }
   return '';
+}
+
+function isWeightKeyForAttr_(key) {
+  const k = String(key || '').trim();
+  return k === 'NW' || k === 'GW' || k === 'MAX_GW' || k === 'VGM_WEI' || k === 'TOT_NW' || k === 'TOT_GW' || k === 'TOT_VGM';
 }
 
 function buildFieldHtml(docKey, field) {
@@ -1118,18 +1165,25 @@ function buildFieldHtml(docKey, field) {
   let html = '<div class="form-group' + spanClass + '" data-field-wrap="' + docKey + '_' + escapeHtml(field.key) + '">';
   html += '<label class="form-label" for="' + id + '">' + escapeHtml(field.label) + '</label>';
 
+  const isWeight = isWeightKeyForAttr_(field.key);
+  const weightAttr = isWeight ? ' data-weight-field="true"' : '';
   const numAttr = field.num ? ' data-num="true" inputmode="decimal"' : '';
   const hint = getFieldPlaceholder_(field.key, field);
   const placeholderAttr = hint ? (' placeholder="' + escapeHtml(hint) + '"') : '';
 
   if (field.type === 'combobox' || field.type === 'select') {
-    html += '<input id="' + id + '" type="text" class="form-control form-combobox' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '" data-combo="' + escapeHtml(field.source || '') + '"' + placeholderAttr + ' autocomplete="off"' + roAttr + disabledAttr + numAttr + ' />';
+    const comboInputHtml = '<input id="' + id + '" type="text" class="form-control form-combobox' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '" data-combo="' + escapeHtml(field.source || '') + '"' + placeholderAttr + ' autocomplete="off"' + roAttr + disabledAttr + numAttr + weightAttr + ' />';
+    if (field.key === 'DEC_TYPE' && (docKey === 'To_khai_XK' || docKey === 'To_khai_NK')) {
+      html += '<div class="input-with-lookup">' + comboInputHtml + '<button type="button" class="btn btn-lookup-inline" onclick="openDecTypeLookupModal(\'' + docKey + '\')">&#128269; Tra cứu</button></div>';
+    } else {
+      html += comboInputHtml;
+    }
   } else if (field.type === 'textarea') {
     html += '<textarea id="' + id + '" class="form-control' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '"' + placeholderAttr + roAttr + disabledAttr + '></textarea>';
   } else {
     const inputType = field.type === 'date' ? 'date' : 'text';
     const titleAttr = field.type === 'date' && hint ? (' title="' + escapeHtml(hint) + '"') : '';
-    const inputElHtml = '<input id="' + id + '" type="' + inputType + '" class="form-control' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '"' + placeholderAttr + titleAttr + roAttr + disabledAttr + numAttr + ' />';
+    const inputElHtml = '<input id="' + id + '" type="' + inputType + '" class="form-control' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '"' + placeholderAttr + titleAttr + roAttr + disabledAttr + numAttr + weightAttr + ' />';
     if (field.currUnit) {
       const badgeLabel = field.currUnit === 'VND' ? 'VND' : (typeof getActiveCurrencyCode_ === 'function' ? getActiveCurrencyCode_() : 'USD');
       const badgeAttr = field.currUnit === 'VND' ? 'VND' : 'DYNAMIC';
@@ -1168,17 +1222,31 @@ function buildTableHtml(tableMode, cols, docKey) {
     html += '<div class="table-locked-banner">&#128274; Mở khóa tại Lệnh cấp Container rỗng — Dữ liệu Container / Seal sẽ tự động đồng bộ từ các chứng từ vận tải sau khi cấp Container.</div>';
   }
 
+  const isPhytoCompact = !isContainer && docKey === 'PHYTOSANITARY_CERTIFICATE';
+  const phytoColWidths = {
+    PROD: '18%',
+    BOTANICAL_NAME: '17%',
+    HS: '11%',
+    PACK: '9%',
+    NW: '11%',
+    GW: '11%',
+    MARKS: '14%'
+  };
+
   html += '<table class="data-table"><thead><tr>';
-  html += '<th style="width:46px; text-align:center;">STT</th>';
+  html += '<th style="width:' + (isPhytoCompact ? '4%' : '46px') + '; text-align:center;">STT</th>';
   cols.forEach(function (colKey) {
     const meta = colMetaMap[colKey] || { label: colKey, width: '100px' };
     let extraHeader = '';
     if (isSealLockedInReleaseOrder && colKey === 'SEAL') {
       extraHeader = ' <span title="Mở khóa tại Packing List">&#128274;</span>';
     }
-    html += '<th style="min-width:' + meta.width + '; text-align:center;">' + escapeHtml(meta.label) + extraHeader + '</th>';
+    const widthStyle = isPhytoCompact && phytoColWidths[colKey]
+      ? ('width:' + phytoColWidths[colKey] + ';')
+      : ('min-width:' + meta.width + ';');
+    html += '<th style="' + widthStyle + ' text-align:center;">' + escapeHtml(meta.label) + extraHeader + '</th>';
   });
-  html += '<th style="width:44px; text-align:center;">Xóa</th>';
+  html += '<th style="width:' + (isPhytoCompact ? '5%' : '44px') + '; text-align:center;">Xóa</th>';
   html += '</tr></thead><tbody>';
 
   rows.forEach(function (rowObj, idx) {
@@ -1193,6 +1261,7 @@ function buildTableHtml(tableMode, cols, docKey) {
       const disabledAttr = colLocked ? ' disabled' : '';
       const lockedCls = colLocked ? ' table-input-locked' : '';
       const numAttr = meta.num ? ' data-num="true" inputmode="decimal"' : '';
+      const weightAttr = isWeightKeyForAttr_(colKey) ? ' data-weight-field="true"' : '';
       const numClass = meta.num ? ' num' : ((colKey === 'PROD' || colKey === 'DES') ? ' wide' : '');
 
       let errMsg = '';
@@ -1206,9 +1275,9 @@ function buildTableHtml(tableMode, cols, docKey) {
 
       html += '<td>';
       if (meta.dropdown) {
-        html += '<input type="text" class="table-input' + invalidClass + lockedCls + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-doc-key="' + escapeHtml(docKey || '') + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '" data-combo="' + escapeHtml(meta.dropdown) + '"' + colPlaceholderAttr + ' autocomplete="off"' + roAttr + disabledAttr + numAttr + ' />';
+        html += '<input type="text" class="table-input' + invalidClass + lockedCls + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-doc-key="' + escapeHtml(docKey || '') + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '" data-combo="' + escapeHtml(meta.dropdown) + '"' + colPlaceholderAttr + ' autocomplete="off"' + roAttr + disabledAttr + numAttr + weightAttr + ' />';
       } else {
-        html += '<input type="text" class="table-input' + numClass + invalidClass + lockedCls + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-doc-key="' + escapeHtml(docKey || '') + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '"' + colPlaceholderAttr + roAttr + disabledAttr + numAttr + ' />';
+        html += '<input type="text" class="table-input' + numClass + invalidClass + lockedCls + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-doc-key="' + escapeHtml(docKey || '') + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '"' + colPlaceholderAttr + roAttr + disabledAttr + numAttr + weightAttr + ' />';
       }
       if (isSealLockedInReleaseOrder && colKey === 'SEAL') {
         html += '<div class="lock-stage-badge">&#128274; Mở khóa tại Packing List</div>';
@@ -1288,7 +1357,7 @@ function renderBatchExportChecklist() {
     html += '<div class="batch-grid">';
     group.docs.forEach(function (doc) {
       html += '<label class="batch-check-item">';
-      html += '<input type="checkbox" value="' + escapeHtml(doc.key) + '" checked />';
+      html += '<input type="checkbox" value="' + escapeHtml(doc.key) + '" onchange="handleBatchDocCheckboxChange(this)" />';
       html += '<span>' + escapeHtml(doc.label) + '</span>';
       html += '</label>';
     });
@@ -1296,5 +1365,12 @@ function renderBatchExportChecklist() {
   });
 
   container.innerHTML = html;
+
+  if (typeof initBatchExportModalUi_ === 'function') {
+    initBatchExportModalUi_();
+  }
+  if (typeof updateBatchSelectionCounter_ === 'function') {
+    updateBatchSelectionCounter_();
+  }
 }
 </script>

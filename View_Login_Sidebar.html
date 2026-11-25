@@ -114,7 +114,7 @@
             class="btn btn-sm btn-admin-unlock"
             onclick="toggleAdminUnlockAllSteps()"
           >
-            &#128274; Đang khóa
+            &#128274; Khóa theo tiến độ: BẬT
           </button>
           <button
             id="btnAdminFillSample"
@@ -137,8 +137,11 @@
           <ul class="sidebar-nav-list">
             <li>
               <button type="button" class="sidebar-nav-btn active" data-nav="MASTER_PARTIES" data-step="0" onclick="switchTab('MASTER_PARTIES')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Thông tin chung</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
           </ul>
@@ -155,44 +158,65 @@
           <ul class="sidebar-nav-list">
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="QUOTATION" data-step="1" onclick="switchTab('QUOTATION')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Quotation</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="SALES_CONTRACT" data-step="2" onclick="switchTab('SALES_CONTRACT')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Sales Contract</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="COMMERCIAL_INVOICE" data-step="3" onclick="switchTab('COMMERCIAL_INVOICE')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Commercial Invoice</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="PACKING_LIST" data-step="4" onclick="switchTab('PACKING_LIST')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Packing List</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_REQUEST" data-step="5" onclick="switchTab('BOOKING_REQUEST')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Booking Request</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="VGM" data-step="6" onclick="switchTab('VGM')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">VGM</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="SHIPPING_INSTRUCTION" data-step="7" onclick="switchTab('SHIPPING_INSTRUCTION')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Shipping Instruction</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
           </ul>
@@ -207,34 +231,73 @@
         </button>
         <div class="sidebar-group-body">
           <ul class="sidebar-nav-list">
-            <li>
+            <li class="sidebar-nav-inspect-li" data-inspect-li="VETERINARY_CERTIFICATE">
+              <label class="nav-inspect-check-wrap" title="Chọn để mở khóa nhập liệu Veterinary Certificate">
+                <input
+                  type="checkbox"
+                  class="nav-inspect-checkbox"
+                  data-inspect-doc="VETERINARY_CERTIFICATE"
+                  onchange="toggleInspectionDocEnabled('VETERINARY_CERTIFICATE', this.checked, event)"
+                />
+              </label>
               <button type="button" class="sidebar-nav-btn" data-nav="VETERINARY_CERTIFICATE" data-step="8" onclick="switchTab('VETERINARY_CERTIFICATE')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Veterinary Certificate</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
-            <li>
+            <li class="sidebar-nav-inspect-li" data-inspect-li="PHYTOSANITARY_CERTIFICATE">
+              <label class="nav-inspect-check-wrap" title="Chọn để mở khóa nhập liệu Phytosanitary Certificate">
+                <input
+                  type="checkbox"
+                  class="nav-inspect-checkbox"
+                  data-inspect-doc="PHYTOSANITARY_CERTIFICATE"
+                  onchange="toggleInspectionDocEnabled('PHYTOSANITARY_CERTIFICATE', this.checked, event)"
+                />
+              </label>
               <button type="button" class="sidebar-nav-btn" data-nav="PHYTOSANITARY_CERTIFICATE" data-step="9" onclick="switchTab('PHYTOSANITARY_CERTIFICATE')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Phytosanitary Certificate</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
-            <li>
+            <li class="sidebar-nav-inspect-li" data-inspect-li="QUALITY_CERTIFICATE">
+              <label class="nav-inspect-check-wrap" title="Chọn để mở khóa nhập liệu Quality Certificate">
+                <input
+                  type="checkbox"
+                  class="nav-inspect-checkbox"
+                  data-inspect-doc="QUALITY_CERTIFICATE"
+                  onchange="toggleInspectionDocEnabled('QUALITY_CERTIFICATE', this.checked, event)"
+                />
+              </label>
               <button type="button" class="sidebar-nav-btn" data-nav="QUALITY_CERTIFICATE" data-step="10" onclick="switchTab('QUALITY_CERTIFICATE')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Quality Certificate</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="FUMIGATION_CERTIFICATE" data-step="11" onclick="switchTab('FUMIGATION_CERTIFICATE')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Fumigation Certificate</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="CERTIFICATE_OF_ORIGIN" data-step="12" onclick="switchTab('CERTIFICATE_OF_ORIGIN')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Certificate of Origin</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
           </ul>
@@ -251,32 +314,47 @@
           <ul class="sidebar-nav-list">
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_NOTE" data-step="13" onclick="switchTab('BOOKING_NOTE')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Booking Note</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_CONFIRMATION" data-step="14" onclick="switchTab('BOOKING_CONFIRMATION')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Booking Confirmation</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="RELEASE_ORDER" data-step="15" onclick="switchTab('RELEASE_ORDER')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Release Order</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="BILL_OF_LADING" data-step="16" onclick="switchTab('BILL_OF_LADING')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Bill of Lading</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="DELIVERY_ORDER" data-step="17" onclick="switchTab('DELIVERY_ORDER')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Delivery Order</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
           </ul>
@@ -293,20 +371,29 @@
           <ul class="sidebar-nav-list">
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="To_khai_XK" data-step="18" onclick="switchTab('To_khai_XK')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Export Customs Declaration</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="To_khai_NK" data-step="19" onclick="switchTab('To_khai_NK')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Import Customs Declaration</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
             <li>
               <button type="button" class="sidebar-nav-btn" data-nav="LETTER_OF_CREDIT" data-step="20" onclick="switchTab('LETTER_OF_CREDIT')">
+                <span class="nav-progress-arrow hidden" aria-hidden="true">&#10132;</span>
                 <span class="nav-label-text">Letter of Credit</span>
-                <span class="nav-lock-icon" aria-hidden="true"></span>
+                <span class="nav-status-slot">
+                  <span class="nav-lock-icon" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
           </ul>

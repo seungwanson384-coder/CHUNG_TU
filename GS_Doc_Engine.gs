@@ -6,7 +6,17 @@
  * - Mode B (Single multi-tab Google Doc with 20 Tabs):
  *   MASTER_TEMPLATE_DOC_ID = Google Doc ID containing 20 tabs matching TEMPLATE_MAP[docKey].tabName
  * Runtime: Google Apps Script (V8)
+ *
+ * IMPORTANT DEPLOYMENT NOTE (Prevent Admin Drive Bloat):
+ * Deploy Web App with "Execute as: User accessing the web app".
+ * All exported files are saved to subfolder "XNK_Documents" inside the signed-in user's
+ * own Google Drive (DriveApp.getRootFolder()), NOT Admin's OUTPUT_FOLDER_ID.
+ * Temporary Preview files use prefix "__XNK_PREVIEW_TEMP_" and are trashed/swept promptly.
  */
+
+const MAX_BATCH_EXPORT_DOCS_SERVER = 5;
+const USER_OUTPUT_SUBFOLDER_NAME = 'XNK_Documents';
+const PREVIEW_TEMP_PREFIX = '__XNK_PREVIEW_TEMP_';
 
 function generateDocuments(maSV, docKeysArray, payload) {
   try {
@@ -30,6 +40,17 @@ function generateDocuments(maSV, docKeysArray, payload) {
       };
     }
 
+    if (keys.length > MAX_BATCH_EXPORT_DOCS_SERVER) {
+      return {
+        success: false,
+        results: [],
+        message:
+          'Mỗi lần chỉ được chọn tối đa ' +
+          MAX_BATCH_EXPORT_DOCS_SERVER +
+          ' chứng từ để tránh quá tải hệ thống khi nhiều người cùng xuất.'
+      };
+    }
+
     const parsedPayload =
       typeof payload === 'string'
         ? JSON.parse(payload || '{}')
@@ -39,7 +60,7 @@ function generateDocuments(maSV, docKeysArray, payload) {
     const items = Array.isArray(parsedPayload.items) ? parsedPayload.items : [];
     const containers = Array.isArray(parsedPayload.containers) ? parsedPayload.containers : [];
 
-    const validated = validateMasterTemplateAndFolder_();
+    const validated = validateMasterTemplateAndFolder_(true);
     const outputFolder = validated.outputFolder;
     const suffix = resolveDocFilenameSuffix_(shared, maSV);
 
@@ -80,8 +101,16 @@ function generateDocuments(maSV, docKeysArray, payload) {
           const copyFileId = copyFile.getId();
 
           const doc = DocumentApp.openById(copyFileId);
-          processSingleDocumentObject_(doc, items, containers, shared, docKey);
+          const pipelineRes = processSingleDocumentObject_(doc, items, containers, shared, docKey);
           doc.saveAndClose();
+
+          if (pipelineRes && pipelineRes.hasPageInfo) {
+            const tmpPdf = copyFile.getAs('application/pdf');
+            const totalPages = countPdfPagesFromBlob_(tmpPdf);
+            const docForPageInfo = DocumentApp.openById(copyFileId);
+            resolvePageInfoInSingleDocumentObject_(docForPageInfo, totalPages);
+            docForPageInfo.saveAndClose();
+          }
 
           results.push({
             docKey: docKey,
@@ -138,6 +167,7 @@ function generateDocuments(maSV, docKeysArray, payload) {
     const allTabs = collectAllTabsFlat_(topLevelTabs);
 
     const selectedTabIds = [];
+    const pageInfoTabs = [];
     const results = [];
     const errors = [];
 
@@ -167,11 +197,17 @@ function generateDocuments(maSV, docKeysArray, payload) {
         const body = docTab.getBody();
         const sections = collectDocumentTabSections_(docTab);
 
-        applyDocumentTagPipeline_(body, sections, items, containers, shared, docKey);
+        const tabPipelineRes = applyDocumentTagPipeline_(body, sections, items, containers, shared, docKey);
 
         const tabId = targetTab.getId();
         if (tabId && selectedTabIds.indexOf(tabId) === -1) {
           selectedTabIds.push(tabId);
+        }
+        if (tabPipelineRes && tabPipelineRes.hasPageInfo) {
+          pageInfoTabs.push({
+            tabId: tabId,
+            tabName: tplConfig.tabName
+          });
         }
 
         results.push({
@@ -205,6 +241,29 @@ function generateDocuments(maSV, docKeysArray, payload) {
     }
 
     const cleanupStatus = removeUnselectedTabsViaDocsApi_(copyFileId, topLevelTabs, selectedTabIds);
+
+    if (pageInfoTabs.length > 0) {
+      const tabPageCounts = {};
+      for (let p = 0; p < pageInfoTabs.length; p++) {
+        const pt = pageInfoTabs[p];
+        const tabPdf = exportDocTabPdfBlob_(copyFileId, pt.tabId, copyFile);
+        const keyId = pt.tabId || pt.tabName;
+        tabPageCounts[keyId] = countPdfPagesFromBlob_(tabPdf);
+      }
+      const docForPageInfo = DocumentApp.openById(copyFileId);
+      const refreshedTabs = collectAllTabsFlat_(typeof docForPageInfo.getTabs === 'function' ? docForPageInfo.getTabs() : []);
+      for (let p = 0; p < pageInfoTabs.length; p++) {
+        const pt = pageInfoTabs[p];
+        const matchedTab = pt.tabId
+          ? findTabById_(refreshedTabs, pt.tabId) || findTabByTitleInsensitive_(refreshedTabs, pt.tabName)
+          : findTabByTitleInsensitive_(refreshedTabs, pt.tabName);
+        if (matchedTab) {
+          const totalPages = tabPageCounts[pt.tabId || pt.tabName] || 1;
+          resolvePageInfoInSections_(collectDocumentTabSections_(matchedTab.asDocumentTab()), totalPages);
+        }
+      }
+      docForPageInfo.saveAndClose();
+    }
 
     const response = {
       success: true,
@@ -271,7 +330,8 @@ function previewDocument(maSV, docKey, payload) {
       .replace(/[^A-Za-z0-9_-]/g, '_') || 'GUEST';
 
     const rootFolder = DriveApp.getRootFolder();
-    const tempDocName = '__PREVIEW_TEMP_' + safeMaSV + '_' + Date.now();
+    cleanupStalePreviewTempFiles_(rootFolder, safeMaSV);
+    const tempDocName = PREVIEW_TEMP_PREFIX + safeMaSV + '_' + Date.now();
     const validated = validateMasterTemplateAndFolder_(false);
 
     let pdfBlob = null;
@@ -295,11 +355,19 @@ function previewDocument(maSV, docKey, payload) {
       resolvedTemplateLabel = tplFile.getName();
       tempDocFile = tplFile.makeCopy(tempDocName, rootFolder);
 
-      const doc = DocumentApp.openById(tempDocFile.getId());
-      processSingleDocumentObject_(doc, items, containers, shared, cleanKey);
+      const tempDocId = tempDocFile.getId();
+      const doc = DocumentApp.openById(tempDocId);
+      const pipelineRes = processSingleDocumentObject_(doc, items, containers, shared, cleanKey);
       doc.saveAndClose();
 
       pdfBlob = tempDocFile.getAs('application/pdf');
+      if (pipelineRes && pipelineRes.hasPageInfo) {
+        const totalPages = countPdfPagesFromBlob_(pdfBlob);
+        const docForPageInfo = DocumentApp.openById(tempDocId);
+        resolvePageInfoInSingleDocumentObject_(docForPageInfo, totalPages);
+        docForPageInfo.saveAndClose();
+        pdfBlob = tempDocFile.getAs('application/pdf');
+      }
     } else {
       const masterFile = validated.masterFile;
       tempDocFile = masterFile.makeCopy(tempDocName, rootFolder);
@@ -329,7 +397,7 @@ function previewDocument(maSV, docKey, payload) {
       const body = docTab.getBody();
       const sections = collectDocumentTabSections_(docTab);
 
-      applyDocumentTagPipeline_(body, sections, items, containers, shared, cleanKey);
+      const tabPipelineRes = applyDocumentTagPipeline_(body, sections, items, containers, shared, cleanKey);
 
       const tabId = targetTab.getId();
       doc.saveAndClose();
@@ -341,26 +409,32 @@ function previewDocument(maSV, docKey, payload) {
       );
 
       if (cleanupStatus && cleanupStatus.warning && tabId) {
-        try {
-          const exportUrl =
-            'https://docs.google.com/document/d/' +
-            tempDocId +
-            '/export?format=pdf&tab=' +
-            encodeURIComponent(tabId);
-          const fetchRes = UrlFetchApp.fetch(exportUrl, {
-            headers: {
-              Authorization: 'Bearer ' + ScriptApp.getOAuthToken()
-            },
-            muteHttpExceptions: true
-          });
-          if (fetchRes.getResponseCode() === 200) {
-            pdfBlob = fetchRes.getBlob();
-          }
-        } catch (fetchErr) {}
+        pdfBlob = exportDocTabPdfBlob_(tempDocId, tabId, null);
       }
 
       if (!pdfBlob) {
         pdfBlob = tempDocFile.getAs('application/pdf');
+      }
+
+      if (tabPipelineRes && tabPipelineRes.hasPageInfo) {
+        const totalPages = countPdfPagesFromBlob_(pdfBlob);
+        const docForPageInfo = DocumentApp.openById(tempDocId);
+        const refreshedTabs = collectAllTabsFlat_(typeof docForPageInfo.getTabs === 'function' ? docForPageInfo.getTabs() : []);
+        const matchedTab = tabId
+          ? findTabById_(refreshedTabs, tabId) || findTabByTitleInsensitive_(refreshedTabs, tplConfig.tabName)
+          : findTabByTitleInsensitive_(refreshedTabs, tplConfig.tabName);
+        if (matchedTab) {
+          resolvePageInfoInSections_(collectDocumentTabSections_(matchedTab.asDocumentTab()), totalPages);
+        }
+        docForPageInfo.saveAndClose();
+
+        pdfBlob = null;
+        if (cleanupStatus && cleanupStatus.warning && tabId) {
+          pdfBlob = exportDocTabPdfBlob_(tempDocId, tabId, null);
+        }
+        if (!pdfBlob) {
+          pdfBlob = tempDocFile.getAs('application/pdf');
+        }
       }
     }
 
@@ -395,19 +469,57 @@ function previewDocument(maSV, docKey, payload) {
   }
 }
 
+function cleanupStalePreviewTempFiles_(rootFolder, safeMaSV) {
+  if (!rootFolder) return;
+  try {
+    const cutoffMs = Date.now() - 2 * 60 * 1000;
+    const prefixes = [PREVIEW_TEMP_PREFIX + safeMaSV + '_', '__PREVIEW_TEMP_' + safeMaSV + '_'];
+    const filesIter = rootFolder.getFiles();
+    let checked = 0;
+    while (filesIter.hasNext() && checked < 60) {
+      const f = filesIter.next();
+      checked++;
+      const fname = String(f.getName() || '');
+      const matchesPrefix = prefixes.some(function (p) {
+        return fname.indexOf(p) === 0;
+      });
+      if (!matchesPrefix) continue;
+      try {
+        const lastUpdated = f.getLastUpdated ? f.getLastUpdated().getTime() : 0;
+        if (!lastUpdated || lastUpdated < cutoffMs) {
+          f.setTrashed(true);
+        }
+      } catch (trashErr) {}
+    }
+  } catch (e) {}
+}
+
+function resolveUserOwnOutputFolder_() {
+  const rootFolder = DriveApp.getRootFolder();
+  try {
+    const existingIter = rootFolder.getFoldersByName(USER_OUTPUT_SUBFOLDER_NAME);
+    if (existingIter.hasNext()) {
+      const existingFolder = existingIter.next();
+      if (!existingFolder.isTrashed()) {
+        return existingFolder;
+      }
+    }
+    return rootFolder.createFolder(USER_OUTPUT_SUBFOLDER_NAME);
+  } catch (folderErr) {
+    return rootFolder;
+  }
+}
+
 function validateMasterTemplateAndFolder_(requireOutputFolder) {
   const shouldCheckOutput = requireOutputFolder !== false;
   const masterId = String(typeof MASTER_TEMPLATE_DOC_ID !== 'undefined' ? MASTER_TEMPLATE_DOC_ID : '').trim();
-  const outputFolderId = String(typeof OUTPUT_FOLDER_ID !== 'undefined' ? OUTPUT_FOLDER_ID : '').trim();
 
   if (!masterId || masterId.indexOf('YOUR_') === 0) {
     throw new Error('Chưa cấu hình MASTER_TEMPLATE_DOC_ID trong GS_Config_Templates.gs.');
   }
-  if (shouldCheckOutput && (!outputFolderId || outputFolderId.indexOf('YOUR_') === 0)) {
-    throw new Error('Chưa cấu hình OUTPUT_FOLDER_ID trong GS_Config_Templates.gs.');
-  }
 
-  const outputFolder = shouldCheckOutput ? DriveApp.getFolderById(outputFolderId) : null;
+  const outputFolder = shouldCheckOutput ? resolveUserOwnOutputFolder_() : null;
+  const outputFolderId = outputFolder ? outputFolder.getId() : '';
   let masterItem = null;
   let mimeType = '';
   try {
@@ -534,6 +646,7 @@ function normalizeTemplateLookupName_(name) {
 }
 
 function processSingleDocumentObject_(doc, items, containers, shared, docKey) {
+  let anyHasPageInfo = false;
   if (typeof doc.getTabs === 'function') {
     const topTabs = doc.getTabs();
     const allTabs = collectAllTabsFlat_(topTabs);
@@ -542,15 +655,19 @@ function processSingleDocumentObject_(doc, items, containers, shared, docKey) {
         const docTab = allTabs[t].asDocumentTab();
         const body = docTab.getBody();
         const sections = collectDocumentTabSections_(docTab);
-        applyDocumentTagPipeline_(body, sections, items, containers, shared, docKey);
+        const res = applyDocumentTagPipeline_(body, sections, items, containers, shared, docKey);
+        if (res && res.hasPageInfo) {
+          anyHasPageInfo = true;
+        }
       }
-      return;
+      return { hasPageInfo: anyHasPageInfo };
     }
   }
 
   const body = doc.getBody();
   const sections = collectSingleDocSections_(doc);
-  applyDocumentTagPipeline_(body, sections, items, containers, shared, docKey);
+  const res = applyDocumentTagPipeline_(body, sections, items, containers, shared, docKey);
+  return { hasPageInfo: Boolean(res && res.hasPageInfo) };
 }
 
 function applyDocumentTagPipeline_(body, sections, items, containers, shared, docKey) {
@@ -560,11 +677,22 @@ function applyDocumentTagPipeline_(body, sections, items, containers, shared, do
   if (docKey === 'BILL_OF_LADING' || docKey === 'DELIVERY_ORDER') {
     prepareBillOfLadingPackageUnitTags_(sections);
   } else if (docKey === 'SALES_CONTRACT') {
-    prepareSalesContractTemplateTags_(sections);
+    prepareSalesContractTemplateTags_(sections, items);
   }
 
   replaceGlobalTags(sections, shared, docKey, items, containers);
+
+  const hasPageInfo = detectHasPageInfoTag_(sections);
+  if (hasPageInfo) {
+    stashPageInfoSentinel_(sections);
+  }
+
   sanitizeRemainingTags_(sections);
+
+  if (hasPageInfo) {
+    restorePageInfoSentinel_(sections);
+  }
+
   cleanupEmptyStaticLabels_(sections);
 
   if (docKey === 'BOOKING_CONFIRMATION') {
@@ -587,6 +715,8 @@ function applyDocumentTagPipeline_(body, sections, items, containers, shared, do
 
   const combinedCandidates = rowCandidateParagraphs.concat(sectionCandidateParagraphs);
   removeResolvedEmptyPlaceholderParagraphs_(combinedCandidates);
+
+  return { hasPageInfo: hasPageInfo };
 }
 
 function collectSingleDocSections_(doc) {
@@ -632,8 +762,8 @@ function authorizePermissions() {
   ScriptApp.getOAuthToken();
   UrlFetchApp.getRequest('https://docs.google.com');
 
-  const validated = validateMasterTemplateAndFolder_();
-  const folderName = validated.outputFolder.getName();
+  const validated = validateMasterTemplateAndFolder_(true);
+  const folderName = validated.outputFolder ? validated.outputFolder.getName() : 'My Drive';
 
   if (validated.mode === 'FOLDER') {
     const templateFolderName = validated.templateFolder.getName();
@@ -694,7 +824,7 @@ function formatEngineErrorMessage_(prefix, err) {
       prefix +
       ': ' +
       rawMsg +
-      ' — Cách khắc phục: (1) Trong Apps Script Editor, chọn hàm authorizePermissions và bấm Run (Chạy) để cấp quyền Drive/Docs; (2) Khi Deploy Web App, chọn "Execute as: Me (Tôi)"; (3) Tạo New version (Phiên bản mới) sau khi lưu code.'
+      ' — Cách khắc phục: (1) Trong Apps Script Editor, chọn hàm authorizePermissions và bấm Run (Chạy) để cấp quyền Drive/Docs; (2) Khi Deploy Web App, chọn "Execute as: User accessing the web app" (để file lưu về Drive cá nhân của người đang đăng nhập); (3) Tạo New version (Phiên bản mới) sau khi lưu code.'
     );
   }
   return prefix + ': ' + rawMsg;
@@ -762,7 +892,7 @@ function processDynamicTableRows(body, items, containers, docKey, shared) {
       const rowText = row.getText();
       const tagsInRow = extractTagNames_(rowText);
 
-      if (!hasDynamicRowTag_(tagsInRow, docKey)) {
+      if (!hasDynamicRowTag_(tagsInRow, docKey, rowText)) {
         continue;
       }
 
@@ -887,6 +1017,7 @@ function replaceGlobalTags(sections, shared, docKey, items, containers) {
     if (docKey === 'SALES_CONTRACT') {
       section.replaceText('[Ff][Oo][Rr][Mm]\\s+[Ff][Oo][Rr][Mm]', 'Form');
     }
+    section.replaceText('[Ss][Aa][Yy]\\s*:\\s*[Ss][Aa][Yy]\\s*:', 'SAY:');
   }
 }
 
@@ -934,6 +1065,138 @@ function findTabByTitleInsensitive_(allTabs, targetTabName) {
     }
   }
   return null;
+}
+
+function findTabById_(allTabs, tabId) {
+  if (!tabId || !Array.isArray(allTabs)) return null;
+  for (let i = 0; i < allTabs.length; i++) {
+    if (allTabs[i].getId() === tabId) {
+      return allTabs[i];
+    }
+  }
+  return null;
+}
+
+function detectHasPageInfoTag_(sections) {
+  if (!Array.isArray(sections)) return false;
+  for (let s = 0; s < sections.length; s++) {
+    const sec = sections[s];
+    if (!sec) continue;
+    try {
+      const txt = typeof sec.getText === 'function' ? String(sec.getText() || '') : '';
+      if (txt.indexOf('{{PAGE_INFO}}') !== -1) {
+        return true;
+      }
+    } catch (e) {}
+  }
+  return false;
+}
+
+function stashPageInfoSentinel_(sections) {
+  if (!Array.isArray(sections)) return;
+  for (let s = 0; s < sections.length; s++) {
+    const sec = sections[s];
+    if (!sec || typeof sec.replaceText !== 'function') continue;
+    try {
+      sec.replaceText('\\{\\{PAGE_INFO\\}\\}', '__AIS_PAGE_INFO_TOKEN__');
+    } catch (e) {}
+  }
+}
+
+function restorePageInfoSentinel_(sections) {
+  if (!Array.isArray(sections)) return;
+  for (let s = 0; s < sections.length; s++) {
+    const sec = sections[s];
+    if (!sec || typeof sec.replaceText !== 'function') continue;
+    try {
+      sec.replaceText('__AIS_PAGE_INFO_TOKEN__', '{{PAGE_INFO}}');
+    } catch (e) {}
+  }
+}
+
+function exportDocTabPdfBlob_(docId, tabId, fileObjFallback) {
+  if (tabId) {
+    try {
+      const exportUrl =
+        'https://docs.google.com/document/d/' +
+        docId +
+        '/export?format=pdf&tab=' +
+        encodeURIComponent(tabId);
+      const fetchRes = UrlFetchApp.fetch(exportUrl, {
+        headers: {
+          Authorization: 'Bearer ' + ScriptApp.getOAuthToken()
+        },
+        muteHttpExceptions: true
+      });
+      if (fetchRes.getResponseCode() === 200) {
+        return fetchRes.getBlob();
+      }
+    } catch (e) {}
+  }
+  return fileObjFallback ? fileObjFallback.getAs('application/pdf') : null;
+}
+
+function countPdfPagesFromBlob_(pdfBlob) {
+  if (!pdfBlob) return 1;
+  try {
+    const pdfText = Utilities.newBlob(pdfBlob.getBytes()).getDataAsString('ISO-8859-1');
+    const pageMatches = pdfText.match(/\/Type\s*\/Page\b(?!s)/g);
+    if (pageMatches && pageMatches.length > 0) {
+      return pageMatches.length;
+    }
+  } catch (e) {}
+  return 1;
+}
+
+function resolvePageInfoInSections_(sections, totalPages) {
+  if (!Array.isArray(sections) || sections.length === 0) return;
+  const nPages = Math.max(1, Number(totalPages) || 1);
+  if (nPages === 1) {
+    for (let s = 0; s < sections.length; s++) {
+      try {
+        sections[s].replaceText('\\{\\{PAGE_INFO\\}\\}', '1 of 1');
+      } catch (e) {}
+    }
+    return;
+  }
+
+  let pageCounter = 1;
+  for (let s = 0; s < sections.length; s++) {
+    const sec = sections[s];
+    if (!sec || typeof sec.findText !== 'function') continue;
+    let rangeEl = sec.findText('\\{\\{PAGE_INFO\\}\\}');
+    let guard = 0;
+    while (rangeEl && guard < 100) {
+      guard++;
+      try {
+        const txt = rangeEl.getElement().asText();
+        const start = rangeEl.getStartOffset();
+        const end = rangeEl.getEndOffsetInclusive();
+        const label = Math.min(pageCounter, nPages) + ' of ' + nPages;
+        txt.deleteText(start, end);
+        txt.insertText(start, label);
+        pageCounter++;
+      } catch (e) {
+        break;
+      }
+      rangeEl = sec.findText('\\{\\{PAGE_INFO\\}\\}');
+    }
+  }
+}
+
+function resolvePageInfoInSingleDocumentObject_(doc, totalPages) {
+  if (!doc) return;
+  if (typeof doc.getTabs === 'function') {
+    const topTabs = doc.getTabs();
+    const allTabs = collectAllTabsFlat_(topTabs);
+    if (allTabs.length > 0) {
+      for (let t = 0; t < allTabs.length; t++) {
+        resolvePageInfoInSections_(collectDocumentTabSections_(allTabs[t].asDocumentTab()), totalPages);
+      }
+      return;
+    }
+  }
+  resolvePageInfoInSections_(collectSingleDocSections_(doc), totalPages);
 }
 
 function collectDocumentTabSections_(docTab) {
@@ -1067,6 +1330,20 @@ function buildEnrichedShared_(payload) {
     }
   });
 
+  const rawSharedWeightUnit = String(shared.WEIGHT_UNIT || shared.WT_UNIT || '').trim();
+  Object.defineProperty(shared, '_rawWeightUnit', {
+    value: rawSharedWeightUnit,
+    enumerable: false,
+    configurable: true
+  });
+
+  ['TOT_NW', 'TOT_GW', 'TOT_VGM', 'NW', 'GW', 'MAX_GW', 'VGM_WEI'].forEach(function (wKey) {
+    if (shared[wKey] != null && String(shared[wKey]).trim() !== '') {
+      shared[wKey] = convertDocWeightToKgs_(shared[wKey], rawSharedWeightUnit);
+    }
+  });
+  shared.WEIGHT_UNIT = 'KGS';
+
   const items = Array.isArray(payload && payload.items) ? payload.items : [];
   const containers = Array.isArray(payload && payload.containers) ? payload.containers : [];
 
@@ -1088,12 +1365,15 @@ function buildEnrichedShared_(payload) {
     if (!firstItemUnit && it.UNIT) firstItemUnit = extractConciseCode_(it.UNIT, 'UNIT');
     if (!firstItemPackUnit && it.UNIT_PACK) firstItemPackUnit = extractConciseCode_(it.UNIT_PACK, 'UNIT_PACK');
 
-    const nwNum = parseDocNumber_(it.NW);
+    const itemWeightUnit = String(it.WEIGHT_UNIT || rawSharedWeightUnit || '').trim();
+    const nwKgsStr = convertDocWeightToKgs_(it.NW, itemWeightUnit);
+    const nwNum = parseDocNumber_(nwKgsStr);
     if (nwNum !== null) {
       sumItemNw += nwNum;
       hasItemNw = true;
     }
-    const gwNum = parseDocNumber_(it.GW);
+    const gwKgsStr = convertDocWeightToKgs_(it.GW, itemWeightUnit);
+    const gwNum = parseDocNumber_(gwKgsStr);
     if (gwNum !== null) {
       sumItemGw += gwNum;
       hasItemGw = true;
@@ -1128,12 +1408,13 @@ function buildEnrichedShared_(payload) {
   containers.forEach(function (c) {
     if (!c || typeof c !== 'object') return;
     if (!firstContPackUnit && c.UNIT_PACK) firstContPackUnit = extractConciseCode_(c.UNIT_PACK, 'UNIT_PACK');
+    const contWeightUnit = String(c.WEIGHT_UNIT || rawSharedWeightUnit || '').trim();
     const packNum = parseDocNumber_(c.PACK);
     if (packNum !== null) {
       sumContPack += packNum;
       hasContPack = true;
     }
-    const gwNum = parseDocNumber_(c.GW);
+    const gwNum = parseDocNumber_(convertDocWeightToKgs_(c.GW, contWeightUnit));
     if (gwNum !== null) {
       sumContGw += gwNum;
       hasContGw = true;
@@ -1143,7 +1424,7 @@ function buildEnrichedShared_(payload) {
       sumContCbm += cbmNum;
       hasContCbm = true;
     }
-    const vgmNum = parseDocNumber_(c.VGM_WEI);
+    const vgmNum = parseDocNumber_(convertDocWeightToKgs_(c.VGM_WEI, contWeightUnit));
     if (vgmNum !== null && vgmNum > 0) {
       sumContVgm += vgmNum;
       hasContVgm = true;
@@ -1317,16 +1598,40 @@ function extractTagNames_(text) {
   return tags;
 }
 
-function hasDynamicRowTag_(tagsInRow, docKey) {
+function hasDynamicRowTag_(tagsInRow, docKey, rowText) {
   if (docKey === 'PHYTOSANITARY_CERTIFICATE' || docKey === 'QUALITY_CERTIFICATE') {
     return false;
   }
+
+  const rawText = String(rowText || '');
 
   if (docKey === 'CERTIFICATE_OF_ORIGIN') {
     return tagsInRow.indexOf('PROD') !== -1 && tagsInRow.indexOf('HS') !== -1;
   }
 
   if (docKey === 'VETERINARY_CERTIFICATE') {
+    const hasVetNonItemTag =
+      tagsInRow.indexOf('TOT_NW') !== -1 ||
+      tagsInRow.indexOf('TOT_GW') !== -1 ||
+      tagsInRow.indexOf('TOT_QTY') !== -1 ||
+      tagsInRow.indexOf('TOT_PACK') !== -1 ||
+      tagsInRow.indexOf('ANIMAL_ORIGIN') !== -1 ||
+      tagsInRow.indexOf('SLAUGHTER_HOUSE') !== -1 ||
+      tagsInRow.indexOf('VET_INSPECTOR') !== -1 ||
+      tagsInRow.indexOf('INSPECTION_CONTENT') !== -1 ||
+      tagsInRow.indexOf('INSPECTION_METHOD') !== -1 ||
+      tagsInRow.indexOf('INSPECTION_RESULT') !== -1 ||
+      tagsInRow.indexOf('INSPECTION_CONCLUSION') !== -1 ||
+      tagsInRow.indexOf('VALIDITY_PERIOD') !== -1;
+    if (hasVetNonItemTag) {
+      return false;
+    }
+    if (/^\s*(?:III|IV|V)\b|vùng\s*trồng|cơ\s*sở|giết\s*mổ|kiểm\s*dịch|kết\s*quả|hiệu\s*lực/i.test(rawText) && tagsInRow.indexOf('PROD') === -1) {
+      return false;
+    }
+    if (/(?:^|\b)(?:total|tổng\s*cộng)\b/i.test(rawText) && tagsInRow.indexOf('PROD') === -1) {
+      return false;
+    }
     const VET_ITEM_ROW_TAGS = ['PROD', 'PCODE', 'DES', 'LOT_NO', 'QTY', 'NW', 'GW', 'PACK'];
     for (let i = 0; i < tagsInRow.length; i++) {
       if (VET_ITEM_ROW_TAGS.indexOf(tagsInRow[i]) !== -1) {
@@ -1336,12 +1641,35 @@ function hasDynamicRowTag_(tagsInRow, docKey) {
     return false;
   }
 
-  if (docKey === 'BILL_OF_LADING') {
+  if (docKey === 'BILL_OF_LADING' || docKey === 'DELIVERY_ORDER') {
     const hasBlSummaryTag =
       tagsInRow.indexOf('TOT_PACK') !== -1 ||
+      tagsInRow.indexOf('TOT_NW') !== -1 ||
       tagsInRow.indexOf('TOT_GW') !== -1 ||
+      tagsInRow.indexOf('TOT_CBM') !== -1 ||
+      tagsInRow.indexOf('TOTAL_CONTAINERS_TEXT') !== -1 ||
       tagsInRow.indexOf('DESCRIPTION_OF_GOODS') !== -1;
     if (hasBlSummaryTag) {
+      return false;
+    }
+  }
+
+  const SUMMARY_ONLY_ROW_TAGS = [
+    'TOT_QTY', 'TOT_AMT', 'GRAND_TOTAL', 'TOT_NW', 'TOT_GW', 'TOT_CBM',
+    'TOT_PACK', 'TOT_VGM', 'TOT_TAX', 'TOT_EX_TAX', 'TOT_FEE'
+  ];
+  const hasCoreItemOrContIdentifier =
+    tagsInRow.indexOf('PROD') !== -1 ||
+    tagsInRow.indexOf('PCODE') !== -1 ||
+    tagsInRow.indexOf('CONT') !== -1 ||
+    tagsInRow.indexOf('HS') !== -1;
+  if (!hasCoreItemOrContIdentifier) {
+    for (let s = 0; s < tagsInRow.length; s++) {
+      if (SUMMARY_ONLY_ROW_TAGS.indexOf(tagsInRow[s]) !== -1) {
+        return false;
+      }
+    }
+    if ((docKey === 'To_khai_XK' || docKey === 'To_khai_NK') && /(?:^|\b)(?:tổng\s*cộng|total)\b/i.test(rawText)) {
       return false;
     }
   }
@@ -1424,6 +1752,8 @@ function replaceRowTags_(row, rowObj, tagsInRow, rowIndexZeroBased, docKey, shar
   row.replaceText('\\{\\{NO\\}\\}', seqText);
   row.replaceText('\\{\\{ITEM_NO\\}\\}', seqText);
 
+  const rowWeightUnit = String(effectiveObj.WEIGHT_UNIT || (shared && shared._rawWeightUnit) || '').trim();
+
   Object.keys(effectiveObj).forEach(function (key) {
     if (key === 'STT' || key === 'NO' || key === 'ITEM_NO') {
       return;
@@ -1439,9 +1769,13 @@ function replaceRowTags_(row, rowObj, tagsInRow, rowIndexZeroBased, docKey, shar
     if (key === 'PREF' || key === 'UNIT' || key === 'UNIT_PACK' || key === 'CTYPE' || key === 'CSIZE') {
       strVal = extractConciseCode_(strVal, key);
     }
-    if (
-      key === 'NW' || key === 'GW' || key === 'CBM' ||
-      key === 'MAX_GW' || key === 'VGM_WEI' ||
+    if (key === 'WEIGHT_UNIT') {
+      strVal = 'KGS';
+    }
+    if (key === 'NW' || key === 'GW' || key === 'MAX_GW' || key === 'VGM_WEI') {
+      strVal = convertDocWeightToKgs_(strVal, rowWeightUnit);
+    } else if (
+      key === 'CBM' ||
       key === 'PRICE' || key === 'AMT' ||
       key === 'EX_VAL' || key === 'EX_AMT' || key === 'FEE_VAL' || key === 'FEE_AMT'
     ) {
@@ -1724,11 +2058,13 @@ function buildDocSpecificShared_(shared, items, containers, docKey) {
       if (singlePrice) out.PRICE = singlePrice;
       if (singleUnit) out.UNIT = singleUnit;
     } else if (safeItems.length > 1) {
+      const currCode = String(out.CURR || 'USD').trim();
       const priceParts = safeItems.map(function (it) {
         if (!it || typeof it !== 'object') return '';
         const p = it.PRICE != null && String(it.PRICE).trim() !== '' ? formatDocFixed2_(it.PRICE) : '';
         const u = extractConciseCode_(it.UNIT || out.TOT_UNIT || '', 'UNIT');
-        return p ? (u ? (p + '/' + u) : p) : '';
+        if (!p) return '';
+        return u ? (p + ' ' + currCode + ' / ' + u) : (p + ' ' + currCode);
       }).filter(Boolean);
       if (priceParts.length > 0) {
         out.PRICE = priceParts.join('; ');
@@ -1744,6 +2080,18 @@ function buildDocSpecificShared_(shared, items, containers, docKey) {
     if (out.TOT_CBM) {
       out.TOT_CBM = formatDocFixed2_(out.TOT_CBM);
     }
+  }
+
+  if (docKey === 'VETERINARY_CERTIFICATE') {
+    if (!out.PROD && prodJoined) out.PROD = prodJoined;
+    if (out.TOT_NW) out.TOT_NW = formatDocFixed2_(out.TOT_NW);
+    if (out.TOT_GW) out.TOT_GW = formatDocFixed2_(out.TOT_GW);
+    if (!out.NW && out.TOT_NW) out.NW = out.TOT_NW;
+    if (!out.GW && out.TOT_GW) out.GW = out.TOT_GW;
+    if (!out.QTY && out.TOT_QTY) out.QTY = out.TOT_QTY;
+    if (!out.PACK && out.TOT_PACK) out.PACK = out.TOT_PACK;
+    if (!out.UNIT && out.TOT_UNIT) out.UNIT = out.TOT_UNIT;
+    if (!out.UNIT_PACK && out.PACK_UNIT) out.UNIT_PACK = out.PACK_UNIT;
   }
 
   if (docKey === 'FUMIGATION_CERTIFICATE') {
@@ -1770,6 +2118,7 @@ function buildDocSpecificShared_(shared, items, containers, docKey) {
 
   if (docKey === 'PHYTOSANITARY_CERTIFICATE' || docKey === 'QUALITY_CERTIFICATE') {
     if (!out.PROD && prodJoined) out.PROD = prodJoined;
+    const botanicalJoined = collectUniqueItemFieldValues_(safeItems, 'BOTANICAL_NAME').join(', ');
     const pcodeJoined = collectUniqueItemFieldValues_(safeItems, 'PCODE').join(', ');
     const desJoined = collectUniqueItemFieldValues_(safeItems, 'DES').join('; ');
     const lotJoined = collectUniqueItemFieldValues_(safeItems, 'LOT_NO').join(', ');
@@ -1777,6 +2126,8 @@ function buildDocSpecificShared_(shared, items, containers, docKey) {
     const moistureJoined = collectUniqueItemFieldValues_(safeItems, 'SPEC_MOISTURE').join(' / ');
     const brokenJoined = collectUniqueItemFieldValues_(safeItems, 'SPEC_BROKEN').join(' / ');
 
+    if (!out.BOTANICAL_NAME && botanicalJoined) out.BOTANICAL_NAME = botanicalJoined;
+    if (!out.SCIENTIFIC_NAME && out.BOTANICAL_NAME) out.SCIENTIFIC_NAME = out.BOTANICAL_NAME;
     if (!out.PCODE && pcodeJoined) out.PCODE = pcodeJoined;
     if (!out.DES && desJoined) out.DES = desJoined;
     if (!out.LOT_NO && lotJoined) out.LOT_NO = lotJoined;
@@ -1880,6 +2231,11 @@ function buildDocSpecificShared_(shared, items, containers, docKey) {
     if (out.TOT_NW) out.TOT_NW = formatDocFixed2_(out.TOT_NW);
 
     if (docKey === 'To_khai_XK') {
+      const xkRes = String(out.XK_CLEARANCE_RESULT || '').trim();
+      out.XK_CLEARANCE_RESULT = xkRes;
+      out.CLEARANCE_RESULT = xkRes;
+      out.NK_CLEARANCE_RESULT = '';
+
       if (hasXkTax) {
         out.TOT_EX_TAX = formatDocFixed2_(sumExTax);
         out.TOT_FEE = formatDocFixed2_(sumFee);
@@ -1890,6 +2246,11 @@ function buildDocSpecificShared_(shared, items, containers, docKey) {
         if (out.TOT_TAX) out.TOT_TAX = formatDocFixed2_(out.TOT_TAX);
       }
     } else {
+      const nkRes = String(out.NK_CLEARANCE_RESULT || '').trim();
+      out.NK_CLEARANCE_RESULT = nkRes;
+      out.CLEARANCE_RESULT = nkRes;
+      out.XK_CLEARANCE_RESULT = '';
+
       const exRateNum = parseDocNumber_(out.EX_RATE) || 0;
       const baseTotAmt = hasItemsAmt ? itemsAmtSum : (parseDocNumber_(out.TOT_AMT) || 0);
       let imValNum = parseDocNumber_(out.IM_VAL);
@@ -2012,8 +2373,9 @@ function walkContainerParagraphsAndCells_(container, onParagraph, onCell) {
   }
 }
 
-function prepareSalesContractTemplateTags_(sections) {
+function prepareSalesContractTemplateTags_(sections, items) {
   if (!Array.isArray(sections)) return;
+  const isMultiItem = Array.isArray(items) && items.length > 1;
   for (let s = 0; s < sections.length; s++) {
     let inArticle5 = false;
     walkContainerParagraphsAndCells_(sections[s], function (para) {
@@ -2036,6 +2398,15 @@ function prepareSalesContractTemplateTags_(sections) {
         }
       }
 
+      if (isMultiItem && /Unit\s*Price/i.test(text) && text.indexOf('{{PRICE}}') !== -1) {
+        para.replaceText('\\{\\{CURR\\}\\}\\s*\\{\\{PRICE\\}\\}\\s*/\\s*\\{\\{UNIT\\}\\}', '{{PRICE}}');
+        para.replaceText('\\{\\{PRICE\\}\\}\\s*\\{\\{CURR\\}\\}\\s*/\\s*\\{\\{UNIT\\}\\}', '{{PRICE}}');
+        para.replaceText('\\{\\{PRICE\\}\\}\\s*/\\s*\\{\\{UNIT\\}\\}', '{{PRICE}}');
+        para.replaceText('\\{\\{CURR\\}\\}\\s*\\{\\{PRICE\\}\\}', '{{PRICE}}');
+        para.replaceText('\\{\\{PRICE\\}\\}\\s*\\{\\{CURR\\}\\}', '{{PRICE}}');
+        para.replaceText('\\s*/\\s*\\{\\{UNIT\\}\\}', '');
+      }
+
       if (/Total\s*Amount\s*:/i.test(text) && text.indexOf('{{TOT_AMT}}') !== -1 && text.indexOf('{{CURR}}') === -1) {
         para.replaceText('\\{\\{TOT_AMT\\}\\}', '{{CURR}} {{TOT_AMT}}');
       }
@@ -2049,6 +2420,10 @@ function cleanupSalesContractUnitPriceSlash_(sections) {
     walkContainerParagraphsAndCells_(sections[s], function (para) {
       const text = String(para.getText() || '');
       if (!/Unit\s*Price/i.test(text)) return;
+      para.replaceText('\\s*/\\s*-', ' -');
+      para.replaceText('\\s*/\\s*\u2013', ' \u2013');
+      para.replaceText('\\s*/\\s*\u2014', ' \u2014');
+      para.replaceText('\\s*/\\s*\\(', ' (');
       para.replaceText('\\s*/\\s*$', '');
       if (/Unit\s*Price\s*:\s*\/\s*/i.test(String(para.getText() || ''))) {
         para.replaceText('Unit\\s*Price\\s*:\\s*/\\s*', 'Unit Price: ');
@@ -2104,7 +2479,7 @@ function cleanupBillOfLadingBoxes_(sections, docKey) {
           /^\s*SAY\s*:/im.test(rowText) ||
           /CONTAINERS?\s+ONLY\s*$/im.test(rowText);
 
-        if (docKey === 'DELIVERY_ORDER' && isBox24Row) {
+        if (isBox24Row) {
           for (let c24 = 0; c24 < row.getNumCells(); c24++) {
             const cell24 = row.getCell(c24);
             const cell24Text = String(cell24.getText() || '');
@@ -2112,6 +2487,8 @@ function cleanupBillOfLadingBoxes_(sections, docKey) {
             try {
               cell24.setPaddingTop(2);
               cell24.setPaddingBottom(2);
+              cell24.setPaddingLeft(2);
+              cell24.setPaddingRight(2);
             } catch (e) {}
             for (let p24 = cell24.getNumChildren() - 1; p24 >= 0; p24--) {
               const ch24 = cell24.getChild(p24);
@@ -2139,20 +2516,28 @@ function cleanupBillOfLadingBoxes_(sections, docKey) {
           contSealHeaderPattern.test(prevRowText) ||
           /\(\s*18\s*\)/.test(prevRowText) ||
           /\(\s*19\s*\)/.test(prevRowText) ||
+          /\(\s*18\s*\)/.test(rowText) ||
+          /\(\s*19\s*\)/.test(rowText) ||
           /\bKGs\b/i.test(rowText);
 
         if (!isBoxes18To21Row) continue;
 
         for (let c = 0; c < row.getNumCells(); c++) {
           const cell = row.getCell(c);
+          try {
+            cell.setPaddingLeft(2);
+            cell.setPaddingRight(2);
+          } catch (e) {}
+
           const prevCellHasHeader =
             prevRow &&
             c < prevRow.getNumCells() &&
             contSealHeaderPattern.test(String(prevRow.getCell(c).getText() || ''));
 
           let seenHeaderInCell = Boolean(prevCellHasHeader);
+          const paragraphsToRemove = [];
 
-          for (let pIdx = cell.getNumChildren() - 1; pIdx >= 0; pIdx--) {
+          for (let pIdx = 0; pIdx < cell.getNumChildren(); pIdx++) {
             const child = cell.getChild(pIdx);
             if (child.getType() !== DocumentApp.ElementType.PARAGRAPH) continue;
             const para = child.asParagraph();
@@ -2160,24 +2545,18 @@ function cleanupBillOfLadingBoxes_(sections, docKey) {
             const trimmed = rawText.trim();
 
             if (trimmed === '') {
-              if (cell.getNumChildren() > 1) {
-                try {
-                  para.removeFromParent();
-                } catch (e) {}
-              }
+              paragraphsToRemove.push(para);
               continue;
             }
 
             if (contSealHeaderPattern.test(trimmed)) {
               const remainder = trimmed.replace(contSealHeaderInlineRegex, '').trim();
               if (remainder === '') {
-                if (seenHeaderInCell && cell.getNumChildren() > 1) {
-                  try {
-                    para.removeFromParent();
-                  } catch (e) {}
-                  continue;
+                if (seenHeaderInCell) {
+                  paragraphsToRemove.push(para);
+                } else {
+                  seenHeaderInCell = true;
                 }
-                seenHeaderInCell = true;
               } else {
                 let firstOccurrenceKept = !seenHeaderInCell;
                 const cleanedInline = rawText.replace(contSealHeaderInlineRegex, function (m) {
@@ -2195,23 +2574,11 @@ function cleanupBillOfLadingBoxes_(sections, docKey) {
             }
           }
 
-          if (c === 0 && !prevCellHasHeader) {
-            let firstSeen = false;
-            for (let pIdx = 0; pIdx < cell.getNumChildren(); pIdx++) {
-              const child = cell.getChild(pIdx);
-              if (child.getType() !== DocumentApp.ElementType.PARAGRAPH) continue;
-              const para = child.asParagraph();
-              const tVal = String(para.getText() || '').trim();
-              if (contSealHeaderPattern.test(tVal) && tVal.replace(contSealHeaderInlineRegex, '').trim() === '') {
-                if (!firstSeen) {
-                  firstSeen = true;
-                } else if (cell.getNumChildren() > 1) {
-                  try {
-                    para.removeFromParent();
-                    pIdx--;
-                  } catch (e) {}
-                }
-              }
+          for (let rm = paragraphsToRemove.length - 1; rm >= 0; rm--) {
+            if (cell.getNumChildren() > 1) {
+              try {
+                paragraphsToRemove[rm].removeFromParent();
+              } catch (e) {}
             }
           }
         }
@@ -2304,11 +2671,11 @@ function populateCustomsBoxesIfEmpty_(body, docKey, extras) {
   if (!body || !extras) return;
   const tables = body.getTables();
   const docsBoxPattern = docKey === 'To_khai_XK'
-    ? /^\s*26\.\s*Chứng từ/i
-    : /^\s*32\.\s*Chứng từ/i;
+    ? /(?:^|\n)\s*26\.\s*Chứng\s*từ/i
+    : /(?:^|\n)\s*32\.\s*Chứng\s*từ/i;
   const dateBoxPattern = docKey === 'To_khai_XK'
-    ? /^\s*27\./
-    : /^\s*33\./;
+    ? /(?:^|\n)\s*27\./
+    : /(?:^|\n)\s*33\./;
 
   for (let t = 0; t < tables.length; t++) {
     const table = tables[t];
@@ -2403,7 +2770,7 @@ function normalizeCustomsBoxesColor_(body) {
 function applyNoWrapFormattingToCustomsTaxCells_(body) {
   if (!body || typeof body.getTables !== 'function') return;
   const tables = body.getTables();
-  const longFormattedNumberRegex = /^-?[\d,]{5,}\.\d{2,}$/;
+  const longFormattedNumberRegex = /^-?[\d,]+\.\d{2,}$/;
 
   for (let t = 0; t < tables.length; t++) {
     const table = tables[t];
@@ -2416,7 +2783,7 @@ function applyNoWrapFormattingToCustomsTaxCells_(body) {
         try {
           cell.setPaddingLeft(1);
           cell.setPaddingRight(1);
-          if (trimmed.length >= 12) {
+          if (trimmed.length >= 10) {
             for (let p = 0; p < cell.getNumChildren(); p++) {
               const child = cell.getChild(p);
               if (child.getType() === DocumentApp.ElementType.PARAGRAPH) {
@@ -2513,6 +2880,52 @@ function parseDocNumber_(rawVal) {
   return isNaN(num) ? null : num;
 }
 
+function getWeightUnitMultiplier_(unitStr) {
+  const norm = String(unitStr == null ? '' : unitStr)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .replace(/[^A-Za-z]/g, '')
+    .toUpperCase();
+  if (!norm || norm === 'KG' || norm === 'KGS' || norm === 'KGM' || norm === 'KILOGRAM' || norm === 'KILOGRAMS') {
+    return 1;
+  }
+  if (norm === 'TON' || norm === 'TONS' || norm === 'MT' || norm === 'MTS' || norm === 'TNE' || norm === 'TAN') {
+    return 1000;
+  }
+  if (norm === 'TA' || norm === 'QUINTAL' || norm === 'QUINTALS') {
+    return 100;
+  }
+  if (norm === 'YEN') {
+    return 10;
+  }
+  return 1;
+}
+
+function detectInlineWeightUnit_(rawVal) {
+  const str = String(rawVal == null ? '' : rawVal).trim();
+  if (!str) return '';
+  const match = str.match(/[\d.,\s]+([A-Za-zÀ-ỹ]+)\s*$/);
+  return match ? match[1] : '';
+}
+
+function convertDocWeightToKgs_(rawVal, fallbackUnit) {
+  const str = String(rawVal == null ? '' : rawVal).trim();
+  if (!str) return '';
+  const inlineUnit = detectInlineWeightUnit_(str);
+  const numericOnly = inlineUnit
+    ? str.replace(/[A-Za-zÀ-ỹ\s]+$/g, '').trim()
+    : str;
+  const parsed = parseDocNumber_(numericOnly);
+  if (parsed === null) {
+    return str;
+  }
+  const effectiveUnit = inlineUnit || fallbackUnit || 'KGS';
+  const mult = getWeightUnitMultiplier_(effectiveUnit);
+  return formatDocFixed2_(parsed * mult);
+}
+
 function formatDocFixed2_(rawVal) {
   const str = String(rawVal == null ? '' : rawVal).trim();
   if (!str) return '';
@@ -2522,7 +2935,7 @@ function formatDocFixed2_(rawVal) {
   }
   const num = Number(cleaned);
   if (isNaN(num)) return str;
-  const fixed = (Math.round(num * 1000) % 10 === 0) ? num.toFixed(2) : num.toFixed(3);
+  const fixed = num.toFixed(2);
   const parts = fixed.split('.');
   const intPart = parts[0].replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
   return intPart + '.' + parts[1];
