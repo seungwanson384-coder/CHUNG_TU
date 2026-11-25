@@ -6,7 +6,91 @@
  * and Admin Account Management RPC frontend.
  */
 
-const ISO_6346_REGEX = /^[A-Z]{4}\d{7}$/;
+const ISO_6346_REGEX = /^[A-Z]{3}[UJZR][0-9]{7}$/;
+const SEAL_NO_REGEX = /^[A-Z0-9]{6,12}$/;
+
+const ISO_6346_CHAR_VALUES = {
+  A: 10, B: 12, C: 13, D: 14, E: 15, F: 16, G: 17, H: 18, I: 19, J: 20, K: 21,
+  L: 23, M: 24, N: 25, O: 26, P: 27, Q: 28, R: 29, S: 30, T: 31, U: 32,
+  V: 34, W: 35, X: 36, Y: 37, Z: 38
+};
+
+const DOC_STEP_ORDER = [
+  'MASTER_PARTIES',
+  'QUOTATION',
+  'SALES_CONTRACT',
+  'COMMERCIAL_INVOICE',
+  'PACKING_LIST',
+  'BOOKING_REQUEST',
+  'VGM',
+  'SHIPPING_INSTRUCTION',
+  'VETERINARY_CERTIFICATE',
+  'PHYTOSANITARY_CERTIFICATE',
+  'QUALITY_CERTIFICATE',
+  'FUMIGATION_CERTIFICATE',
+  'CERTIFICATE_OF_ORIGIN',
+  'BOOKING_NOTE',
+  'BOOKING_CONFIRMATION',
+  'RELEASE_ORDER',
+  'BILL_OF_LADING',
+  'DELIVERY_ORDER',
+  'To_khai_XK',
+  'To_khai_NK',
+  'LETTER_OF_CREDIT'
+];
+
+const DOCS_CONT_TABLE_LOCKED = {
+  SALES_CONTRACT: true
+};
+
+const DOCS_CONT_REQUIRED_SEAL_LOCKED = {
+  RELEASE_ORDER: true
+};
+
+const DOCS_BOTH_CONT_SEAL_REQUIRED = {
+  PACKING_LIST: true,
+  SHIPPING_INSTRUCTION: true,
+  FUMIGATION_CERTIFICATE: true,
+  BOOKING_CONFIRMATION: true,
+  BILL_OF_LADING: true,
+  DELIVERY_ORDER: true,
+  To_khai_XK: true,
+  To_khai_NK: true
+};
+
+const DEFAULT_CURRENCIES_20 = [
+  'USD', 'VND', 'EUR', 'JPY', 'CNY', 'GBP', 'SGD', 'KRW', 'AED', 'AUD',
+  'BDT', 'BRL', 'CAD', 'IDR', 'INR', 'MYR', 'PHP', 'SAR', 'THB', 'TWD'
+];
+
+const DEFAULT_CONT_SEAL_PAIRS = [
+  { owner: 'MAERSK: MSKU, MRKU, MRSU, PONU', seal: 'ML' },
+  { owner: 'MSC: MSCU, MEDU, MSMU', seal: 'MSC' },
+  { owner: 'CMA CGM: CMAU, CGMU, CNCU, APZU', seal: 'CMA' },
+  { owner: 'COSCO: COSU, CBHU, CCLU, OOLU', seal: 'COS' },
+  { owner: 'HAPAG-LLOYD: HLXU, HLCU, UACU', seal: 'HL' },
+  { owner: 'ONE: ONEU, NYKU, KKFU, MOLU', seal: 'ONE' },
+  { owner: 'EVERGREEN: EMCU, EGHU, EISU, UETU', seal: 'EMC' },
+  { owner: 'HMM: HDMU, HMMU', seal: 'HMM' },
+  { owner: 'YANG MING: YMLU, YMMU', seal: 'YM' },
+  { owner: 'ZIM: ZIMU, ZCSU', seal: 'ZIM' },
+  { owner: 'WAN HAI: WHLU, WHSU', seal: 'WHL' },
+  { owner: 'SITC: SITU, STJU', seal: 'SITC' },
+  { owner: 'KMTC: KMTU', seal: 'KMTC' },
+  { owner: 'PIL: PCIU, PILU', seal: 'PIL' },
+  { owner: 'HẢI QUAN CÁT LÁI (TP.HCM)', seal: 'HQCL' },
+  { owner: 'HẢI QUAN CÁI MÉP - THỊ VẢI', seal: 'HQCM' },
+  { owner: 'HẢI QUAN HẢI PHÒNG KVI', seal: 'HQHP1' },
+  { owner: 'HẢI QUAN HẢI PHÒNG KVII', seal: 'HQHP2' },
+  { owner: 'HẢI QUAN HẢI PHÒNG KVIII', seal: 'HQHP3' },
+  { owner: 'HẢI QUAN ĐÀ NẴNG', seal: 'HQDN' },
+  { owner: 'HẢI QUAN NỘI BÀI', seal: 'HQNB' },
+  { owner: 'HẢI QUAN TÂN SƠN NHẤT', seal: 'HQTSN' },
+  { owner: 'HẢI QUAN HỮU NGHỊ (LẠNG SƠN)', seal: 'HQHN' },
+  { owner: 'HẢI QUAN MÓNG CÁI (QUẢNG NINH)', seal: 'HQMC' },
+  { owner: 'HẢI QUAN MỘC BÀI (TÂY NINH)', seal: 'HQMB' },
+  { owner: 'HẢI QUAN CHUYỂN CỬA KHẨU / GIÁM SÁT', seal: 'HQGS' }
+];
 
 const DOC_GROUPS = [
   {
@@ -114,9 +198,14 @@ function createEmptyContainer() {
 const APP_STATE = {
   user: null,
   activeTab: 'MASTER_PARTIES',
+  unlockedStepIndex: 0,
+  adminUnlockAllSteps: false,
+  lookupTargetDocKey: '',
+  lookupTargetRowIdx: 0,
   dropdowns: {
     cuocTau: [],
     loaiHinhXNK: [],
+    contSealList: [],
     danhMucChung: {
       LOAI_CONT: [],
       SERVICE_TYPE: [],
@@ -127,7 +216,9 @@ const APP_STATE = {
       CO_FORM: [],
       CO_CRITERIA: [],
       TRADE_AGREEMENT: [],
-      INSURANCE_TERM: []
+      INSURANCE_TERM: [],
+      MA_CHU_SO_HUU_CONT: [],
+      MA_SEAL: []
     }
   },
   shared: {},
@@ -239,7 +330,300 @@ function toggleSidebarGroup(groupId) {
   setSidebarGroupExpanded(groupId, isCollapsed);
 }
 
+function openGuideModal() {
+  const modal = document.getElementById('guideModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeGuideModal() {
+  const modal = document.getElementById('guideModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function isStepLocked_(tabKey) {
+  if (!tabKey || tabKey === 'MASTER_PARTIES' || tabKey === 'ADMIN_ACCOUNTS') {
+    return false;
+  }
+  if (APP_STATE.adminUnlockAllSteps) {
+    return false;
+  }
+  const idx = DOC_STEP_ORDER.indexOf(tabKey);
+  if (idx === -1) return false;
+  return idx > (APP_STATE.unlockedStepIndex || 0);
+}
+
+function isBillOfLadingReached_() {
+  if (APP_STATE.adminUnlockAllSteps) return true;
+  const blIdx = DOC_STEP_ORDER.indexOf('BILL_OF_LADING');
+  if (blIdx === -1) return true;
+  return (APP_STATE.unlockedStepIndex || 0) >= blIdx || APP_STATE.activeTab === 'BILL_OF_LADING';
+}
+
+function hasFilledVal_(val) {
+  return val != null && String(val).trim() !== '';
+}
+
+function isStepComplete_(docKey) {
+  const s = APP_STATE.shared || {};
+  const items = Array.isArray(APP_STATE.items) ? APP_STATE.items : [];
+  const containers = Array.isArray(APP_STATE.containers) ? APP_STATE.containers : [];
+  const firstItem = items[0] || {};
+  const firstCont = containers[0] || {};
+
+  if (typeof validateContainerAndSealRows === 'function') {
+    const check = validateContainerAndSealRows(docKey);
+    if (check && check.hasErrors) return false;
+  }
+
+  switch (docKey) {
+    case 'MASTER_PARTIES':
+      return hasFilledVal_(s.SHIP_NAME) &&
+        hasFilledVal_(s.SHIP_ADDR) &&
+        hasFilledVal_(s.CNE_NAME) &&
+        hasFilledVal_(s.CNE_ADDR) &&
+        hasFilledVal_(firstItem.PROD) &&
+        (hasFilledVal_(firstItem.QTY) || hasFilledVal_(firstItem.GW) || hasFilledVal_(firstItem.CBM) || hasFilledVal_(firstItem.AMT));
+    case 'QUOTATION':
+      return hasFilledVal_(s.QUOT_NO) &&
+        hasFilledVal_(s.QUOT_DT) &&
+        hasFilledVal_(s.CURR) &&
+        hasFilledVal_(firstItem.PROD) &&
+        hasFilledVal_(firstItem.QTY) &&
+        hasFilledVal_(firstItem.PRICE);
+    case 'SALES_CONTRACT':
+      return hasFilledVal_(s.CTR_NO) &&
+        hasFilledVal_(s.CTR_DT) &&
+        hasFilledVal_(s.POL) &&
+        hasFilledVal_(s.POD) &&
+        hasFilledVal_(s.INCOTERM) &&
+        hasFilledVal_(s.PAY_TERM) &&
+        hasFilledVal_(s.CURR) &&
+        hasFilledVal_(s.FREIGHT);
+    case 'COMMERCIAL_INVOICE':
+      return hasFilledVal_(s.INV_NO) &&
+        hasFilledVal_(s.INV_DT) &&
+        hasFilledVal_(s.CTR_NO) &&
+        hasFilledVal_(s.CURR) &&
+        hasFilledVal_(firstItem.PROD) &&
+        hasFilledVal_(firstItem.QTY) &&
+        hasFilledVal_(firstItem.PRICE);
+    case 'PACKING_LIST':
+      return hasFilledVal_(s.PL_DT) &&
+        hasFilledVal_(s.INV_NO) &&
+        hasFilledVal_(s.POL) &&
+        hasFilledVal_(s.POD) &&
+        hasFilledVal_(firstCont.CONT) &&
+        hasFilledVal_(firstCont.SEAL);
+    case 'BOOKING_REQUEST':
+      return hasFilledVal_(s.BKR_NO) &&
+        hasFilledVal_(s.BKR_DT) &&
+        hasFilledVal_(s.CAR_NAME) &&
+        hasFilledVal_(s.POL) &&
+        hasFilledVal_(s.POD) &&
+        hasFilledVal_(s.ETD_DT);
+    case 'VGM':
+      return hasFilledVal_(s.VGM_DT) &&
+        hasFilledVal_(s.WEI_STATION) &&
+        hasFilledVal_(s.BK_NO) &&
+        hasFilledVal_(s.VESSEL) &&
+        hasFilledVal_(s.VOYAGE) &&
+        hasFilledVal_(firstCont.CONT) &&
+        hasFilledVal_(firstCont.VGM_WEI);
+    case 'SHIPPING_INSTRUCTION':
+      return hasFilledVal_(s.SI_NO) &&
+        hasFilledVal_(s.SI_DT) &&
+        hasFilledVal_(s.CAR_NAME) &&
+        hasFilledVal_(s.BK_NO) &&
+        hasFilledVal_(s.DESCRIPTION_OF_GOODS) &&
+        hasFilledVal_(firstCont.CONT) &&
+        hasFilledVal_(firstCont.SEAL);
+    case 'VETERINARY_CERTIFICATE':
+      return hasFilledVal_(s.VET_CERT_NO) &&
+        hasFilledVal_(s.VET_CERT_DT) &&
+        hasFilledVal_(s.ANIMAL_ORIGIN);
+    case 'PHYTOSANITARY_CERTIFICATE':
+      return hasFilledVal_(s.PHYTO_CERT_NO) &&
+        hasFilledVal_(s.PHYTO_CERT_DT) &&
+        hasFilledVal_(s.PLANT_ORIGIN);
+    case 'QUALITY_CERTIFICATE':
+      return hasFilledVal_(s.QUAL_CERT_NO) &&
+        hasFilledVal_(s.QUAL_CERT_DT) &&
+        hasFilledVal_(s.INSPECTING_BODY) &&
+        hasFilledVal_(s.TEST_RESULT);
+    case 'FUMIGATION_CERTIFICATE':
+      return hasFilledVal_(s.FUM_CERT_NO) &&
+        hasFilledVal_(s.FUM_CERT_DT) &&
+        hasFilledVal_(s.FUM_CHEMICAL) &&
+        hasFilledVal_(firstCont.CONT) &&
+        hasFilledVal_(firstCont.SEAL);
+    case 'CERTIFICATE_OF_ORIGIN':
+      return hasFilledVal_(s.CO_REF_NO) &&
+        hasFilledVal_(s.CO_ISSUE_DT) &&
+        hasFilledVal_(s.CO_FORM_NAME) &&
+        hasFilledVal_(s.ORG) &&
+        hasFilledVal_(s.DEST_CTRY) &&
+        hasFilledVal_(s.INCOTERM);
+    case 'BOOKING_NOTE':
+      return hasFilledVal_(s.BK_NO) &&
+        hasFilledVal_(s.BK_DT) &&
+        hasFilledVal_(s.CAR_NAME) &&
+        hasFilledVal_(s.VESSEL) &&
+        hasFilledVal_(s.VOYAGE) &&
+        hasFilledVal_(s.POL) &&
+        hasFilledVal_(s.POD);
+    case 'BOOKING_CONFIRMATION':
+      return hasFilledVal_(s.BK_NO) &&
+        hasFilledVal_(s.BK_DT) &&
+        hasFilledVal_(s.CAR_NAME) &&
+        hasFilledVal_(s.STUFFING_PLACE) &&
+        hasFilledVal_(s.FREIGHT) &&
+        hasFilledVal_(firstCont.CONT) &&
+        hasFilledVal_(firstCont.SEAL);
+    case 'RELEASE_ORDER':
+      return hasFilledVal_(s.RO_NO) &&
+        hasFilledVal_(s.RO_DT) &&
+        hasFilledVal_(s.CAR_NAME) &&
+        hasFilledVal_(s.EMPTY_PICKUP_DEPOT) &&
+        hasFilledVal_(s.BK_NO) &&
+        hasFilledVal_(firstCont.CONT);
+    case 'BILL_OF_LADING':
+      return hasFilledVal_(s.BL_NO) &&
+        hasFilledVal_(s.BL_DT) &&
+        hasFilledVal_(s.CAR_NAME) &&
+        hasFilledVal_(s.DESCRIPTION_OF_GOODS) &&
+        hasFilledVal_(firstCont.CONT) &&
+        hasFilledVal_(firstCont.SEAL);
+    case 'DELIVERY_ORDER':
+      return hasFilledVal_(s.DO_NO) &&
+        hasFilledVal_(s.DO_DT) &&
+        hasFilledVal_(s.CAR_NAME) &&
+        hasFilledVal_(s.BL_NO) &&
+        hasFilledVal_(s.DESCRIPTION_OF_GOODS) &&
+        hasFilledVal_(firstCont.CONT) &&
+        hasFilledVal_(firstCont.SEAL);
+    case 'To_khai_XK':
+      return hasFilledVal_(s.CUS_DEPT) &&
+        hasFilledVal_(s.CUS_REG) &&
+        hasFilledVal_(s.DEC_NO) &&
+        hasFilledVal_(s.DEC_TYPE) &&
+        hasFilledVal_(s.CURR) &&
+        hasFilledVal_(s.EX_RATE) &&
+        hasFilledVal_(firstCont.CONT) &&
+        hasFilledVal_(firstCont.SEAL);
+    case 'To_khai_NK':
+      return hasFilledVal_(s.CUS_DEPT) &&
+        hasFilledVal_(s.CUS_REG) &&
+        hasFilledVal_(s.DEC_NO) &&
+        hasFilledVal_(s.DEC_TYPE) &&
+        hasFilledVal_(s.CURR) &&
+        hasFilledVal_(s.EX_RATE) &&
+        hasFilledVal_(firstCont.CONT) &&
+        hasFilledVal_(firstCont.SEAL);
+    case 'LETTER_OF_CREDIT':
+      return hasFilledVal_(s.LC_NO) &&
+        hasFilledVal_(s.LC_DT) &&
+        hasFilledVal_(s.PAY_TERM) &&
+        hasFilledVal_(s.CURR);
+    default:
+      return false;
+  }
+}
+
+function recomputeUnlockedStepIndex_() {
+  let chainIdx = 0;
+  for (let i = 0; i < DOC_STEP_ORDER.length - 1; i++) {
+    if (isStepComplete_(DOC_STEP_ORDER[i])) {
+      chainIdx = i + 1;
+    } else {
+      break;
+    }
+  }
+  const activeIdx = DOC_STEP_ORDER.indexOf(APP_STATE.activeTab);
+  let nextIdx = Math.max(APP_STATE.unlockedStepIndex || 0, chainIdx);
+  if (activeIdx >= 0 && activeIdx <= nextIdx && activeIdx < DOC_STEP_ORDER.length - 1 && isStepComplete_(DOC_STEP_ORDER[activeIdx])) {
+    nextIdx = Math.max(nextIdx, activeIdx + 1);
+  }
+  APP_STATE.unlockedStepIndex = Math.min(DOC_STEP_ORDER.length - 1, nextIdx);
+}
+
+function updateSidebarLockState_() {
+  recomputeUnlockedStepIndex_();
+  const prevBlUnlocked = APP_STATE._lastBlUnlockedState;
+  const nowBlUnlocked = isBillOfLadingReached_();
+
+  document.querySelectorAll('.sidebar-nav-btn[data-nav]').forEach(function (btn) {
+    const navKey = btn.getAttribute('data-nav');
+    const locked = isStepLocked_(navKey);
+    btn.classList.toggle('locked', locked);
+    btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
+    const iconSpan = btn.querySelector('.nav-lock-icon');
+    if (iconSpan) {
+      iconSpan.textContent = locked ? '\uD83D\uDD12' : '';
+    }
+  });
+
+  const adminUnlockBtn = document.getElementById('btnAdminUnlockAllSteps');
+  if (adminUnlockBtn) {
+    const isAdmin = APP_STATE.user && APP_STATE.user.role === 'ADMIN';
+    adminUnlockBtn.classList.toggle('hidden', !isAdmin);
+    if (APP_STATE.adminUnlockAllSteps) {
+      adminUnlockBtn.textContent = '\uD83D\uDD12 Khóa theo tiến độ (Admin)';
+      adminUnlockBtn.classList.add('unlocked-active');
+    } else {
+      adminUnlockBtn.textContent = '\uD83D\uDD13 Mở khóa tất cả (Admin)';
+      adminUnlockBtn.classList.remove('unlocked-active');
+    }
+  }
+
+  if (prevBlUnlocked !== nowBlUnlocked) {
+    APP_STATE._lastBlUnlockedState = nowBlUnlocked;
+    updateFieldAndTableLocksInDOM_();
+  }
+}
+
+function toggleAdminUnlockAllSteps() {
+  if (!APP_STATE.user || APP_STATE.user.role !== 'ADMIN') return;
+  APP_STATE.adminUnlockAllSteps = !APP_STATE.adminUnlockAllSteps;
+  updateSidebarLockState_();
+  updateFieldAndTableLocksInDOM_();
+  showToast(
+    APP_STATE.adminUnlockAllSteps
+      ? 'Đã mở khóa toàn bộ 21 chứng từ (Chế độ Admin).'
+      : 'Đã bật lại chế độ khóa tuần tự theo tiến độ.',
+    'info'
+  );
+}
+
+function updateFieldAndTableLocksInDOM_() {
+  const blUnlocked = isBillOfLadingReached_();
+  ['PHYTOSANITARY_CERTIFICATE', 'FUMIGATION_CERTIFICATE'].forEach(function (docKey) {
+    const wrap = document.querySelector('[data-field-wrap="' + docKey + '_BL_NO"]');
+    if (!wrap) return;
+    const inp = wrap.querySelector('[data-sync="BL_NO"]');
+    const badge = wrap.querySelector('[data-lock-badge="true"]');
+    if (inp) {
+      if (blUnlocked) {
+        inp.removeAttribute('readonly');
+        inp.removeAttribute('disabled');
+        inp.classList.remove('field-locked-input');
+      } else {
+        inp.setAttribute('readonly', 'readonly');
+        inp.setAttribute('disabled', 'disabled');
+        inp.classList.add('field-locked-input');
+      }
+    }
+    if (badge) {
+      badge.classList.toggle('hidden', blUnlocked);
+    }
+  });
+}
+
 function switchTab(tabKey) {
+  if (isStepLocked_(tabKey)) {
+    showToast('Vui lòng hoàn tất chứng từ phía trước để mở khóa', 'warning');
+    return;
+  }
+
   APP_STATE.activeTab = tabKey;
 
   if (tabKey === 'To_khai_XK' || tabKey === 'To_khai_NK') {
@@ -266,7 +650,10 @@ function switchTab(tabKey) {
     sidebar.classList.remove('open');
   }
 
-  recalculateAllTotals(true, false, { sourceKey: 'TAB_SWITCH' });
+  recalculateAllTotals(true, false, { sourceKey: 'TAB_SWITCH', targetDocKey: tabKey });
+  updateSidebarLockState_();
+  updateFieldAndTableLocksInDOM_();
+  validateContainerInputsInDOM();
 
   if (tabKey === 'ADMIN_ACCOUNTS' && APP_STATE.user && APP_STATE.user.role === 'ADMIN') {
     loadAdminAccountsTables();
@@ -609,7 +996,8 @@ function initDefaultDocumentNumbers(forceOverwrite) {
     DOCUMENT_NO: 'DOC-' + yymmdd + '-01',
     DO_NO: 'DO-' + yymmdd + '-01',
     DEC_NO: 'DEC-' + yymmdd + '-01',
-    LC_NO: 'LC-' + yymmdd + '-01'
+    LC_NO: 'LC-' + yymmdd + '-01',
+    CURR: 'USD'
   };
 
   Object.keys(defaults).forEach(function (k) {
@@ -652,6 +1040,7 @@ function restoreDraftState(draftJson) {
   APP_STATE.shared = {};
   APP_STATE.items = [createEmptyItem()];
   APP_STATE.containers = [createEmptyContainer()];
+  APP_STATE.unlockedStepIndex = 0;
 
   if (draftJson && typeof draftJson === 'string' && draftJson.trim() !== '') {
     try {
@@ -672,6 +1061,9 @@ function restoreDraftState(draftJson) {
             ? parsed.containers.map(function (row) { return Object.assign(createEmptyContainer(), row); })
             : [];
         }
+        if (typeof parsed.unlockedStepIndex === 'number' && !isNaN(parsed.unlockedStepIndex)) {
+          APP_STATE.unlockedStepIndex = Math.max(0, Math.min(DOC_STEP_ORDER.length - 1, Math.floor(parsed.unlockedStepIndex)));
+        }
       }
     } catch (e) {
       showToast('Dữ liệu nháp cũ không đúng định dạng, đã khởi tạo biểu mẫu mới.', 'warning');
@@ -680,6 +1072,7 @@ function restoreDraftState(draftJson) {
 
   initDefaultDocumentNumbers(false);
   normalizeCheckboxFieldsInState();
+  recomputeUnlockedStepIndex_();
 }
 
 function loadInitialDropdowns() {
@@ -698,6 +1091,7 @@ function loadInitialDropdowns() {
         APP_STATE.dropdowns = {
           cuocTau: Array.isArray(res.cuocTau) ? res.cuocTau : [],
           loaiHinhXNK: Array.isArray(res.loaiHinhXNK) ? res.loaiHinhXNK : [],
+          contSealList: Array.isArray(res.contSealList) ? res.contSealList : [],
           danhMucChung: res.danhMucChung || {}
         };
       }
@@ -705,12 +1099,29 @@ function loadInitialDropdowns() {
       document.getElementById('loginScreen').classList.add('hidden');
       document.getElementById('appShell').classList.remove('hidden');
 
+      const clearBtn = document.querySelector('button[onclick="openClearConfirmModal()"]');
+      if (clearBtn) {
+        if (APP_STATE.user && APP_STATE.user.role === 'ADMIN') {
+          clearBtn.textContent = 'Xóa dữ liệu SV';
+          clearBtn.title = 'Xóa toàn bộ Draft_JSON của Sinh viên';
+        } else {
+          clearBtn.textContent = 'Xóa dữ liệu';
+          clearBtn.title = 'Xóa toàn bộ dữ liệu đang nhập';
+        }
+      }
+
       initDefaultDocumentNumbers(false);
+      normalizeNumericFieldsInState_();
       recalculateAllTotals(false);
       renderAllFormViews();
       refreshScheduleDropdownSuggestions_();
+      refreshCurrencyDropdownSuggestions_();
+      updateSidebarLockState_();
       switchTab('MASTER_PARTIES');
+      validateContainerInputsInDOM();
+      updateCurrencyBadgesInDOM_();
       showToast('Đăng nhập thành công! Chào mừng ' + (APP_STATE.user.tenSV || APP_STATE.user.maSV), 'success');
+      openGuideModal();
     })
     .withFailureHandler(function (err) {
       hideLoading();
@@ -725,11 +1136,21 @@ function handleSaveDraft() {
     return;
   }
 
+  const activeDoc = APP_STATE.activeTab || 'MASTER_PARTIES';
+  const contCheck = validateContainerAndSealRows(activeDoc);
+  if (contCheck.hasErrors) {
+    validateContainerInputsInDOM();
+    showToast('Vui lòng sửa lỗi Số Container / Số Seal trước khi Lưu nháp.', 'error');
+    return;
+  }
+
   recalculateAllTotals(false);
+  recomputeUnlockedStepIndex_();
   const draftPayload = {
     shared: APP_STATE.shared,
     items: APP_STATE.items,
-    containers: APP_STATE.containers
+    containers: APP_STATE.containers,
+    unlockedStepIndex: APP_STATE.unlockedStepIndex || 0
   };
 
   showLoading('Loading...');
@@ -738,6 +1159,7 @@ function handleSaveDraft() {
     .withSuccessHandler(function (res) {
       hideLoading();
       if (res && res.success) {
+        updateSidebarLockState_();
         showToast('Đã lưu nháp thành công cho ' + APP_STATE.user.maSV + '.', 'success');
       } else {
         showToast((res && res.message) || 'Lưu nháp thất bại.', 'error');
@@ -751,11 +1173,40 @@ function handleSaveDraft() {
 }
 
 function openClearConfirmModal() {
-  document.getElementById('clearConfirmModal').classList.remove('hidden');
+  if (APP_STATE.user && APP_STATE.user.role === 'ADMIN') {
+    showLoading('Loading...');
+    google.script.run
+      .withSuccessHandler(function (res) {
+        hideLoading();
+        if (res && res.success) {
+          showToast(
+            'Đã xóa dữ liệu nháp của ' + (res.clearedCount || 0) + ' tài khoản Sinh viên (tài khoản đăng nhập và dữ liệu Admin được giữ nguyên).',
+            'success'
+          );
+        } else {
+          showToast((res && res.message) || 'Không thể xóa dữ liệu nháp của sinh viên.', 'error');
+        }
+      })
+      .withFailureHandler(function (err) {
+        hideLoading();
+        showToast('Lỗi xóa dữ liệu nháp sinh viên: ' + (err && err.message ? err.message : err), 'error');
+      })
+      .adminClearAllStudentsDrafts(APP_STATE.user.maSV);
+    return;
+  }
+
+  const modal = document.getElementById('clearConfirmModal');
+  if (!modal) return;
+  const msgEl = modal.querySelector('p');
+  if (msgEl) {
+    msgEl.textContent = 'Bạn có chắc chắn muốn xóa toàn bộ dữ liệu đang nhập không?';
+  }
+  modal.classList.remove('hidden');
 }
 
 function closeClearConfirmModal() {
-  document.getElementById('clearConfirmModal').classList.add('hidden');
+  const modal = document.getElementById('clearConfirmModal');
+  if (modal) modal.classList.add('hidden');
 }
 
 function confirmClearData() {
@@ -764,6 +1215,8 @@ function confirmClearData() {
   APP_STATE.items = [createEmptyItem()];
   APP_STATE.containers = [createEmptyContainer()];
   APP_STATE.exportResults = {};
+  APP_STATE.unlockedStepIndex = 0;
+  APP_STATE.activeTab = 'MASTER_PARTIES';
   APP_STATE.manualFlags = {
     IM_VAL: false,
     SCT_VAL: false,
@@ -775,17 +1228,43 @@ function confirmClearData() {
   recalculateAllTotals(false, true);
 
   renderAllFormViews();
-  switchTab(APP_STATE.activeTab || 'MASTER_PARTIES');
-  showToast('Đã xóa toàn bộ dữ liệu trên biểu mẫu hiện tại.', 'info');
+  refreshCurrencyDropdownSuggestions_();
+  updateSidebarLockState_();
+  switchTab('MASTER_PARTIES');
+  validateContainerInputsInDOM();
+  updateCurrencyBadgesInDOM_();
+
+  if (APP_STATE.user && APP_STATE.user.maSV && APP_STATE.user.role !== 'ADMIN') {
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (res && res.success) {
+          showToast('Đã xóa toàn bộ dữ liệu đang nhập và bản nháp đã lưu.', 'success');
+        } else {
+          showToast('Đã xóa dữ liệu trên biểu mẫu hiện tại.', 'info');
+        }
+      })
+      .withFailureHandler(function () {
+        showToast('Đã xóa dữ liệu trên biểu mẫu hiện tại.', 'info');
+      })
+      .saveUserDraft(APP_STATE.user.maSV, '');
+  } else {
+    showToast('Đã xóa toàn bộ dữ liệu trên biểu mẫu hiện tại.', 'info');
+  }
 }
 
 function handleLogout() {
+  closeGuideModal();
+  closeContSealLookupModal();
+  closeClearConfirmModal();
+  closeBatchExportModal();
   closeDocPreviewModal();
   APP_STATE.user = null;
   APP_STATE.shared = {};
   APP_STATE.items = [createEmptyItem()];
   APP_STATE.containers = [createEmptyContainer()];
   APP_STATE.exportResults = {};
+  APP_STATE.unlockedStepIndex = 0;
+  APP_STATE.adminUnlockAllSteps = false;
 
   document.getElementById('loginMatKhau').value = '';
   document.getElementById('loginError').classList.add('hidden');
@@ -935,9 +1414,37 @@ async function renderPdfBase64ToCanvases_(base64Str, containerEl) {
   return pdfDoc.numPages;
 }
 
+function ensurePreviewModalHeaderLayout_(modal, exportBtn) {
+  if (!modal) return;
+  const headerBar = modal.querySelector('div > div:first-child');
+  if (headerBar) {
+    headerBar.classList.add('preview-modal-header-flex');
+    const closeBtn = headerBar.querySelector('button[onclick*="closeDocPreviewModal"], .modal-close-x');
+    if (exportBtn && closeBtn && exportBtn.parentNode === headerBar && closeBtn.parentNode === headerBar) {
+      let actionsWrap = headerBar.querySelector('.preview-header-actions');
+      if (!actionsWrap) {
+        actionsWrap = document.createElement('div');
+        actionsWrap.className = 'preview-header-actions';
+        headerBar.appendChild(actionsWrap);
+      }
+      actionsWrap.appendChild(exportBtn);
+      actionsWrap.appendChild(closeBtn);
+    } else if (exportBtn && exportBtn.parentNode && exportBtn.parentNode !== headerBar) {
+      exportBtn.parentNode.classList.add('preview-header-actions');
+    }
+  }
+}
+
 function handlePreviewDocument(docKey) {
   if (!APP_STATE.user || !APP_STATE.user.maSV) {
     showToast('Vui lòng đăng nhập để xem trước chứng từ.', 'error');
+    return;
+  }
+
+  const contCheck = validateContainerAndSealRows(docKey);
+  if (contCheck.hasErrors) {
+    validateContainerInputsInDOM();
+    showToast('Vui lòng sửa lỗi Số Container / Số Seal trước khi Review Document.', 'error');
     return;
   }
 
@@ -953,6 +1460,8 @@ function handlePreviewDocument(docKey) {
   const frame = document.getElementById('docPreviewFrame');
   const exportBtn = document.getElementById('btnPreviewExportOfficial');
   const downloadBtn = document.getElementById('btnPreviewDownloadPdf');
+
+  ensurePreviewModalHeaderLayout_(modal, exportBtn);
 
   const cfg = (typeof DOC_FORM_CONFIGS !== 'undefined' && DOC_FORM_CONFIGS[docKey]) ? DOC_FORM_CONFIGS[docKey] : null;
   if (titleEl) {
@@ -979,6 +1488,7 @@ function handlePreviewDocument(docKey) {
   if (errorWrap) errorWrap.classList.add('hidden');
   if (errorText) errorText.textContent = '';
   if (loadingEl) {
+    loadingEl.classList.add('preview-loading-box');
     const loadingTextEl = loadingEl.querySelector('.loading-text');
     if (loadingTextEl) loadingTextEl.textContent = 'Loading...';
     loadingEl.classList.remove('hidden');
@@ -1131,9 +1641,19 @@ function buildExportPayload(targetDocKey) {
     sharedClone[k] = APP_STATE.shared[k];
   });
 
-  ['INS_TERM', 'CO_FORM_NAME', 'CTYPE', 'UNIT', 'TOT_UNIT'].forEach(function (k) {
+  ['INS_TERM', 'CO_FORM_NAME', 'CTYPE', 'UNIT', 'TOT_UNIT', 'CURR'].forEach(function (k) {
     if (sharedClone[k] != null && String(sharedClone[k]).trim() !== '') {
       sharedClone[k] = extractShortCodeForExport_(sharedClone[k], k);
+    }
+  });
+
+  if (!sharedClone.CURR || String(sharedClone.CURR).trim() === '') {
+    sharedClone.CURR = 'USD';
+  }
+
+  Object.keys(NUMERIC_SHARED_FIELD_MAP).forEach(function (numKey) {
+    if (sharedClone[numKey] != null && String(sharedClone[numKey]).trim() !== '') {
+      sharedClone[numKey] = normalizeFormattedNumberString_(sharedClone[numKey]);
     }
   });
 
@@ -1144,6 +1664,11 @@ function buildExportPayload(targetDocKey) {
         copy[col] = extractShortCodeForExport_(copy[col], col);
       }
     });
+    Object.keys(NUMERIC_TABLE_COL_MAP).forEach(function (col) {
+      if (copy[col] != null && String(copy[col]).trim() !== '') {
+        copy[col] = normalizeFormattedNumberString_(copy[col]);
+      }
+    });
     return copy;
   });
 
@@ -1152,6 +1677,11 @@ function buildExportPayload(targetDocKey) {
     ['CTYPE', 'CSIZE', 'UNIT_PACK'].forEach(function (col) {
       if (copy[col] != null && String(copy[col]).trim() !== '') {
         copy[col] = extractShortCodeForExport_(copy[col], col);
+      }
+    });
+    Object.keys(NUMERIC_TABLE_COL_MAP).forEach(function (col) {
+      if (copy[col] != null && String(copy[col]).trim() !== '') {
+        copy[col] = normalizeFormattedNumberString_(copy[col]);
       }
     });
     return copy;
@@ -1167,6 +1697,13 @@ function buildExportPayload(targetDocKey) {
 function handleExportSingle(docKey) {
   if (!APP_STATE.user || !APP_STATE.user.maSV) {
     showToast('Vui lòng đăng nhập để xuất chứng từ.', 'error');
+    return;
+  }
+
+  const contCheck = validateContainerAndSealRows(docKey);
+  if (contCheck.hasErrors) {
+    validateContainerInputsInDOM();
+    showToast('Vui lòng sửa lỗi Số Container / Số Seal trước khi xuất chứng từ.', 'error');
     return;
   }
 
@@ -1193,7 +1730,25 @@ function handleExportSingle(docKey) {
     .generateDocuments(APP_STATE.user.maSV, [docKey], buildExportPayload(docKey));
 }
 
+function validateBatchContainers_(selectedKeys) {
+  const keys = Array.isArray(selectedKeys) ? selectedKeys : [];
+  if (keys.some(function (k) { return Boolean(DOCS_BOTH_CONT_SEAL_REQUIRED[k]); })) {
+    return validateContainerAndSealRows('BILL_OF_LADING');
+  }
+  if (keys.some(function (k) { return Boolean(DOCS_CONT_REQUIRED_SEAL_LOCKED[k]); })) {
+    return validateContainerAndSealRows('RELEASE_ORDER');
+  }
+  return validateContainerAndSealRows(APP_STATE.activeTab || 'MASTER_PARTIES');
+}
+
 function openBatchExportModal() {
+  const contCheck = validateContainerAndSealRows(APP_STATE.activeTab || 'MASTER_PARTIES');
+  if (contCheck.hasErrors) {
+    validateContainerInputsInDOM();
+    showToast('Vui lòng sửa lỗi Số Container / Số Seal trước khi Xuất hàng loạt.', 'error');
+    return;
+  }
+
   const resultsBox = document.getElementById('batchExportResults');
   if (resultsBox) resultsBox.classList.add('hidden');
   document.getElementById('batchExportModal').classList.remove('hidden');
@@ -1222,6 +1777,13 @@ function handleExportBatch() {
 
   if (selectedKeys.length === 0) {
     showToast('Vui lòng chọn ít nhất một chứng từ để xuất hàng loạt.', 'warning');
+    return;
+  }
+
+  const contCheck = validateBatchContainers_(selectedKeys);
+  if (contCheck.hasErrors) {
+    validateContainerInputsInDOM();
+    showToast('Vui lòng sửa lỗi Số Container / Số Seal (từ Release Order / Packing List trở đi) trước khi Xuất hàng loạt.', 'error');
     return;
   }
 
@@ -1289,11 +1851,63 @@ const NK_TAX_TRIGGER_FIELDS = {
   VAT_RATE: true
 };
 
+const NUMERIC_SHARED_FIELD_MAP = {
+  VAT_GST: true,
+  VAT_TOTAL: true,
+  TOT_QTY: true,
+  TOT_AMT: true,
+  GRAND_TOTAL: true,
+  TOT_PACK: true,
+  TOT_NW: true,
+  TOT_GW: true,
+  TOT_CBM: true,
+  TOT_VGM: true,
+  EX_RATE: true,
+  TOT_EX_TAX: true,
+  TOT_FEE: true,
+  TOT_TAX: true,
+  IM_VAL: true,
+  IM_RATE: true,
+  IM_AMT: true,
+  SCT_VAL: true,
+  SCT_RATE: true,
+  SCT_AMT: true,
+  EPT_VAL: true,
+  EPT_RATE: true,
+  EPT_AMT: true,
+  VAT_VAL: true,
+  VAT_RATE: true,
+  VAT_AMT: true,
+  FREIGHT_AMT: true,
+  INS_AMT: true
+};
+
+const NUMERIC_TABLE_COL_MAP = {
+  QTY: true,
+  PRICE: true,
+  AMT: true,
+  PACK: true,
+  NW: true,
+  GW: true,
+  CBM: true,
+  MAX_GW: true,
+  VGM_WEI: true,
+  EX_VAL: true,
+  EX_TAX_RATE: true,
+  EX_AMT: true,
+  FEE_VAL: true,
+  FEE_RATE: true,
+  FEE_AMT: true
+};
+
 function handleWorkspaceFieldChange(target) {
   const key = target.getAttribute('data-sync');
   if (!key) return;
 
-  const value = target.type === 'checkbox' ? (target.checked ? '\u2611' : '\u2610') : target.value;
+  let value = target.type === 'checkbox' ? (target.checked ? '\u2611' : '\u2610') : target.value;
+  if (target.type !== 'checkbox' && (target.getAttribute('data-num') === 'true' || NUMERIC_SHARED_FIELD_MAP[key])) {
+    value = formatLiveNumericInput_(value, target);
+  }
   APP_STATE.shared[key] = value;
 
   if (!APP_STATE.manualFlags) {
@@ -1324,17 +1938,23 @@ function handleWorkspaceFieldChange(target) {
     handlePolChanged(value);
   } else if (key === 'POD') {
     handlePodChanged(value);
+  } else if (key === 'DEST_CTRY' || key === 'EXP_CTRY') {
+    refreshCurrencyDropdownSuggestions_();
   } else if (key === 'CAR_NAME') {
     handleCarNameChanged(value);
   } else if (key === 'VESSEL' || key === 'VOYAGE') {
     updateVesVoyDerived();
   } else if (key === 'SHIP_NAME' || key === 'CNE_NAME') {
     updateAllContextBanners();
+  } else if (key === 'CURR') {
+    updateCurrencyBadgesInDOM_();
   }
 
   if (CALC_TRIGGER_FIELDS[key]) {
     recalculateAllTotals(true, false, { sourceKey: key });
   }
+
+  updateSidebarLockState_();
 }
 
 function syncSharedFieldToDOM(key, value, sourceElement) {
@@ -1457,6 +2077,122 @@ function refreshScheduleDropdownSuggestions_() {
   ensureDatalistForField_('VOYAGE', voyageValues);
 }
 
+function getAvailableCurrencies20_() {
+  const dm = (APP_STATE.dropdowns && APP_STATE.dropdowns.danhMucChung) || {};
+  const fromSheet = Array.isArray(dm.CURR) ? dm.CURR.map(function (c) { return String(c || '').trim(); }).filter(Boolean) : [];
+  const merged = [];
+  const seen = {};
+  fromSheet.concat(DEFAULT_CURRENCIES_20).forEach(function (c) {
+    const upper = String(c || '').trim().toUpperCase();
+    if (upper && !seen[upper]) {
+      seen[upper] = true;
+      merged.push(c);
+    }
+  });
+  return merged;
+}
+
+function detectCurrencyFromLocation_(rawLocation) {
+  const str = String(rawLocation || '').trim();
+  if (!str) return '';
+  const upper = str.toUpperCase();
+  const cleanLoc = upper.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  const rules = [
+    { curr: 'KRW', tokens: ['KOREA', 'HAN QUOC', 'BUSAN', 'PUSAN', 'INCHEON', 'GWANGYANG', 'PYEONGTAEK', 'ULSAN', 'SEOUL', 'KRBUS', 'KRICN', 'KRKAN'] },
+    { curr: 'JPY', tokens: ['JAPAN', 'NHAT BAN', 'NHAT', 'TOKYO', 'YOKOHAMA', 'OSAKA', 'KOBE', 'NAGOYA', 'HAKATA', 'MOJI', 'JPTYO', 'JPYOK', 'JPOSA', 'JPUKB'] },
+    { curr: 'CNY', tokens: ['CHINA', 'TRUNG QUOC', 'SHANGHAI', 'NINGBO', 'SHENZHEN', 'QINGDAO', 'GUANGZHOU', 'XIAMEN', 'TIANJIN', 'DALIAN', 'SHEKOU', 'YANTIAN', 'CNSHA', 'CNNGB', 'CNSZX', 'CNTAO'] },
+    { curr: 'EUR', tokens: ['GERMANY', 'DUC', 'FRANCE', 'PHAP', 'NETHERLANDS', 'HA LAN', 'BELGIUM', 'ITALY', 'SPAIN', 'PORTUGAL', 'GREECE', 'EUROPE', 'CHAU AU', 'EU', 'ROTTERDAM', 'HAMBURG', 'ANTWERP', 'BREMEN', 'BREMERHAVEN', 'LE HAVRE', 'GENOA', 'VALENCIA', 'BARCELONA', 'NLRTM', 'DEHAM', 'BEANR'] },
+    { curr: 'VND', tokens: ['VIETNAM', 'VIET NAM', 'HAI PHONG', 'CAT LAI', 'CAI MEP', 'DA NANG', 'QUY NHON', 'HO CHI MINH', 'SAIGON', 'SAI GON', 'VNHPH', 'VNSGN', 'VNCMT', 'VNDAD'] },
+    { curr: 'GBP', tokens: ['UNITED KINGDOM', 'ENGLAND', 'BRITAIN', 'VUONG QUOC ANH', 'ANH', 'LONDON', 'FELIXSTOWE', 'SOUTHAMPTON', 'LIVERPOOL', 'GBFXT', 'GBLON', 'GBSOU'] },
+    { curr: 'SGD', tokens: ['SINGAPORE', 'SGSIN'] },
+    { curr: 'AUD', tokens: ['AUSTRALIA', 'UC', 'SYDNEY', 'MELBOURNE', 'BRISBANE', 'FREMANTLE', 'ADELAIDE', 'AUSYD', 'AUMEL', 'AUBNE'] },
+    { curr: 'AED', tokens: ['UAE', 'DUBAI', 'JEBEL ALI', 'ABU DHABI', 'SHARJAH', 'AEJEA', 'AEDXB'] },
+    { curr: 'THB', tokens: ['THAILAND', 'THAI LAN', 'BANGKOK', 'LAEM CHABANG', 'LAT KRABANG', 'THBKK', 'THLCH'] },
+    { curr: 'TWD', tokens: ['TAIWAN', 'DAI LOAN', 'KAOHSIUNG', 'KEELUNG', 'TAICHUNG', 'TAIPEI', 'TWKHH', 'TWKEL'] },
+    { curr: 'INR', tokens: ['INDIA', 'AN DO', 'NHAVA SHEVA', 'MUNDRA', 'CHENNAI', 'KOLKATA', 'MUMBAI', 'INNSA', 'INMUN', 'INMAA'] },
+    { curr: 'MYR', tokens: ['MALAYSIA', 'PORT KLANG', 'TANJUNG PELEPAS', 'PENANG', 'PASIR GUDANG', 'MYPKG', 'MYTPP'] },
+    { curr: 'IDR', tokens: ['INDONESIA', 'JAKARTA', 'TANJUNG PRIOK', 'SURABAYA', 'BELAWAN', 'SEMARANG', 'IDJKT', 'IDSUB'] },
+    { curr: 'PHP', tokens: ['PHILIPPINES', 'MANILA', 'CEBU', 'DAVAO', 'SUBIC', 'PHMNL', 'PHCEB'] },
+    { curr: 'CAD', tokens: ['CANADA', 'VANCOUVER', 'MONTREAL', 'TORONTO', 'PRINCE RUPERT', 'CAVAN', 'CAMTR'] },
+    { curr: 'BRL', tokens: ['BRAZIL', 'SANTOS', 'PARANAGUA', 'RIO DE JANEIRO', 'BRSSZ'] },
+    { curr: 'SAR', tokens: ['SAUDI ARABIA', 'A RAP XE UT', 'JEDDAH', 'DAMMAM', 'RIYADH', 'SAJED', 'SADMM'] },
+    { curr: 'BDT', tokens: ['BANGLADESH', 'CHITTAGONG', 'CHATTOGRAM', 'DHAKA', 'MONGLA', 'BDCGP'] },
+    { curr: 'USD', tokens: ['USA', 'UNITED STATES', 'AMERICA', 'HOA KY', 'MY', 'LOS ANGELES', 'LONG BEACH', 'NEW YORK', 'SAVANNAH', 'HOUSTON', 'SEATTLE', 'OAKLAND', 'USLAX', 'USLGB', 'USNYC'] }
+  ];
+
+  for (let i = 0; i < rules.length; i++) {
+    const r = rules[i];
+    for (let j = 0; j < r.tokens.length; j++) {
+      const tok = r.tokens[j];
+      if (tok.length <= 2) {
+        const padded = ' ' + cleanLoc.replace(/[^A-Z0-9]/g, ' ') + ' ';
+        if (padded.indexOf(' ' + tok + ' ') !== -1) {
+          return r.curr;
+        }
+      } else if (cleanLoc.indexOf(tok) !== -1) {
+        return r.curr;
+      }
+    }
+  }
+  return '';
+}
+
+function getSmartCurrencyOptions_() {
+  const allCurrencies = getAvailableCurrencies20_();
+  const s = APP_STATE.shared || {};
+  const candidateLoc = [s.POD, s.DEST_CTRY, s.EXP_CTRY].filter(Boolean).join(' ');
+  const detectedLocal = detectCurrencyFromLocation_(candidateLoc);
+
+  const prioritized = [];
+  const used = {};
+
+  function pushByCode(targetCode) {
+    if (!targetCode) return;
+    const match = allCurrencies.find(function (c) {
+      return extractShortCodeForExport_(c, 'CURR').toUpperCase() === targetCode;
+    });
+    const val = match || targetCode;
+    const upperKey = extractShortCodeForExport_(val, 'CURR').toUpperCase();
+    if (!used[upperKey]) {
+      used[upperKey] = true;
+      prioritized.push(val);
+    }
+  }
+
+  if (detectedLocal && detectedLocal !== 'USD') {
+    pushByCode(detectedLocal);
+  }
+  pushByCode('USD');
+
+  allCurrencies.forEach(function (c) {
+    const upperKey = extractShortCodeForExport_(c, 'CURR').toUpperCase();
+    if (!used[upperKey]) {
+      used[upperKey] = true;
+      prioritized.push(c);
+    }
+  });
+
+  return prioritized;
+}
+
+function refreshCurrencyDropdownSuggestions_() {
+  const opts = getSmartCurrencyOptions_();
+  let dl = document.getElementById('dl_combo_CURR');
+  if (!dl) {
+    dl = document.createElement('datalist');
+    dl.id = 'dl_combo_CURR';
+    document.body.appendChild(dl);
+  }
+  dl.innerHTML = opts.map(function (v) {
+    return '<option value="' + escapeHtml(v) + '"></option>';
+  }).join('');
+
+  document.querySelectorAll('input[data-sync="CURR"]').forEach(function (inp) {
+    inp.setAttribute('list', 'dl_combo_CURR');
+  });
+}
+
 function applyCuocTauRow_(match) {
   if (!match) return;
   if (match.Quoc_Gia) {
@@ -1471,6 +2207,7 @@ function applyCuocTauRow_(match) {
   if (match.Ten_tau) setSharedFieldAndSync('VESSEL', match.Ten_tau);
   if (match.So_chuyen) setSharedFieldAndSync('VOYAGE', match.So_chuyen);
   updateVesVoyDerived();
+  refreshCurrencyDropdownSuggestions_();
 }
 
 function handleServiceTypeChanged(serviceTypeValue) {
@@ -1505,6 +2242,7 @@ function handlePolChanged(polValue) {
 
 function handlePodChanged(podValue) {
   refreshScheduleDropdownSuggestions_();
+  refreshCurrencyDropdownSuggestions_();
   if (!podValue) return;
 
   const serviceRows = getFilteredCuocTauByServiceType_();
@@ -1612,9 +2350,11 @@ function handleTableCellChange(target) {
   if (!targetArray[rowIdx]) return;
 
   let rawVal = target.value;
-  if (colKey === 'CONT') {
+  if (colKey === 'CONT' || colKey === 'SEAL') {
     rawVal = rawVal.toUpperCase();
     if (target.value !== rawVal) target.value = rawVal;
+  } else if (target.getAttribute('data-num') === 'true' || NUMERIC_TABLE_COL_MAP[colKey]) {
+    rawVal = formatLiveNumericInput_(rawVal, target);
   }
 
   targetArray[rowIdx][colKey] = rawVal;
@@ -1645,6 +2385,11 @@ function handleTableCellChange(target) {
 
   syncTableCellToDOM(tableType, rowIdx, colKey, rawVal, target);
   recalculateAllTotals(true, tableType === 'containers', { sourceKey: colKey, rowIdx: rowIdx });
+
+  if (tableType === 'containers') {
+    validateContainerInputsInDOM();
+  }
+  updateSidebarLockState_();
 }
 
 function syncTableCellToDOM(tableType, rowIdx, colKey, value, sourceElement) {
@@ -1662,6 +2407,7 @@ function addItemRow() {
   }
   recalculateAllTotals(true, false, { sourceKey: 'ITEM_MUTATION' });
   rerenderAllSyncedTables('items');
+  updateSidebarLockState_();
 }
 
 function deleteItemRow(rowIdx) {
@@ -1671,6 +2417,7 @@ function deleteItemRow(rowIdx) {
   }
   recalculateAllTotals(true, false, { sourceKey: 'ITEM_MUTATION' });
   rerenderAllSyncedTables('items');
+  updateSidebarLockState_();
 }
 
 function addContainerRow() {
@@ -1680,6 +2427,8 @@ function addContainerRow() {
   }
   recalculateAllTotals(true, true, { sourceKey: 'CONTAINER_MUTATION' });
   rerenderAllSyncedTables('containers');
+  validateContainerInputsInDOM();
+  updateSidebarLockState_();
 }
 
 function deleteContainerRow(rowIdx) {
@@ -1689,9 +2438,514 @@ function deleteContainerRow(rowIdx) {
   }
   recalculateAllTotals(true, true, { sourceKey: 'CONTAINER_MUTATION' });
   rerenderAllSyncedTables('containers');
+  validateContainerInputsInDOM();
+  updateSidebarLockState_();
 }
 
-function validateContainerInputsInDOM() {}
+function isRedChannelInspection_() {
+  const raw = String((APP_STATE.shared && APP_STATE.shared.INSPECTION_CODE) || '').trim().toUpperCase();
+  if (!raw) return false;
+  if (raw.indexOf('3') !== -1 || raw.indexOf('ĐỎ') !== -1) return true;
+  const ascii = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return ascii.indexOf('LUONG DO') !== -1 || ascii === 'DO';
+}
+
+function getNormalizedContSealEntries_() {
+  const fromSheet = (APP_STATE.dropdowns && Array.isArray(APP_STATE.dropdowns.contSealList) && APP_STATE.dropdowns.contSealList.length > 0)
+    ? APP_STATE.dropdowns.contSealList
+    : null;
+
+  let rawList = [];
+  if (fromSheet) {
+    rawList = fromSheet;
+  } else {
+    const dm = (APP_STATE.dropdowns && APP_STATE.dropdowns.danhMucChung) || {};
+    const owners = Array.isArray(dm.MA_CHU_SO_HUU_CONT) ? dm.MA_CHU_SO_HUU_CONT : [];
+    const seals = Array.isArray(dm.MA_SEAL) ? dm.MA_SEAL : [];
+    if (owners.length > 0 || seals.length > 0) {
+      const maxLen = Math.max(owners.length, seals.length);
+      for (let i = 0; i < maxLen; i++) {
+        rawList.push({ owner: owners[i] || '', seal: seals[i] || '' });
+      }
+    } else {
+      rawList = DEFAULT_CONT_SEAL_PAIRS;
+    }
+  }
+
+  return rawList.map(function (entry) {
+    const rawOwner = String(entry && entry.owner ? entry.owner : '').trim();
+    const rawSeal = String(entry && entry.seal ? entry.seal : '').trim();
+    const combinedUpper = (rawOwner + ' ' + rawSeal).toUpperCase();
+    const isCustoms =
+      combinedUpper.indexOf('HẢI QUAN') !== -1 ||
+      combinedUpper.indexOf('HAI QUAN') !== -1 ||
+      combinedUpper.indexOf('CUSTOMS') !== -1 ||
+      combinedUpper.indexOf('NIÊM PHONG') !== -1 ||
+      combinedUpper.indexOf('LUỒNG ĐỎ') !== -1;
+
+    let label = rawOwner;
+    let ownerCodesPart = rawOwner;
+    const colonIdx = rawOwner.indexOf(':');
+    if (colonIdx !== -1) {
+      label = rawOwner.slice(0, colonIdx).trim();
+      ownerCodesPart = rawOwner.slice(colonIdx + 1).trim();
+    } else if (isCustoms && !label) {
+      label = rawSeal;
+    }
+
+    const ownerPrefixes = [];
+    if (!isCustoms) {
+      const tokens = ownerCodesPart.split(/[,;/\s]+/).map(function (t) { return t.trim().toUpperCase(); }).filter(Boolean);
+      tokens.forEach(function (t) {
+        if (/^[A-Z]{3,4}[UJZR]?$/.test(t) || /^[A-Z]{4}$/.test(t)) {
+          if (ownerPrefixes.indexOf(t) === -1) ownerPrefixes.push(t);
+        }
+      });
+    } else {
+      const tokens = rawOwner.split(/[:;,/\s]+/).map(function (t) { return t.trim().toUpperCase(); }).filter(Boolean);
+      tokens.forEach(function (t) {
+        if (/^[A-Z]{4}$/.test(t) && ownerPrefixes.indexOf(t) === -1) {
+          ownerPrefixes.push(t);
+        }
+      });
+    }
+
+    let sealDisplay = rawSeal;
+    let sealCodesPart = rawSeal;
+    const sealColon = rawSeal.indexOf(':');
+    if (sealColon !== -1) {
+      if (!label) label = rawSeal.slice(0, sealColon).trim();
+      sealCodesPart = rawSeal.slice(sealColon + 1).trim();
+    }
+
+    const sealPrefixes = [];
+    sealCodesPart.split(/[,;/\s]+/).map(function (t) { return t.trim().toUpperCase(); }).filter(Boolean).forEach(function (t) {
+      const cleaned = t.replace(/[^A-Z0-9]/g, '');
+      if (cleaned.length >= 2 && cleaned.length <= 12 && sealPrefixes.indexOf(cleaned) === -1) {
+        sealPrefixes.push(cleaned);
+      }
+    });
+
+    return {
+      rawOwner: rawOwner,
+      rawSeal: sealDisplay,
+      label: label || rawSeal || rawOwner,
+      ownerPrefixes: ownerPrefixes,
+      sealPrefixes: sealPrefixes,
+      isCustoms: isCustoms
+    };
+  });
+}
+
+function openContSealLookupModal(docKey, rowIdx) {
+  const modal = document.getElementById('contSealLookupModal');
+  if (!modal) return;
+
+  if (!Array.isArray(APP_STATE.containers) || APP_STATE.containers.length === 0) {
+    APP_STATE.containers = [createEmptyContainer()];
+    rerenderAllSyncedTables('containers');
+  }
+
+  APP_STATE.lookupTargetDocKey = docKey || APP_STATE.activeTab || '';
+  APP_STATE.lookupTargetRowIdx = typeof rowIdx === 'number' ? rowIdx : 0;
+
+  const rowSelect = document.getElementById('contSealTargetRowSelect');
+  if (rowSelect) {
+    rowSelect.innerHTML = APP_STATE.containers.map(function (c, idx) {
+      const curCont = c && c.CONT ? (' — ' + c.CONT) : '';
+      return '<option value="' + idx + '">Dòng ' + (idx + 1) + escapeHtml(curCont) + '</option>';
+    }).join('');
+    rowSelect.value = String(Math.min(APP_STATE.lookupTargetRowIdx, Math.max(0, APP_STATE.containers.length - 1)));
+  }
+
+  const searchInp = document.getElementById('contSealSearchInput');
+  if (searchInp) searchInp.value = '';
+
+  const redToggle = document.getElementById('contSealRedChannelToggle');
+  if (redToggle) {
+    redToggle.checked = isRedChannelInspection_();
+  }
+
+  const noteEl = document.getElementById('contSealModalContextNote');
+  if (noteEl) {
+    if (APP_STATE.lookupTargetDocKey === 'RELEASE_ORDER') {
+      noteEl.textContent = 'Lưu ý: Tại Release Order chỉ điền Số Container (Số Seal mở khóa tại Packing List).';
+    } else {
+      noteEl.textContent = 'Bấm vào mã tiền tố để điền nhanh vào dòng Container đang chọn.';
+    }
+  }
+
+  renderContSealLookupRows_();
+  modal.classList.remove('hidden');
+}
+
+function closeContSealLookupModal() {
+  const modal = document.getElementById('contSealLookupModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function renderContSealLookupRows_() {
+  const tbody = document.getElementById('contSealLookupTableBody');
+  if (!tbody) return;
+
+  const query = String((document.getElementById('contSealSearchInput') || {}).value || '').trim().toLowerCase();
+  const toggleEl = document.getElementById('contSealRedChannelToggle');
+  const showCustoms = isRedChannelInspection_() || Boolean(toggleEl && toggleEl.checked);
+  const sealLockedForDoc = APP_STATE.lookupTargetDocKey === 'RELEASE_ORDER' || APP_STATE.lookupTargetDocKey === 'SALES_CONTRACT';
+
+  const entries = getNormalizedContSealEntries_().filter(function (item) {
+    if (item.isCustoms && !showCustoms) return false;
+    if (!query) return true;
+    const hay = (item.label + ' ' + item.rawOwner + ' ' + item.rawSeal).toLowerCase();
+    return hay.indexOf(query) !== -1;
+  });
+
+  if (entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-table-note">Không tìm thấy mã phù hợp. Hãy thử từ khóa khác hoặc bật tùy chọn Luồng đỏ để xem mã Seal Hải quan.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = entries.map(function (item, idx) {
+    const ownerHtml = item.ownerPrefixes.length > 0
+      ? '<div class="lookup-pill-wrap">' + item.ownerPrefixes.map(function (p) {
+          return '<button type="button" class="lookup-prefix-btn" title="Điền tiền tố Container ' + escapeHtml(p) + '" onclick="applyContSealPrefixSelection_(\'' + escapeHtml(p) + '\', \'\')">' + escapeHtml(p) + '</button>';
+        }).join('') + '</div>'
+      : '<span style="color:#64748B; font-size:12px;">' + escapeHtml(item.rawOwner || '—') + '</span>';
+
+    const sealHtml = item.sealPrefixes.length > 0
+      ? '<div class="lookup-pill-wrap">' + item.sealPrefixes.map(function (s) {
+          return '<button type="button" class="lookup-prefix-btn"' + (sealLockedForDoc ? ' disabled title="Số Seal mở khóa tại Packing List"' : (' title="Điền tiền tố Seal ' + escapeHtml(s) + '"')) + ' onclick="applyContSealPrefixSelection_(\'\', \'' + escapeHtml(s) + '\')">' + escapeHtml(s) + '</button>';
+        }).join('') + '</div>'
+      : '<span style="color:#64748B; font-size:12px;">' + escapeHtml(item.rawSeal || '—') + '</span>';
+
+    const firstOwner = item.ownerPrefixes[0] || '';
+    const firstSeal = sealLockedForDoc ? '' : (item.sealPrefixes[0] || '');
+    const badgeHtml = item.isCustoms ? '<span class="lookup-red-badge">Luồng đỏ / Hải quan</span>' : '';
+
+    return (
+      '<tr class="' + (item.isCustoms ? 'lookup-customs-row' : '') + '">' +
+        '<td class="table-row-num">' + (idx + 1) + '</td>' +
+        '<td><strong>' + escapeHtml(item.label) + '</strong>' + badgeHtml + '</td>' +
+        '<td>' + ownerHtml + '</td>' +
+        '<td>' + sealHtml + '</td>' +
+        '<td style="text-align:center;"><button type="button" class="btn btn-primary btn-sm" onclick="applyContSealPrefixSelection_(\'' + escapeHtml(firstOwner) + '\', \'' + escapeHtml(firstSeal) + '\')">Áp dụng</button></td>' +
+      '</tr>'
+    );
+  }).join('');
+}
+
+function applyContSealPrefixSelection_(ownerPrefix, sealPrefix) {
+  const rowSelect = document.getElementById('contSealTargetRowSelect');
+  const rowIdx = rowSelect ? parseInt(rowSelect.value, 10) : (APP_STATE.lookupTargetRowIdx || 0);
+  if (isNaN(rowIdx) || !APP_STATE.containers[rowIdx]) return;
+
+  const targetRow = APP_STATE.containers[rowIdx];
+  const sealLocked = APP_STATE.lookupTargetDocKey === 'RELEASE_ORDER' || APP_STATE.lookupTargetDocKey === 'SALES_CONTRACT';
+  const appliedParts = [];
+
+  if (ownerPrefix) {
+    const cleanPrefix = String(ownerPrefix).trim().toUpperCase();
+    const existingCont = String(targetRow.CONT || '').trim().toUpperCase();
+    const suffixDigits = existingCont.length === 11 && /^[0-9]{7}$/.test(existingCont.slice(4)) ? existingCont.slice(4) : '';
+    targetRow.CONT = suffixDigits ? (cleanPrefix.slice(0, 4) + suffixDigits) : cleanPrefix;
+    syncTableCellToDOM('containers', rowIdx, 'CONT', targetRow.CONT, null);
+    appliedParts.push('Cont: ' + targetRow.CONT);
+  }
+
+  if (sealPrefix && !sealLocked) {
+    const cleanSeal = String(sealPrefix).trim().toUpperCase();
+    targetRow.SEAL = cleanSeal;
+    syncTableCellToDOM('containers', rowIdx, 'SEAL', targetRow.SEAL, null);
+    appliedParts.push('Seal: ' + targetRow.SEAL);
+  }
+
+  if (APP_STATE.manualFlags) {
+    APP_STATE.manualFlags.TOTAL_CONTAINERS_TEXT = false;
+  }
+  recalculateAllTotals(true, true, { sourceKey: 'CONTAINER_LOOKUP', rowIdx: rowIdx });
+  validateContainerInputsInDOM();
+  updateSidebarLockState_();
+
+  if (appliedParts.length > 0) {
+    showToast('Đã điền tiền tố (' + appliedParts.join(', ') + ') vào dòng ' + (rowIdx + 1) + '. Hãy nhập đủ số Container / Seal.', 'success');
+  }
+  closeContSealLookupModal();
+}
+
+function computeIso6346CheckDigit_(prefix10) {
+  if (!prefix10 || prefix10.length !== 10) return -1;
+  let sum = 0;
+  for (let i = 0; i < 10; i++) {
+    const ch = prefix10.charAt(i);
+    let val;
+    if (ch >= '0' && ch <= '9') {
+      val = parseInt(ch, 10);
+    } else if (Object.prototype.hasOwnProperty.call(ISO_6346_CHAR_VALUES, ch)) {
+      val = ISO_6346_CHAR_VALUES[ch];
+    } else {
+      return -1;
+    }
+    sum += val * Math.pow(2, i);
+  }
+  return (sum % 11) % 10;
+}
+
+function isValidIso6346ContainerNumber_(contStr) {
+  const clean = String(contStr || '').trim().toUpperCase();
+  if (!ISO_6346_REGEX.test(clean)) return false;
+  const expected = computeIso6346CheckDigit_(clean.slice(0, 10));
+  const actual = parseInt(clean.charAt(10), 10);
+  return expected !== -1 && expected === actual;
+}
+
+function validateContainerAndSealRows(docKeyOverride) {
+  const targetDoc = docKeyOverride !== undefined ? String(docKeyOverride || '') : String(APP_STATE.activeTab || '');
+  const containers = Array.isArray(APP_STATE.containers) ? APP_STATE.containers : [];
+
+  if (DOCS_CONT_TABLE_LOCKED[targetDoc]) {
+    return { hasErrors: false, rowErrors: [] };
+  }
+
+  const requireCont = Boolean(DOCS_CONT_REQUIRED_SEAL_LOCKED[targetDoc] || DOCS_BOTH_CONT_SEAL_REQUIRED[targetDoc]);
+  const requireSeal = Boolean(DOCS_BOTH_CONT_SEAL_REQUIRED[targetDoc]);
+  const lockSeal = Boolean(DOCS_CONT_REQUIRED_SEAL_LOCKED[targetDoc]);
+
+  const rowErrors = [];
+  const contCounts = {};
+  const sealCounts = {};
+  let hasErrors = false;
+  let hasAnyNonEmptyCont = false;
+
+  containers.forEach(function (row) {
+    const cont = String(row && row.CONT != null ? row.CONT : '').trim().toUpperCase();
+    const seal = String(row && row.SEAL != null ? row.SEAL : '').trim().toUpperCase();
+    if (cont) {
+      contCounts[cont] = (contCounts[cont] || 0) + 1;
+      hasAnyNonEmptyCont = true;
+    }
+    if (seal) {
+      sealCounts[seal] = (sealCounts[seal] || 0) + 1;
+    }
+  });
+
+  if (requireCont && containers.length === 0) {
+    return { hasErrors: true, rowErrors: [] };
+  }
+
+  containers.forEach(function (row, idx) {
+    const cont = String(row && row.CONT != null ? row.CONT : '').trim().toUpperCase();
+    const seal = String(row && row.SEAL != null ? row.SEAL : '').trim().toUpperCase();
+    const hasOtherContData = Boolean(
+      row && (row.CTYPE || row.CSIZE || row.PACK || row.GW || row.VGM_WEI || row.CBM)
+    );
+    const err = { CONT: '', SEAL: '' };
+
+    const mustHaveContOnThisRow = requireCont && (idx === 0 || hasOtherContData || cont !== '' || seal !== '' || !hasAnyNonEmptyCont);
+    const mustHaveSealOnThisRow = requireSeal && !lockSeal && (idx === 0 || cont !== '' || seal !== '' || hasOtherContData);
+
+    if (cont !== '') {
+      if (!isValidIso6346ContainerNumber_(cont)) {
+        err.CONT = 'Sai số container (ISO 6346)';
+      } else if (contCounts[cont] > 1) {
+        err.CONT = 'Trùng số container';
+      }
+    } else if (mustHaveContOnThisRow || (!lockSeal && seal !== '')) {
+      err.CONT = 'Bắt buộc nhập số container hợp lệ';
+    }
+
+    if (!lockSeal) {
+      if (seal !== '') {
+        if (!SEAL_NO_REGEX.test(seal)) {
+          err.SEAL = 'Số seal phải gồm 6–12 ký tự (A-Z, 0-9)';
+        } else if (sealCounts[seal] > 1) {
+          err.SEAL = 'Trùng số seal';
+        }
+      } else if (mustHaveSealOnThisRow || (requireSeal && cont !== '')) {
+        err.SEAL = 'Bắt buộc nhập số seal (6–12 ký tự)';
+      }
+    }
+
+    if (err.CONT || err.SEAL) {
+      hasErrors = true;
+    }
+    rowErrors[idx] = err;
+  });
+
+  return {
+    hasErrors: hasErrors,
+    rowErrors: rowErrors
+  };
+}
+
+function validateContainerInputsInDOM() {
+  const activeDoc = APP_STATE.activeTab || 'MASTER_PARTIES';
+  const activeValidation = validateContainerAndSealRows(activeDoc);
+  const perDocCache = {};
+  perDocCache[activeDoc] = activeValidation;
+
+  document.querySelectorAll('[data-table-type="containers"]').forEach(function (inp) {
+    const colKey = inp.getAttribute('data-col-key');
+    if (colKey !== 'CONT' && colKey !== 'SEAL') return;
+    const docKey = inp.getAttribute('data-doc-key') || activeDoc;
+    if (!perDocCache[docKey]) {
+      perDocCache[docKey] = validateContainerAndSealRows(docKey);
+    }
+    const v = perDocCache[docKey];
+    const rowErrors = v.rowErrors || [];
+    const idx = parseInt(inp.getAttribute('data-row-idx'), 10);
+    const isLocked = inp.disabled || inp.classList.contains('table-input-locked');
+    const errMsg = (!isLocked && !isNaN(idx) && rowErrors[idx]) ? (rowErrors[idx][colKey] || '') : '';
+    inp.classList.toggle('input-invalid', Boolean(errMsg));
+
+    const cell = inp.parentNode;
+    if (cell) {
+      let msgEl = cell.querySelector('.cell-error-msg[data-col-key="' + colKey + '"]');
+      if (!msgEl) {
+        msgEl = document.createElement('div');
+        msgEl.className = 'cell-error-msg hidden';
+        msgEl.setAttribute('data-err-type', 'containers');
+        msgEl.setAttribute('data-row-idx', String(idx));
+        msgEl.setAttribute('data-col-key', colKey);
+        cell.appendChild(msgEl);
+      }
+      msgEl.textContent = errMsg;
+      msgEl.classList.toggle('hidden', !errMsg);
+    }
+  });
+
+  const activeLock = activeValidation.hasErrors;
+  document.querySelectorAll('button[onclick="handleSaveDraft()"]').forEach(function (btn) {
+    btn.disabled = activeLock;
+    btn.title = activeLock ? 'Vui lòng nhập đúng Số Container / Số Seal trước khi Lưu nháp' : '';
+  });
+
+  document.querySelectorAll('[data-tab-panel]').forEach(function (panel) {
+    const panelDocKey = panel.getAttribute('data-tab-panel');
+    if (!panelDocKey || panelDocKey === 'MASTER_PARTIES' || panelDocKey === 'ADMIN_ACCOUNTS') return;
+    if (!perDocCache[panelDocKey]) {
+      perDocCache[panelDocKey] = validateContainerAndSealRows(panelDocKey);
+    }
+    const panelLock = perDocCache[panelDocKey].hasErrors;
+    panel.querySelectorAll('button[data-action-preview="true"], button[data-action-export="true"]').forEach(function (btn) {
+      btn.disabled = panelLock;
+      btn.title = panelLock ? 'Vui lòng nhập đúng Số Container / Số Seal cho chứng từ này' : '';
+    });
+  });
+
+  return activeValidation;
+}
+
+function formatLiveNumericInput_(rawVal, inputEl) {
+  const original = String(rawVal == null ? '' : rawVal);
+  if (!original.trim()) return '';
+
+  const selStart = inputEl && typeof inputEl.selectionStart === 'number' ? inputEl.selectionStart : original.length;
+  let significantBeforeCursor = 0;
+  let dotSeenBefore = false;
+  for (let i = 0; i < selStart && i < original.length; i++) {
+    const ch = original.charAt(i);
+    if (ch >= '0' && ch <= '9') {
+      significantBeforeCursor++;
+    } else if (ch === '.' && !dotSeenBefore) {
+      significantBeforeCursor++;
+      dotSeenBefore = true;
+    }
+  }
+
+  let cleaned = '';
+  let dotSeen = false;
+  for (let i = 0; i < original.length; i++) {
+    const ch = original.charAt(i);
+    if (ch >= '0' && ch <= '9') {
+      cleaned += ch;
+    } else if (ch === '.' && !dotSeen) {
+      cleaned += '.';
+      dotSeen = true;
+    }
+  }
+
+  if (!cleaned) {
+    if (inputEl && inputEl.value !== '') inputEl.value = '';
+    return '';
+  }
+
+  const parts = cleaned.split('.');
+  let intPart = parts[0] || '';
+  if (intPart.length > 1) {
+    intPart = intPart.replace(/^0+(?=\d)/, '');
+  }
+  if (intPart === '' && dotSeen) {
+    intPart = '0';
+  }
+  const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const formatted = parts.length > 1 ? (intFormatted + '.' + parts[1]) : intFormatted;
+
+  if (inputEl && inputEl.value !== formatted) {
+    inputEl.value = formatted;
+    if (typeof inputEl.setSelectionRange === 'function') {
+      let newPos = 0;
+      let count = 0;
+      while (newPos < formatted.length && count < significantBeforeCursor) {
+        const ch = formatted.charAt(newPos);
+        if ((ch >= '0' && ch <= '9') || ch === '.') {
+          count++;
+        }
+        newPos++;
+      }
+      try {
+        inputEl.setSelectionRange(newPos, newPos);
+      } catch (e) {}
+    }
+  }
+
+  return formatted;
+}
+
+function normalizeFormattedNumberString_(rawVal) {
+  const str = String(rawVal == null ? '' : rawVal).trim();
+  if (!str) return '';
+  const cleaned = str.replace(/[,\s]/g, '');
+  if (!/^-?\d+(\.\d+)?$/.test(cleaned)) return str;
+  const parts = cleaned.split('.');
+  const intFormatted = parts[0].replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+  return parts.length > 1 ? (intFormatted + '.' + parts[1]) : intFormatted;
+}
+
+function normalizeNumericFieldsInState_() {
+  Object.keys(NUMERIC_SHARED_FIELD_MAP).forEach(function (k) {
+    if (APP_STATE.shared[k] != null && String(APP_STATE.shared[k]).trim() !== '') {
+      APP_STATE.shared[k] = normalizeFormattedNumberString_(APP_STATE.shared[k]);
+    }
+  });
+  (APP_STATE.items || []).forEach(function (row) {
+    Object.keys(NUMERIC_TABLE_COL_MAP).forEach(function (col) {
+      if (row[col] != null && String(row[col]).trim() !== '') {
+        row[col] = normalizeFormattedNumberString_(row[col]);
+      }
+    });
+  });
+  (APP_STATE.containers || []).forEach(function (row) {
+    Object.keys(NUMERIC_TABLE_COL_MAP).forEach(function (col) {
+      if (row[col] != null && String(row[col]).trim() !== '') {
+        row[col] = normalizeFormattedNumberString_(row[col]);
+      }
+    });
+  });
+}
+
+function getActiveCurrencyCode_() {
+  const raw = APP_STATE.shared && APP_STATE.shared.CURR ? String(APP_STATE.shared.CURR).trim() : '';
+  if (!raw) return 'USD';
+  const shortCode = extractShortCodeForExport_(raw, 'CURR').toUpperCase();
+  return shortCode || 'USD';
+}
+
+function updateCurrencyBadgesInDOM_() {
+  const code = getActiveCurrencyCode_();
+  document.querySelectorAll('.currency-unit-badge[data-curr-badge="DYNAMIC"]').forEach(function (el) {
+    el.textContent = code;
+  });
+}
 
 function parseNum(val) {
   if (val == null || val === '') return 0;
@@ -1705,7 +2959,12 @@ function formatNum(num, maxDecimals) {
   const factor = Math.pow(10, maxDecimals || 2);
   const rounded = Math.round((num + Number.EPSILON) * factor) / factor;
   if (rounded === 0) return '0';
-  return String(rounded);
+  const parts = String(rounded).split('.');
+  const intFormatted = parts[0].replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+  if (parts.length > 1) {
+    return intFormatted + '.' + parts[1];
+  }
+  return intFormatted;
 }
 
 /* ==========================================================================
@@ -1759,12 +3018,10 @@ function numberToEnglishCurrencyWords(amount, currencyCode) {
   if (isNaN(num) || num <= 0) return '';
 
   const code = String(currencyCode || 'USD').trim().toUpperCase() || 'USD';
-  if (code === 'VND') {
-    return numberToVietnameseWords(num, 'đồng');
-  }
 
   const currencyMap = {
     USD: { plural: 'US DOLLARS', singular: 'US DOLLAR', subPlural: 'CENTS', subSingular: 'CENT', hasCents: true },
+    VND: { plural: 'VIETNAMESE DONG', singular: 'VIETNAMESE DONG', subPlural: '', subSingular: '', hasCents: false },
     EUR: { plural: 'EUROS', singular: 'EURO', subPlural: 'CENTS', subSingular: 'CENT', hasCents: true },
     GBP: { plural: 'BRITISH POUNDS', singular: 'BRITISH POUND', subPlural: 'PENCE', subSingular: 'PENNY', hasCents: true },
     JPY: { plural: 'JAPANESE YEN', singular: 'JAPANESE YEN', subPlural: '', subSingular: '', hasCents: false },
@@ -1773,6 +3030,16 @@ function numberToEnglishCurrencyWords(amount, currencyCode) {
     RMB: { plural: 'CHINESE YUAN', singular: 'CHINESE YUAN', subPlural: 'FEN', subSingular: 'FEN', hasCents: true },
     AUD: { plural: 'AUSTRALIAN DOLLARS', singular: 'AUSTRALIAN DOLLAR', subPlural: 'CENTS', subSingular: 'CENT', hasCents: true },
     SGD: { plural: 'SINGAPORE DOLLARS', singular: 'SINGAPORE DOLLAR', subPlural: 'CENTS', subSingular: 'CENT', hasCents: true },
+    CAD: { plural: 'CANADIAN DOLLARS', singular: 'CANADIAN DOLLAR', subPlural: 'CENTS', subSingular: 'CENT', hasCents: true },
+    TWD: { plural: 'NEW TAIWAN DOLLARS', singular: 'NEW TAIWAN DOLLAR', subPlural: 'CENTS', subSingular: 'CENT', hasCents: true },
+    AED: { plural: 'UAE DIRHAMS', singular: 'UAE DIRHAM', subPlural: 'FILS', subSingular: 'FIL', hasCents: true },
+    BDT: { plural: 'BANGLADESHI TAKA', singular: 'BANGLADESHI TAKA', subPlural: 'POISHA', subSingular: 'POISHA', hasCents: true },
+    BRL: { plural: 'BRAZILIAN REAIS', singular: 'BRAZILIAN REAL', subPlural: 'CENTAVOS', subSingular: 'CENTAVO', hasCents: true },
+    IDR: { plural: 'INDONESIAN RUPIAH', singular: 'INDONESIAN RUPIAH', subPlural: '', subSingular: '', hasCents: false },
+    INR: { plural: 'INDIAN RUPEES', singular: 'INDIAN RUPEE', subPlural: 'PAISE', subSingular: 'PAISA', hasCents: true },
+    MYR: { plural: 'MALAYSIAN RINGGIT', singular: 'MALAYSIAN RINGGIT', subPlural: 'SEN', subSingular: 'SEN', hasCents: true },
+    PHP: { plural: 'PHILIPPINE PESOS', singular: 'PHILIPPINE PESO', subPlural: 'CENTAVOS', subSingular: 'CENTAVO', hasCents: true },
+    SAR: { plural: 'SAUDI RIYALS', singular: 'SAUDI RIYAL', subPlural: 'HALALAS', subSingular: 'HALALA', hasCents: true },
     THB: { plural: 'THAI BAHT', singular: 'THAI BAHT', subPlural: 'SATANG', subSingular: 'SATANG', hasCents: true }
   };
 
@@ -1787,7 +3054,7 @@ function numberToEnglishCurrencyWords(amount, currencyCode) {
   if (!meta.hasCents) {
     const intOnly = Math.round(num);
     const label = intOnly === 1 ? meta.singular : meta.plural;
-    return 'SAY: ' + label + ' ' + numberToEnglishIntWords_(intOnly) + ' ONLY';
+    return label + ' ' + numberToEnglishIntWords_(intOnly) + ' ONLY';
   }
 
   const totalCents = Math.round(num * 100);
@@ -1799,10 +3066,10 @@ function numberToEnglishCurrencyWords(amount, currencyCode) {
   if (fracPart > 0) {
     const subLabel = fracPart === 1 ? meta.subSingular : meta.subPlural;
     const fracWords = numberToEnglishIntWords_(fracPart);
-    return 'SAY: ' + mainLabel + ' ' + intWords + ' AND ' + fracWords + ' ' + subLabel + ' ONLY';
+    return mainLabel + ' ' + intWords + ' AND ' + fracWords + ' ' + subLabel + ' ONLY';
   }
 
-  return 'SAY: ' + mainLabel + ' ' + intWords + ' ONLY';
+  return mainLabel + ' ' + intWords + ' ONLY';
 }
 
 const VI_DIGITS_ = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
@@ -1874,6 +3141,54 @@ function numberToVietnameseWords(amount, unitSuffix) {
   return unitSuffix ? (capitalized + ' ' + unitSuffix) : capitalized;
 }
 
+function numberToVietnameseCurrencyWords(amount, currencyCode) {
+  const num = Number(amount);
+  if (isNaN(num) || num <= 0) return '';
+
+  const code = String(currencyCode || 'USD').trim().toUpperCase() || 'USD';
+  const viCurrMap = {
+    USD: { name: 'đô la Mỹ', sub: 'xu', hasCents: true },
+    VND: { name: 'đồng chẵn', sub: '', hasCents: false },
+    EUR: { name: 'euro', sub: 'xu', hasCents: true },
+    JPY: { name: 'yên Nhật', sub: '', hasCents: false },
+    CNY: { name: 'nhân dân tệ', sub: 'hào', hasCents: true },
+    RMB: { name: 'nhân dân tệ', sub: 'hào', hasCents: true },
+    GBP: { name: 'bảng Anh', sub: 'xu', hasCents: true },
+    SGD: { name: 'đô la Singapore', sub: 'xu', hasCents: true },
+    KRW: { name: 'won Hàn Quốc', sub: '', hasCents: false },
+    AED: { name: 'dirham UAE', sub: 'fils', hasCents: true },
+    AUD: { name: 'đô la Úc', sub: 'xu', hasCents: true },
+    BDT: { name: 'taka Bangladesh', sub: 'poisha', hasCents: true },
+    BRL: { name: 'real Brazil', sub: 'centavo', hasCents: true },
+    CAD: { name: 'đô la Canada', sub: 'xu', hasCents: true },
+    IDR: { name: 'rupiah Indonesia', sub: '', hasCents: false },
+    INR: { name: 'rupee Ấn Độ', sub: 'paisa', hasCents: true },
+    MYR: { name: 'ringgit Malaysia', sub: 'sen', hasCents: true },
+    PHP: { name: 'peso Philippines', sub: 'centavo', hasCents: true },
+    SAR: { name: 'riyal Ả Rập Xê Út', sub: 'halala', hasCents: true },
+    THB: { name: 'baht Thái Lan', sub: 'satang', hasCents: true },
+    TWD: { name: 'đô la Đài Loan', sub: 'xu', hasCents: true }
+  };
+
+  const meta = viCurrMap[code] || { name: code, sub: 'xu', hasCents: true };
+  if (!meta.hasCents) {
+    return numberToVietnameseWords(Math.round(num), meta.name);
+  }
+
+  const totalCents = Math.round(num * 100);
+  const intPart = Math.floor(totalCents / 100);
+  const fracPart = totalCents % 100;
+  const intText = intPart > 0 ? numberToVietnameseWords(intPart, meta.name) : '';
+
+  if (fracPart > 0 && meta.sub) {
+    const fracRaw = numberToVietnameseWords(fracPart, meta.sub);
+    const fracLower = fracRaw ? (fracRaw.charAt(0).toLowerCase() + fracRaw.slice(1)) : '';
+    return intText ? (intText + ' và ' + fracLower) : fracRaw;
+  }
+
+  return intText;
+}
+
 function generateTotalContainersText(containers) {
   const list = Array.isArray(containers) ? containers : [];
   const activeRows = list.filter(function (c) {
@@ -1930,7 +3245,7 @@ function recalculateAllTotals(syncDom, updateContainerCount, options) {
   const containers = APP_STATE.containers || [];
   const manualFlags = APP_STATE.manualFlags || {};
   const exRate = parseNum(APP_STATE.shared.EX_RATE);
-  const curr = String(APP_STATE.shared.CURR || '').trim();
+  const curr = getActiveCurrencyCode_();
 
   let totQty = 0;
   let totAmt = 0;
@@ -2067,10 +3382,16 @@ function recalculateAllTotals(syncDom, updateContainerCount, options) {
     : (totExTax > 0 || totFee > 0 || items.some(function (it) { return it.EX_VAL !== '' || it.EX_TAX_RATE !== '' || it.FEE_VAL !== '' || it.FEE_RATE !== ''; }));
 
   // Word conversions
-  const wordsTargetAmount =
-    (targetDocKey === 'QUOTATION' || targetDocKey === 'SALES_CONTRACT')
-      ? totAmt
-      : grandTotalNum;
+  const wordsVi = totAmt > 0 ? numberToVietnameseCurrencyWords(totAmt, curr) : '';
+  const wordsSc = totAmt > 0 ? numberToEnglishCurrencyWords(totAmt, curr) : '';
+  const wordsCi = grandTotalNum > 0 ? numberToEnglishCurrencyWords(grandTotalNum, curr) : '';
+
+  let activeAmtWords = wordsCi;
+  if (targetDocKey === 'QUOTATION') {
+    activeAmtWords = wordsVi;
+  } else if (targetDocKey === 'SALES_CONTRACT') {
+    activeAmtWords = wordsSc;
+  }
 
   const updates = {
     TOT_QTY: totQty > 0 ? formatNum(totQty, 3) : (items.length ? '0' : ''),
@@ -2079,7 +3400,10 @@ function recalculateAllTotals(syncDom, updateContainerCount, options) {
       ? formatNum(vatTotalNum, 2)
       : (totAmt > 0 ? '0' : ''),
     GRAND_TOTAL: grandTotalNum > 0 ? formatNum(grandTotalNum, 2) : (items.length ? '0' : ''),
-    TOT_AMT_WORDS: wordsTargetAmount > 0 ? numberToEnglishCurrencyWords(wordsTargetAmount, curr) : '',
+    TOT_AMT_WORDS: activeAmtWords,
+    TOT_AMT_WORDS_VI: wordsVi,
+    TOT_AMT_WORDS_SC: wordsSc,
+    TOT_AMT_WORDS_CI: wordsCi,
     TOT_PACK: totPack > 0 ? formatNum(totPack, 2) : '',
     TOT_NW: totNw > 0 ? formatNum(totNw, 3) : '',
     TOT_GW: totGw > 0 ? formatNum(totGw, 3) : '',
@@ -2120,5 +3444,9 @@ function recalculateAllTotals(syncDom, updateContainerCount, options) {
       APP_STATE.shared[k] = updates[k];
     }
   });
+
+  if (syncDom) {
+    updateCurrencyBadgesInDOM_();
+  }
 }
 </script>

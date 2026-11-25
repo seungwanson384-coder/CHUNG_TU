@@ -126,8 +126,8 @@ const DOC_FORM_CONFIGS = {
       { type: 'items', title: 'Danh mục hàng hóa báo giá', cols: ['PCODE', 'PROD', 'UNIT', 'PRICE', 'QTY', 'AMT'] }
     ],
     totals: [
-      { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
-      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true },
+      { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true, num: true },
+      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true, num: true, currUnit: 'DYNAMIC_CURR' },
       { key: 'TOT_AMT_WORDS', label: 'Tổng tiền bằng chữ', span: 3 }
     ]
   },
@@ -173,7 +173,7 @@ const DOC_FORM_CONFIGS = {
       { type: 'containers', title: 'Danh sách Container / Seal', cols: ['CONT', 'SEAL'] }
     ],
     totals: [
-      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true },
+      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true, num: true, currUnit: 'DYNAMIC_CURR' },
       { key: 'TOT_AMT_WORDS', label: 'Tổng tiền bằng chữ', span: 2 }
     ]
   },
@@ -191,8 +191,8 @@ const DOC_FORM_CONFIGS = {
           { key: 'INCOTERM_PLACE', label: 'Địa điểm giao hàng' },
           { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'combobox', source: 'PAY_TERM' },
           { key: 'CURR', label: 'Đồng tiền thanh toán', type: 'combobox', source: 'CURR' },
-          { key: 'VAT_GST', label: 'Thuế suất VAT' },
-          { key: 'VAT_TOTAL', label: 'Tiền thuế VAT', readonly: true }
+          { key: 'VAT_GST', label: 'Thuế suất VAT (%)', num: true },
+          { key: 'VAT_TOTAL', label: 'Tiền thuế VAT', readonly: true, num: true, currUnit: 'DYNAMIC_CURR' }
         ]
       }
     ],
@@ -200,8 +200,8 @@ const DOC_FORM_CONFIGS = {
       { type: 'items', title: 'Chi tiết hàng hóa hóa đơn', cols: ['PCODE', 'PROD', 'DES', 'QTY', 'PRICE', 'UNIT', 'AMT'] }
     ],
     totals: [
-      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true },
-      { key: 'GRAND_TOTAL', label: 'Tổng cộng thanh toán', readonly: true },
+      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true, num: true, currUnit: 'DYNAMIC_CURR' },
+      { key: 'GRAND_TOTAL', label: 'Tổng cộng thanh toán', readonly: true, num: true, currUnit: 'DYNAMIC_CURR' },
       { key: 'TOT_AMT_WORDS', label: 'Tổng tiền bằng chữ', span: 3 }
     ]
   },
@@ -352,6 +352,7 @@ const DOC_FORM_CONFIGS = {
         fields: [
           { key: 'PHYTO_CERT_NO', label: 'Số giấy chứng nhận kiểm dịch thực vật' },
           { key: 'PHYTO_CERT_DT', label: 'Ngày cấp', type: 'date' },
+          { key: 'BL_NO', label: 'Số vận đơn' },
           { key: 'PLANT_ORIGIN', label: 'Vùng trồng / Xuất xứ thực vật' },
           { key: 'DISINFESTATION_METHOD', label: 'Phương pháp khử trùng / xử lý' },
           { key: 'CHEMICAL_NAME', label: 'Tên hóa chất xử lý' }
@@ -389,6 +390,7 @@ const DOC_FORM_CONFIGS = {
         fields: [
           { key: 'FUM_CERT_NO', label: 'Số giấy chứng nhận hun trùng' },
           { key: 'FUM_CERT_DT', label: 'Ngày cấp', type: 'date' },
+          { key: 'BL_NO', label: 'Số vận đơn' },
           { key: 'FUM_CHEMICAL', label: 'Hóa chất hun trùng (Methyl Bromide...)' },
           { key: 'FUM_DOSAGE', label: 'Liều lượng sử dụng' },
           { key: 'FUM_EXPOSURE_TIME', label: 'Thời gian ủ thuốc (giờ)' },
@@ -516,7 +518,7 @@ const DOC_FORM_CONFIGS = {
       }
     ],
     tables: [
-      { type: 'containers', title: 'Chi tiết Container được cấp', cols: ['CONT', 'CTYPE', 'CSIZE'] }
+      { type: 'containers', title: 'Chi tiết Container được cấp', cols: ['CONT', 'SEAL', 'CTYPE', 'CSIZE'] }
     ]
   },
 
@@ -594,6 +596,7 @@ const DOC_FORM_CONFIGS = {
           { key: 'DEC_NO', label: 'Số tờ khai' },
           { key: 'REG_DTM', label: 'Ngày đăng ký' },
           { key: 'DEC_TYPE', label: 'Mã loại hình xuất khẩu', type: 'combobox', source: 'XNK_XK' },
+          { key: 'INSPECTION_CODE', label: 'Mã phân luồng Hải quan', type: 'combobox', source: 'INSPECTION_CODE' },
           { key: 'LIC_NO', label: 'Số giấy phép' },
           { key: 'LIC_DT', label: 'Ngày giấy phép', type: 'date' },
           { key: 'LIC_EXP', label: 'Ngày hết hạn giấy phép', type: 'date' },
@@ -610,7 +613,7 @@ const DOC_FORM_CONFIGS = {
           { key: 'INCOTERM', label: 'Điều kiện giao hàng', type: 'combobox', source: 'INCOTERM' },
           { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'combobox', source: 'PAY_TERM' },
           { key: 'CURR', label: 'Đồng tiền thanh toán', type: 'combobox', source: 'CURR' },
-          { key: 'EX_RATE', label: 'Tỷ giá tính thuế' }
+          { key: 'EX_RATE', label: 'Tỷ giá tính thuế', num: true }
         ]
       }
     ],
@@ -620,9 +623,9 @@ const DOC_FORM_CONFIGS = {
       { type: 'containers', title: 'Danh sách Container', cols: ['CONT', 'PACK', 'GW'] }
     ],
     totals: [
-      { key: 'TOT_EX_TAX', label: 'Tổng thuế xuất khẩu', readonly: true },
-      { key: 'TOT_FEE', label: 'Tổng lệ phí', readonly: true },
-      { key: 'TOT_TAX', label: 'Tổng tiền thuế', readonly: true },
+      { key: 'TOT_EX_TAX', label: 'Tổng thuế xuất khẩu', readonly: true, num: true, currUnit: 'VND' },
+      { key: 'TOT_FEE', label: 'Tổng lệ phí', readonly: true, num: true, currUnit: 'VND' },
+      { key: 'TOT_TAX', label: 'Tổng tiền thuế', readonly: true, num: true, currUnit: 'VND' },
       { key: 'TOT_TAX_WORDS', label: 'Tổng tiền thuế bằng chữ', span: 3 }
     ]
   },
@@ -641,6 +644,7 @@ const DOC_FORM_CONFIGS = {
           { key: 'DEC_NO', label: 'Số tờ khai' },
           { key: 'REG_DTM', label: 'Ngày đăng ký' },
           { key: 'DEC_TYPE', label: 'Mã loại hình nhập khẩu', type: 'combobox', source: 'XNK_NK' },
+          { key: 'INSPECTION_CODE', label: 'Mã phân luồng Hải quan', type: 'combobox', source: 'INSPECTION_CODE' },
           { key: 'LIC_NO', label: 'Số giấy phép' },
           { key: 'LIC_DT', label: 'Ngày giấy phép', type: 'date' },
           { key: 'LIC_EXP', label: 'Ngày hết hạn giấy phép', type: 'date' },
@@ -662,24 +666,24 @@ const DOC_FORM_CONFIGS = {
           { key: 'INCOTERM', label: 'Điều kiện giao hàng', type: 'combobox', source: 'INCOTERM' },
           { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'combobox', source: 'PAY_TERM' },
           { key: 'CURR', label: 'Đồng tiền thanh toán', type: 'combobox', source: 'CURR' },
-          { key: 'EX_RATE', label: 'Tỷ giá tính thuế' }
+          { key: 'EX_RATE', label: 'Tỷ giá tính thuế', num: true }
         ]
       },
       {
         title: 'Tính thuế Nhập khẩu, TTĐB, BVMT & GTGT',
         fields: [
-          { key: 'IM_VAL', label: 'Trị giá tính thuế NK' },
-          { key: 'IM_RATE', label: 'Thuế suất NK' },
-          { key: 'IM_AMT', label: 'Tiền thuế NK', readonly: true },
-          { key: 'SCT_VAL', label: 'Trị giá tính thuế TTĐB' },
-          { key: 'SCT_RATE', label: 'Thuế suất TTĐB' },
-          { key: 'SCT_AMT', label: 'Tiền thuế TTĐB', readonly: true },
-          { key: 'EPT_VAL', label: 'Trị giá tính thuế BVMT' },
-          { key: 'EPT_RATE', label: 'Thuế suất BVMT' },
-          { key: 'EPT_AMT', label: 'Tiền thuế BVMT', readonly: true },
-          { key: 'VAT_VAL', label: 'Trị giá tính thuế VAT' },
-          { key: 'VAT_RATE', label: 'Thuế suất VAT' },
-          { key: 'VAT_AMT', label: 'Tiền thuế VAT', readonly: true }
+          { key: 'IM_VAL', label: 'Trị giá tính thuế NK', num: true },
+          { key: 'IM_RATE', label: 'Thuế suất NK (%)', num: true },
+          { key: 'IM_AMT', label: 'Tiền thuế NK', readonly: true, num: true },
+          { key: 'SCT_VAL', label: 'Trị giá tính thuế TTĐB', num: true },
+          { key: 'SCT_RATE', label: 'Thuế suất TTĐB (%)', num: true },
+          { key: 'SCT_AMT', label: 'Tiền thuế TTĐB', readonly: true, num: true },
+          { key: 'EPT_VAL', label: 'Trị giá tính thuế BVMT', num: true },
+          { key: 'EPT_RATE', label: 'Thuế suất BVMT (%)', num: true },
+          { key: 'EPT_AMT', label: 'Tiền thuế BVMT', readonly: true, num: true },
+          { key: 'VAT_VAL', label: 'Trị giá tính thuế VAT', num: true },
+          { key: 'VAT_RATE', label: 'Thuế suất VAT (%)', num: true },
+          { key: 'VAT_AMT', label: 'Tiền thuế VAT', readonly: true, num: true }
         ]
       }
     ],
@@ -688,7 +692,7 @@ const DOC_FORM_CONFIGS = {
       { type: 'containers', title: 'Danh sách Container', cols: ['CONT', 'PACK', 'GW'] }
     ],
     totals: [
-      { key: 'TOT_TAX', label: 'Tổng tiền thuế', readonly: true },
+      { key: 'TOT_TAX', label: 'Tổng tiền thuế', readonly: true, num: true, currUnit: 'VND' },
       { key: 'TOT_TAX_WORDS', label: 'Tổng tiền thuế bằng chữ', span: 3 }
     ]
   },
@@ -709,8 +713,8 @@ const DOC_FORM_CONFIGS = {
           { key: 'INCOTERM_PLACE', label: 'Địa điểm giao hàng' },
           { key: 'CURR', label: 'Đồng tiền thanh toán', type: 'combobox', source: 'CURR' },
           { key: 'INS_TERM', label: 'Điều kiện bảo hiểm', type: 'combobox', source: 'INSURANCE_TERM' },
-          { key: 'FREIGHT_AMT', label: 'Cước phí' },
-          { key: 'INS_AMT', label: 'Phí bảo hiểm' }
+          { key: 'FREIGHT_AMT', label: 'Cước phí', num: true },
+          { key: 'INS_AMT', label: 'Phí bảo hiểm', num: true }
         ]
       }
     ],
@@ -751,6 +755,17 @@ function getComboboxOptionsForSource(source) {
       const name = String(r.Ten_loai_hinh || r.ten || r.name || '').trim();
       return code && name ? (code + ' - ' + name) : (code || name);
     }).filter(Boolean);
+  }
+
+  if (key === 'CURR') {
+    if (typeof getSmartCurrencyOptions_ === 'function') {
+      return getSmartCurrencyOptions_();
+    }
+    return Array.isArray(dm.CURR) ? dm.CURR : [];
+  }
+
+  if (key === 'INSPECTION_CODE') {
+    return ['1 - Luồng Xanh', '2 - Luồng Vàng', '3 - Luồng Đỏ'];
   }
 
   if (key === 'TOTAL_CONTAINERS_TEXT') {
@@ -803,7 +818,13 @@ function renderAllFormViews() {
   container.innerHTML = html;
 
   initCustomComboboxSystem();
+  if (typeof refreshCurrencyDropdownSuggestions_ === 'function') {
+    refreshCurrencyDropdownSuggestions_();
+  }
   syncAllStateValuesToDOM();
+  if (typeof updateFieldAndTableLocksInDOM_ === 'function') {
+    updateFieldAndTableLocksInDOM_();
+  }
   validateContainerInputsInDOM();
   renderBatchExportChecklist();
 
@@ -909,17 +930,19 @@ function buildPanelHtml(docKey, cfg) {
   html += '</div>';
   if (!cfg.isMaster) {
     html += '<div class="doc-panel-actions">';
-    html += '<button type="button" class="btn btn-secondary" onclick="handlePreviewDocument(\'' + docKey + '\')">Review Document</button>';
-    html += '<button type="button" class="btn btn-primary" onclick="handleExportSingle(\'' + docKey + '\')">Export This Document</button>';
+    html += '<button type="button" class="btn btn-secondary" data-action-preview="true" onclick="handlePreviewDocument(\'' + docKey + '\')">Review Document</button>';
+    html += '<button type="button" class="btn btn-primary" data-action-export="true" onclick="handleExportSingle(\'' + docKey + '\')">Export This Document</button>';
+    html += '</div>';
+  } else {
+    html += '<div class="doc-panel-actions">';
+    html += '<button type="button" class="btn-guide-prominent" onclick="openGuideModal()">HƯỚNG DẪN &amp; LƯU Ý</button>';
     html += '</div>';
   }
   html += '</div>';
 
   if (!cfg.isMaster) {
-    const ship = String(APP_STATE.shared.SHIP_NAME || '').trim() || 'Chưa nhập Người xuất khẩu';
-    const cne = String(APP_STATE.shared.CNE_NAME || '').trim() || 'Chưa nhập Người nhập khẩu';
     html += '<div class="context-banner">';
-    html += '<div class="context-banner-parties"><strong>' + escapeHtml(ship) + '</strong> &#10132; <strong>' + escapeHtml(cne) + '</strong></div>';
+    html += '<button type="button" class="btn-guide-prominent" onclick="openGuideModal()">HƯỚNG DẪN &amp; LƯU Ý</button>';
     html += '<button type="button" class="context-banner-link" onclick="switchTab(\'MASTER_PARTIES\')">Sửa Thông tin chung</button>';
     html += '</div>';
   }
@@ -941,18 +964,31 @@ function buildPanelHtml(docKey, cfg) {
 
   (cfg.tables || []).forEach(function (tbl) {
     const logicalType = tbl.type === 'tax' ? 'items' : tbl.type;
+    const isContainerTable = logicalType === 'containers';
+    const isContLocked = isContainerTable && docKey === 'SALES_CONTRACT';
+    const showLookupBtn = isContainerTable && !isContLocked;
+
     html += '<div class="card form-card table-card dynamic-table-wrapper">';
     html += '<div class="card-header table-card-header">';
     html += '<div><h3 class="card-title">' + escapeHtml(tbl.title) + '</h3></div>';
     if (logicalType === 'items') {
       html += '<button type="button" class="btn btn-table-add btn-sm btn-add-row" onclick="addItemRow()">+ Thêm sản phẩm</button>';
     } else {
-      html += '<button type="button" class="btn btn-table-add btn-sm btn-add-row" onclick="addContainerRow()">+ Thêm Container</button>';
+      html += '<div class="table-header-actions">';
+      if (showLookupBtn) {
+        html += '<button type="button" class="btn btn-lookup-cont btn-sm" onclick="openContSealLookupModal(\'' + docKey + '\', 0)">&#128269; Tra cứu mã Cont / Seal</button>';
+      }
+      if (isContLocked) {
+        html += '<span class="lock-stage-badge lock-stage-badge-inline">&#128274; Mở khóa tại Lệnh cấp Container rỗng</span>';
+      } else {
+        html += '<button type="button" class="btn btn-table-add btn-sm btn-add-row" onclick="addContainerRow()">+ Thêm Container</button>';
+      }
+      html += '</div>';
     }
     html += '</div>';
     html += '<div class="card-body table-card-body" style="padding:12px;">';
-    html += '<div class="table-scroll" data-synced-table="' + tbl.type + '" data-table-cols="' + tbl.cols.join(',') + '">';
-    html += buildTableHtml(tbl.type, tbl.cols);
+    html += '<div class="table-scroll" data-synced-table="' + tbl.type + '" data-doc-key="' + docKey + '" data-table-cols="' + tbl.cols.join(',') + '">';
+    html += buildTableHtml(tbl.type, tbl.cols, docKey);
     html += '</div></div></div>';
   });
 
@@ -970,12 +1006,35 @@ function buildPanelHtml(docKey, cfg) {
   return html;
 }
 
+function getFieldLockInfo_(docKey, fieldKey) {
+  if (docKey === 'SALES_CONTRACT' && (fieldKey === 'BK_NO' || fieldKey === 'VESSEL' || fieldKey === 'VOYAGE')) {
+    return {
+      locked: true,
+      badge: 'Mở khóa tại giai đoạn Booking'
+    };
+  }
+  if ((docKey === 'PHYTOSANITARY_CERTIFICATE' || docKey === 'FUMIGATION_CERTIFICATE') && fieldKey === 'BL_NO') {
+    const blUnlocked = typeof isBillOfLadingReached_ === 'function' ? isBillOfLadingReached_() : false;
+    if (!blUnlocked) {
+      return {
+        locked: true,
+        badge: 'Mở khóa khi phát hành Bill of Lading'
+      };
+    }
+  }
+  return { locked: false, badge: '' };
+}
+
 function buildFieldHtml(docKey, field) {
   const spanClass = field.span === 'full'
     ? ' span-full'
     : (field.span === 4 ? ' span-4' : (field.span === 3 ? ' span-3' : (field.span === 2 ? ' span-2' : '')));
   const id = 'field_' + docKey + '_' + field.key;
-  const roAttr = field.readonly ? ' readonly' : '';
+  const lockInfo = getFieldLockInfo_(docKey, field.key);
+  const isLocked = lockInfo.locked;
+  const roAttr = (field.readonly || isLocked) ? ' readonly' : '';
+  const disabledAttr = isLocked ? ' disabled' : '';
+  const lockedCls = isLocked ? ' field-locked-input' : '';
 
   if (field.type === 'checkbox') {
     let html = '<div class="form-group' + spanClass + '">';
@@ -989,37 +1048,65 @@ function buildFieldHtml(docKey, field) {
     return html;
   }
 
-  let html = '<div class="form-group' + spanClass + '">';
+  let html = '<div class="form-group' + spanClass + '" data-field-wrap="' + docKey + '_' + escapeHtml(field.key) + '">';
   html += '<label class="form-label" for="' + id + '">' + escapeHtml(field.label) + '</label>';
 
+  const numAttr = field.num ? ' data-num="true" inputmode="decimal"' : '';
+
   if (field.type === 'combobox' || field.type === 'select') {
-    html += '<input id="' + id + '" type="text" class="form-control form-combobox" data-sync="' + escapeHtml(field.key) + '" data-combo="' + escapeHtml(field.source || '') + '" placeholder="Chọn hoặc nhập..." autocomplete="off"' + roAttr + ' />';
+    html += '<input id="' + id + '" type="text" class="form-control form-combobox' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '" data-combo="' + escapeHtml(field.source || '') + '" placeholder="Chọn hoặc nhập..." autocomplete="off"' + roAttr + disabledAttr + numAttr + ' />';
   } else if (field.type === 'textarea') {
-    html += '<textarea id="' + id + '" class="form-control" data-sync="' + escapeHtml(field.key) + '"' + roAttr + '></textarea>';
+    html += '<textarea id="' + id + '" class="form-control' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '"' + roAttr + disabledAttr + '></textarea>';
   } else {
     const inputType = field.type === 'date' ? 'date' : 'text';
-    html += '<input id="' + id + '" type="' + inputType + '" class="form-control" data-sync="' + escapeHtml(field.key) + '"' + roAttr + ' />';
+    const inputElHtml = '<input id="' + id + '" type="' + inputType + '" class="form-control' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '"' + roAttr + disabledAttr + numAttr + ' />';
+    if (field.currUnit) {
+      const badgeLabel = field.currUnit === 'VND' ? 'VND' : (typeof getActiveCurrencyCode_ === 'function' ? getActiveCurrencyCode_() : 'USD');
+      const badgeAttr = field.currUnit === 'VND' ? 'VND' : 'DYNAMIC';
+      html += '<div class="input-with-unit">' + inputElHtml + '<span class="currency-unit-badge" data-curr-badge="' + badgeAttr + '">' + escapeHtml(badgeLabel) + '</span></div>';
+    } else {
+      html += inputElHtml;
+    }
+  }
+
+  if (isLocked && lockInfo.badge) {
+    html += '<span class="lock-stage-badge" data-lock-badge="true">&#128274; ' + escapeHtml(lockInfo.badge) + '</span>';
   }
 
   html += '</div>';
   return html;
 }
 
-function buildTableHtml(tableMode, cols) {
+function buildTableHtml(tableMode, cols, docKey) {
   const isContainer = tableMode === 'containers';
   const rows = isContainer ? APP_STATE.containers : APP_STATE.items;
   const colMetaMap = isContainer ? CONT_COLUMNS : (tableMode === 'tax' ? TAX_COLUMNS : ITEM_COLUMNS);
   const logicalType = isContainer ? 'containers' : 'items';
+  const isSalesContractContLocked = isContainer && docKey === 'SALES_CONTRACT';
+  const isSealLockedInReleaseOrder = isContainer && docKey === 'RELEASE_ORDER';
 
   if (!rows || rows.length === 0) {
     return '<div class="empty-table-note">Chưa có dòng dữ liệu. Bấm nút thêm dòng ở góc trên bên phải nếu cần.</div>';
   }
 
-  let html = '<table class="data-table"><thead><tr>';
+  const contValidation = isContainer && typeof validateContainerAndSealRows === 'function'
+    ? validateContainerAndSealRows(docKey || '')
+    : null;
+
+  let html = '';
+  if (isSalesContractContLocked) {
+    html += '<div class="table-locked-banner">&#128274; Mở khóa tại Lệnh cấp Container rỗng — Dữ liệu Container / Seal sẽ tự động đồng bộ từ các chứng từ vận tải sau khi cấp Container.</div>';
+  }
+
+  html += '<table class="data-table"><thead><tr>';
   html += '<th style="width:46px; text-align:center;">STT</th>';
   cols.forEach(function (colKey) {
     const meta = colMetaMap[colKey] || { label: colKey, width: '100px' };
-    html += '<th style="min-width:' + meta.width + '; text-align:center;">' + escapeHtml(meta.label) + '</th>';
+    let extraHeader = '';
+    if (isSealLockedInReleaseOrder && colKey === 'SEAL') {
+      extraHeader = ' <span title="Mở khóa tại Packing List">&#128274;</span>';
+    }
+    html += '<th style="min-width:' + meta.width + '; text-align:center;">' + escapeHtml(meta.label) + extraHeader + '</th>';
   });
   html += '<th style="width:44px; text-align:center;">Xóa</th>';
   html += '</tr></thead><tbody>';
@@ -1031,20 +1118,37 @@ function buildTableHtml(tableMode, cols) {
     cols.forEach(function (colKey) {
       const meta = colMetaMap[colKey] || { label: colKey };
       const val = rowObj[colKey] == null ? '' : String(rowObj[colKey]);
-      const roAttr = meta.readonly ? ' readonly' : '';
+      const colLocked = isSalesContractContLocked || (isSealLockedInReleaseOrder && colKey === 'SEAL');
+      const roAttr = (meta.readonly || colLocked) ? ' readonly' : '';
+      const disabledAttr = colLocked ? ' disabled' : '';
+      const lockedCls = colLocked ? ' table-input-locked' : '';
+      const numAttr = meta.num ? ' data-num="true" inputmode="decimal"' : '';
       const numClass = meta.num ? ' num' : ((colKey === 'PROD' || colKey === 'DES') ? ' wide' : '');
+
+      let errMsg = '';
+      if (!colLocked && contValidation && contValidation.rowErrors && contValidation.rowErrors[idx]) {
+        errMsg = contValidation.rowErrors[idx][colKey] || '';
+      }
+      const invalidClass = errMsg ? ' input-invalid' : '';
 
       html += '<td>';
       if (meta.dropdown) {
-        html += '<input type="text" class="table-input" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '" data-combo="' + escapeHtml(meta.dropdown) + '" placeholder="Chọn hoặc nhập..." autocomplete="off"' + roAttr + ' />';
+        html += '<input type="text" class="table-input' + invalidClass + lockedCls + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-doc-key="' + escapeHtml(docKey || '') + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '" data-combo="' + escapeHtml(meta.dropdown) + '" placeholder="Chọn hoặc nhập..." autocomplete="off"' + roAttr + disabledAttr + numAttr + ' />';
       } else {
-        html += '<input type="text" class="table-input' + numClass + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '"' + roAttr + ' />';
+        html += '<input type="text" class="table-input' + numClass + invalidClass + lockedCls + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-doc-key="' + escapeHtml(docKey || '') + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '"' + roAttr + disabledAttr + numAttr + ' />';
+      }
+      if (isSealLockedInReleaseOrder && colKey === 'SEAL') {
+        html += '<div class="lock-stage-badge">&#128274; Mở khóa tại Packing List</div>';
+      }
+      if (isContainer && (colKey === 'CONT' || colKey === 'SEAL')) {
+        html += '<div class="cell-error-msg' + (errMsg ? '' : ' hidden') + '" data-err-type="containers" data-row-idx="' + idx + '" data-col-key="' + colKey + '">' + escapeHtml(errMsg) + '</div>';
       }
       html += '</td>';
     });
 
     const delHandler = isContainer ? 'deleteContainerRow(' + idx + ')' : 'deleteItemRow(' + idx + ')';
-    html += '<td style="text-align:center;"><button type="button" class="btn-del-row" title="Xóa dòng" onclick="' + delHandler + '">&times;</button></td>';
+    const delDisabled = isSalesContractContLocked ? ' disabled' : '';
+    html += '<td style="text-align:center;"><button type="button" class="btn-del-row" title="Xóa dòng" onclick="' + delHandler + '"' + delDisabled + '>&times;</button></td>';
     html += '</tr>';
   });
 
@@ -1059,8 +1163,9 @@ function rerenderAllSyncedTables(logicalType) {
 
   document.querySelectorAll(selector).forEach(function (wrapper) {
     const tableMode = wrapper.getAttribute('data-synced-table');
+    const docKey = wrapper.getAttribute('data-doc-key') || '';
     const cols = (wrapper.getAttribute('data-table-cols') || '').split(',').filter(Boolean);
-    wrapper.innerHTML = buildTableHtml(tableMode, cols);
+    wrapper.innerHTML = buildTableHtml(tableMode, cols, docKey);
   });
 
   if (typeof initCustomComboboxSystem === 'function') {

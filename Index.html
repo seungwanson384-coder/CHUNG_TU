@@ -20,6 +20,82 @@
   <!-- Main Workspace Forms + Batch Export Modal + Confirmation Modal -->
   <?!= include('View_Document_Forms'); ?>
 
+  <!-- Student Operation Guide & Notes Modal -->
+  <div id="guideModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="guideModalTitle">
+    <div class="modal-card guide-modal-card">
+      <div class="modal-header-bar">
+        <h3 id="guideModalTitle" class="modal-header-title">HƯỚNG DẪN &amp; LƯU Ý THAO TÁC DÀNH CHO SINH VIÊN:</h3>
+        <button type="button" class="modal-close-x" onclick="closeGuideModal()" aria-label="Đóng">&times;</button>
+      </div>
+      <div class="modal-body-pad">
+        <ul class="guide-list">
+          <li>1. Dữ liệu dùng chung sẽ tự động đồng bộ xuyên suốt và sẽ tự cập nhật lại nếu sửa ở bất kỳ chứng từ liên quan nào.</li>
+          <li>2. Quy tắc định dạng số &amp; Mã số: Nhập số tiền, số lượng, trọng lượng theo chuẩn 1,000.00 (dấu phẩy ngăn cách hàng nghìn, dấu chấm thập phân).</li>
+          <li>3. Quy tắc Container &amp; Seal: Số Container chuẩn ISO 6346 (4 chữ + 7 số, đúng số kiểm tra) và số Seal gồm <strong>6–12 ký tự</strong> chữ in hoa/số (không trùng). Seal hãng tàu bắt buộc từ bước <strong>Packing List</strong> trở đi; Seal Hải quan chỉ dùng khi hàng kiểm hóa <strong>Luồng đỏ</strong> hoặc chuyển cửa khẩu.</li>
+          <li>4. Kiểm tra &amp; Lưu trữ: Bấm Review Document để xem trước định dạng thực tế trên mẫu gốc trước khi xuất.</li>
+          <li>5. Nhớ bấm Lưu nháp trước khi thoát để lưu lại tiến độ bài làm.</li>
+        </ul>
+      </div>
+      <div class="modal-footer-bar">
+        <button type="button" class="btn btn-primary" onclick="closeGuideModal()">OK, Đã hiểu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Container / Seal Prefix Lookup Modal -->
+  <div id="contSealLookupModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="contSealLookupTitle">
+    <div class="modal-card lookup-modal-card">
+      <div class="modal-header-bar">
+        <h3 id="contSealLookupTitle" class="modal-header-title">&#128269; Tra cứu mã Chủ sở hữu Container &amp; Số Seal</h3>
+        <button type="button" class="modal-close-x" onclick="closeContSealLookupModal()" aria-label="Đóng">&times;</button>
+      </div>
+      <div class="modal-body-pad">
+        <div class="lookup-toolbar">
+          <div class="lookup-search-wrap">
+            <label class="form-label" for="contSealSearchInput">Tìm kiếm hãng tàu / cơ quan Hải quan / mã tiền tố</label>
+            <input
+              id="contSealSearchInput"
+              type="text"
+              class="form-control"
+              placeholder="Nhập tên hãng tàu, MSC, MAERSK, ONE, HQ..."
+              oninput="renderContSealLookupRows_()"
+            />
+          </div>
+          <div class="lookup-row-select-wrap">
+            <label class="form-label" for="contSealTargetRowSelect">Dòng Container áp dụng</label>
+            <select id="contSealTargetRowSelect" class="form-control"></select>
+          </div>
+        </div>
+
+        <div class="lookup-filter-bar">
+          <label class="checkbox-field-wrap lookup-red-toggle" for="contSealRedChannelToggle">
+            <input id="contSealRedChannelToggle" type="checkbox" onchange="renderContSealLookupRows_()" />
+            <span class="checkbox-field-text">Hàng kiểm hóa (Luồng đỏ) — Hiện mã Seal Hải quan</span>
+          </label>
+          <div id="contSealModalContextNote" class="lookup-context-note"></div>
+        </div>
+
+        <div class="table-scroll lookup-table-scroll">
+          <table class="data-table lookup-data-table">
+            <thead>
+              <tr>
+                <th style="width:46px;">STT</th>
+                <th style="min-width:190px;">Hãng tàu / Đơn vị</th>
+                <th style="min-width:210px;">Mã chủ sở hữu Cont (Col K)</th>
+                <th style="min-width:170px;">Mã tiền tố Seal (Col L)</th>
+                <th style="width:110px;">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="contSealLookupTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer-bar">
+        <button type="button" class="btn btn-secondary" onclick="closeContSealLookupModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 

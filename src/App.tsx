@@ -40,7 +40,7 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'Code.gs',
     gasType: 'gs',
     category: 'Backend (.gs)',
-    description: 'Updated system title & INSURANCE_TERM (Column J) dropdown reader',
+    description: '20-currency Col F reader, Col K/L Container/Seal prefix lookup & system branding',
     content: codeGs,
   });
   byId.set('Index.html', {
@@ -48,7 +48,7 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'Index.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Updated page title, logo favicon & Base64 auto-injection hook',
+    description: 'Container/Seal prefix lookup modal with Red-Channel filter & updated Seal guide (6–12 chars)',
     content: indexHtml,
   });
   byId.set('View_Login_Sidebar.html', {
@@ -56,7 +56,7 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'View_Login_Sidebar.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Login screen, unclipped .brand-logo-circle & collapsible sidebar accordion groups',
+    description: 'Progressive 21-step locked sidebar navigation & Admin "Mở khóa tất cả" toggle',
     content: viewLoginSidebarHtml,
   });
   byId.set('JS_Render_Forms.html', {
@@ -64,7 +64,7 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'JS_Render_Forms.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Cleaned summary blocks, computed fields & sequential STT table renderer',
+    description: 'Strict CURR vs UNIT separation, milestone field/table locks, Inspection Code & Cont/Seal lookup button',
     content: jsRenderFormsHtml,
   });
   byId.set('JS_App_State.html', {
@@ -72,7 +72,7 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'JS_App_State.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Sidebar accordion toggles, EN/VI number-to-words & real-time XK/NK tax engine',
+    description: '21-step locking engine, destination-smart CURR, 6–12 Seal & milestone rules, EN/VI words (no SAY:)',
     content: jsAppStateHtml,
   });
   byId.set('CSS_Style.html', {
@@ -80,7 +80,7 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'CSS_Style.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Unclipped circular logo styles & collapsible sidebar group header pills',
+    description: 'Locked step/field/table badges, lookup modal styling & fixed Preview modal header/loading box',
     content: cssStyleHtml,
   });
   byId.set('GS_Doc_Engine.gs', {
@@ -88,7 +88,7 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'GS_Doc_Engine.gs',
     gasType: 'gs',
     category: 'Backend (.gs)',
-    description: 'Google Docs engine with automatic sequential STT (1..N) row numbering',
+    description: 'Per-doc language-accurate TOT_AMT_WORDS (VI for Báo giá, EN+ONLY for SC/CI, no SAY:)',
     content: gsDocEngineGs,
   });
 

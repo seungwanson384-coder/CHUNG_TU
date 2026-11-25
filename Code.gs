@@ -466,6 +466,51 @@ function reindexDanhSachSv_(sheet) {
   SpreadsheetApp.flush();
 }
 
+function adminClearAllStudentsDrafts(adminMaSV) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    if (!verifyAdmin_(adminMaSV)) {
+      return { success: false, message: 'Quyền quản trị viên bị từ chối.' };
+    }
+
+    const ss = getAppSpreadsheet_();
+    const sheet = ss.getSheetByName('Danh_sach_SV');
+    if (!sheet) {
+      return { success: false, message: 'Không tìm thấy sheet "Danh_sach_SV".' };
+    }
+
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastRow < 2 || lastCol < 4) {
+      return { success: true, clearedCount: 0 };
+    }
+
+    const values = sheet.getRange(1, 1, lastRow, lastCol).getDisplayValues();
+    const colIdx = resolveColumnIndices_(values[0], { STT: 0, Ma_SV: 1, Ten_SV: 2, Vai_Tro: 3, Draft_JSON: 4 });
+    const draftColNumber = colIdx.Draft_JSON + 1;
+    let clearedCount = 0;
+
+    for (let r = 1; r < values.length; r++) {
+      const role = String(values[r][colIdx.Vai_Tro] || '').trim().toUpperCase();
+      if (role === 'ADMIN') continue;
+      const cell = sheet.getRange(r + 1, draftColNumber);
+      cell.setValue('');
+      clearedCount++;
+    }
+
+    SpreadsheetApp.flush();
+    return {
+      success: true,
+      clearedCount: clearedCount
+    };
+  } catch (err) {
+    return { success: false, message: 'Lỗi xóa dữ liệu nháp sinh viên: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function getInitialDropdownData() {
   try {
     const ss = getAppSpreadsheet_();
@@ -515,15 +560,20 @@ function getInitialDropdownData() {
       'CO_FORM',
       'CO_CRITERIA',
       'TRADE_AGREEMENT',
-      'INSURANCE_TERM'
+      'INSURANCE_TERM',
+      'MA_CHU_SO_HUU_CONT',
+      'MA_SEAL'
     ]);
+
+    const contSealList = readContSealPairs_(ss, 'Danh_Muc_chung');
 
     return {
       success: true,
       logoDataUrl: getBrandLogoBase64(),
       cuocTau: cuocTau,
       loaiHinhXNK: loaiHinhXNK,
-      danhMucChung: danhMucChung
+      danhMucChung: danhMucChung,
+      contSealList: contSealList
     };
   } catch (err) {
     return {
@@ -712,3 +762,41 @@ function readIndependentColumns_(ss, sheetName, expectedColumns) {
 
   return output;
 }
+
+function readContSealPairs_(ss, sheetName) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return [];
+
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 11) return [];
+
+  const values = sheet.getRange(1, 1, lastRow, lastCol).getDisplayValues();
+  const colIdx = resolveColumnIndices_(values[0], {
+    MA_CHU_SO_HUU_CONT: 10,
+    MA_SEAL: 11
+  });
+
+  const ownerIdx = colIdx.MA_CHU_SO_HUU_CONT;
+  const sealIdx = colIdx.MA_SEAL;
+  const pairs = [];
+  const seen = {};
+
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    const owner = ownerIdx < row.length ? String(row[ownerIdx] || '').trim() : '';
+    const seal = sealIdx < row.length ? String(row[sealIdx] || '').trim() : '';
+    if (!owner && !seal) continue;
+    const dedupKey = owner + '||' + seal;
+    if (!seen[dedupKey]) {
+      seen[dedupKey] = true;
+      pairs.push({
+        owner: owner,
+        seal: seal
+      });
+    }
+  }
+
+  return pairs;
+}
+

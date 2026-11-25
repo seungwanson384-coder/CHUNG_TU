@@ -815,11 +815,20 @@ function populateSttCell_(cell, seqNumber) {
 }
 
 function replaceGlobalTags(sections, shared, docKey) {
-  const keys = Object.keys(shared).sort(function (a, b) {
+  const effectiveShared = Object.assign({}, shared);
+  if (docKey === 'QUOTATION' && effectiveShared.TOT_AMT_WORDS_VI) {
+    effectiveShared.TOT_AMT_WORDS = effectiveShared.TOT_AMT_WORDS_VI;
+  } else if (docKey === 'SALES_CONTRACT' && effectiveShared.TOT_AMT_WORDS_SC) {
+    effectiveShared.TOT_AMT_WORDS = effectiveShared.TOT_AMT_WORDS_SC;
+  } else if (docKey === 'COMMERCIAL_INVOICE' && effectiveShared.TOT_AMT_WORDS_CI) {
+    effectiveShared.TOT_AMT_WORDS = effectiveShared.TOT_AMT_WORDS_CI;
+  }
+
+  const keys = Object.keys(effectiveShared).sort(function (a, b) {
     return b.length - a.length;
   });
 
-  const coFormVal = String(shared.CO_FORM_NAME || '').trim();
+  const coFormVal = String(effectiveShared.CO_FORM_NAME || '').trim();
   const coFormNoPrefix = coFormVal.replace(/^[Ff][Oo][Rr][Mm]\s+/, '').trim();
   const hasFormPrefix = coFormNoPrefix !== '' && /^[Ff][Oo][Rr][Mm]\s+/.test(coFormVal);
 
@@ -831,7 +840,7 @@ function replaceGlobalTags(sections, shared, docKey) {
 
     for (let k = 0; k < keys.length; k++) {
       const key = keys[k];
-      const rawVal = shared[key];
+      const rawVal = effectiveShared[key];
       let strVal = rawVal == null ? '' : String(rawVal);
       if (key === 'CO_FORM_NAME' && docKey === 'SALES_CONTRACT' && hasFormPrefix) {
         strVal = coFormNoPrefix;
@@ -840,7 +849,7 @@ function replaceGlobalTags(sections, shared, docKey) {
     }
 
     if (docKey === 'SALES_CONTRACT') {
-      section.replaceText('[Ff][Oo][Rr][Mm]\\s+[Ff][Oo][Rr][Mm]\\b', 'Form');
+      section.replaceText('[Ff][Oo][Rr][Mm]\\s+[Ff][Oo][Rr][Mm]', 'Form');
     }
   }
 }
@@ -955,9 +964,29 @@ function buildEnrichedShared_(payload) {
     shared[cbKey] = normalizeCheckboxSymbol_(shared[cbKey]);
   });
 
-  ['INS_TERM', 'CO_FORM_NAME', 'CTYPE', 'UNIT', 'TOT_UNIT'].forEach(function (codeKey) {
+  ['INS_TERM', 'CO_FORM_NAME', 'CTYPE', 'UNIT', 'TOT_UNIT', 'CURR'].forEach(function (codeKey) {
     if (shared[codeKey] != null && String(shared[codeKey]).trim() !== '') {
       shared[codeKey] = extractConciseCode_(shared[codeKey], codeKey);
+    }
+  });
+
+  if (!shared.CURR || String(shared.CURR).trim() === '') {
+    shared.CURR = 'USD';
+  }
+
+  const NUMERIC_SHARED_KEYS = [
+    'TOT_QTY', 'TOT_AMT', 'VAT_GST', 'VAT_TOTAL', 'GRAND_TOTAL',
+    'TOT_PACK', 'TOT_NW', 'TOT_GW', 'TOT_CBM', 'TOT_VGM',
+    'EX_RATE', 'TOT_EX_TAX', 'TOT_FEE', 'TOT_TAX',
+    'IM_VAL', 'IM_RATE', 'IM_AMT',
+    'SCT_VAL', 'SCT_RATE', 'SCT_AMT',
+    'EPT_VAL', 'EPT_RATE', 'EPT_AMT',
+    'VAT_VAL', 'VAT_RATE', 'VAT_AMT',
+    'FREIGHT_AMT', 'INS_AMT'
+  ];
+  NUMERIC_SHARED_KEYS.forEach(function (numKey) {
+    if (shared[numKey] != null && String(shared[numKey]).trim() !== '') {
+      shared[numKey] = formatDocNumber_(shared[numKey]);
     }
   });
 
@@ -1122,6 +1151,14 @@ function replaceRowTags_(row, rowObj, tagsInRow, rowIndexZeroBased) {
     if (key === 'PREF' || key === 'UNIT' || key === 'UNIT_PACK' || key === 'CTYPE' || key === 'CSIZE') {
       strVal = extractConciseCode_(strVal, key);
     }
+    if (
+      key === 'QTY' || key === 'PRICE' || key === 'AMT' || key === 'PACK' ||
+      key === 'NW' || key === 'GW' || key === 'CBM' || key === 'MAX_GW' || key === 'VGM_WEI' ||
+      key === 'EX_VAL' || key === 'EX_TAX_RATE' || key === 'EX_AMT' ||
+      key === 'FEE_VAL' || key === 'FEE_RATE' || key === 'FEE_AMT'
+    ) {
+      strVal = formatDocNumber_(strVal);
+    }
     row.replaceText('\\{\\{' + escapeRegex_(key) + '\\}\\}', strVal);
   });
 
@@ -1150,19 +1187,60 @@ function sanitizeRemainingTags_(sections) {
 }
 
 function cleanupEmptyStaticLabels_(sections) {
-  const telLbl = '(?:[Tt][Ee][Ll]|[Pp][Hh][Oo][Nn][Ee]|[Mm][Oo][Bb][Ii][Ll][E])';
-  const emailLbl = '(?:[Ee]-?[Mm][Aa][Ii][Ll])';
-  const faxLbl = '(?:[Ff][Aa][Xx])';
-  const taxLbl = '(?:[Tt][Aa][Xx](?:\\s+[Cc][Oo][Dd][E])?|[Mm][Ss][Tt])';
-  const attnLbl = '(?:[Aa][Tt][Tt][Nn])';
-  const anyLbl = '(?:' + telLbl + '|' + emailLbl + '|' + faxLbl + '|' + taxLbl + '|' + attnLbl + ')';
+  const emptyPairPatterns = [
+    '\\(\\s*[Tt][Ee][Ll]\\s*:\\s*,?\\s*[Ee]-?[Mm][Aa][Ii][Ll]\\s*:\\s*\\)',
+    '\\(\\s*[Tt][Ee][Ll]\\s*:\\s*,?\\s*[Ff][Aa][Xx]\\s*:\\s*,?\\s*[Ee]-?[Mm][Aa][Ii][Ll]\\s*:\\s*\\)',
+    '\\(\\s*[Tt][Ee][Ll]\\s*:\\s*\\)',
+    '\\(\\s*[Pp][Hh][Oo][Nn][Ee]\\s*:\\s*\\)',
+    '\\(\\s*[Mm][Oo][Bb][Ii][Ll][Ee]\\s*:\\s*\\)',
+    '\\(\\s*[Ee]-?[Mm][Aa][Ii][Ll]\\s*:\\s*\\)',
+    '\\(\\s*[Ff][Aa][Xx]\\s*:\\s*\\)',
+    '\\(\\s*[Mm][Ss][Tt]\\s*:\\s*\\)',
+    '\\(\\s*[Tt][Aa][Xx]\\s*:\\s*\\)',
+    '\\(\\s*[Tt][Aa][Xx]\\s+[Cc][Oo][Dd][Ee]\\s*:\\s*\\)',
+    '\\(\\s*[Aa][Tt][Tt][Nn]\\s*:\\s*\\)'
+  ];
+
+  const trailingEmptyPatterns = [
+    '[Tt][Ee][Ll]\\s*:\\s*$',
+    '[Pp][Hh][Oo][Nn][Ee]\\s*:\\s*$',
+    '[Ee]-?[Mm][Aa][Ii][Ll]\\s*:\\s*$',
+    '[Ff][Aa][Xx]\\s*:\\s*$',
+    '[Mm][Ss][Tt]\\s*:\\s*$',
+    '[Tt][Aa][Xx]\\s+[Cc][Oo][Dd][Ee]\\s*:\\s*$',
+    '[Aa][Tt][Tt][Nn]\\s*:\\s*$',
+    '[Tt][Ee][Ll]\\s*:\\s*,\\s*',
+    '[Ff][Aa][Xx]\\s*:\\s*,\\s*',
+    '[Ee]-?[Mm][Aa][Ii][Ll]\\s*:\\s*,\\s*'
+  ];
 
   for (let s = 0; s < sections.length; s++) {
     const section = sections[s];
-    section.replaceText('\\([\\s\\p{P}]*\\b' + telLbl + '\\b[\\s\\p{P}]*\\b' + emailLbl + '\\b[\\s\\p{P}]*\\)', '');
-    section.replaceText('\\([\\s\\p{P}]*\\b' + anyLbl + '\\b\\s*:\\s*,?\\s*\\)', '');
-    section.replaceText('\\b' + anyLbl + '\\s*:\\s*(?=[\\),;\\.\\r\\n]|$)', '');
+    for (let i = 0; i < emptyPairPatterns.length; i++) {
+      section.replaceText(emptyPairPatterns[i], '');
+    }
+    for (let j = 0; j < trailingEmptyPatterns.length; j++) {
+      section.replaceText(trailingEmptyPatterns[j], '');
+    }
+    section.replaceText('\\(\\s*,\\s*', '(');
+    section.replaceText(',\\s*\\)', ')');
+    section.replaceText('\\(\\s*\\)', '');
   }
+}
+
+function formatDocNumber_(rawVal) {
+  const str = String(rawVal == null ? '' : rawVal).trim();
+  if (!str) return '';
+  const cleaned = str.replace(/,/g, '');
+  if (!/^-?\d+(\.\d+)?$/.test(cleaned)) {
+    return str;
+  }
+  const parts = cleaned.split('.');
+  const intPart = parts[0].replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+  if (parts.length > 1) {
+    return intPart + '.' + parts[1];
+  }
+  return intPart;
 }
 
 function extractConciseCode_(rawVal, fieldKey) {
