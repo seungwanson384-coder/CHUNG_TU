@@ -2,28 +2,18 @@
  * GS_Doc_Engine.gs
  * Core Google Docs auto-fill engine supporting BOTH:
  * - Mode A (Folder of 20 Google Docs templates, e.g. folder "CHỨNG TỪ"):
- *   MASTER_TEMPLATE_DOC_ID = Folder ID containing 20 files named by docKey (QUOTATION, BILL_OF_LADING, ...)
+ *   MASTER_TEMPLATE_DOC_ID = Folder ID containing 20 files named by docKey
  * - Mode B (Single multi-tab Google Doc with 20 Tabs):
  *   MASTER_TEMPLATE_DOC_ID = Google Doc ID containing 20 tabs matching TEMPLATE_MAP[docKey].tabName
  * Runtime: Google Apps Script (V8)
  */
 
-/**
- * Tạo 1 hoặc nhiều chứng từ từ thư mục mẫu 20 file Google Docs hoặc 1 file Google Docs tổng hợp
- * (MASTER_TEMPLATE_DOC_ID) và trả về link Google Docs + link tải PDF.
- *
- * @param {string} maSV
- * @param {Array<string>|string} docKeysArray
- * @param {{shared?: Object, items?: Array<Object>, containers?: Array<Object>}|string} payload
- * @return {{success: boolean, results: Array<{docKey: string, docName: string, tabName: string, docUrl: string, pdfUrl: string}>, errors?: Array<{docKey: string, message: string}>, warning?: string, message?: string}}
- */
 function generateDocuments(maSV, docKeysArray, payload) {
   try {
     const rawKeys = Array.isArray(docKeysArray)
       ? docKeysArray
       : (docKeysArray ? [String(docKeysArray)] : []);
 
-    // Loại bỏ key rỗng hoặc trùng lặp nhưng giữ nguyên thứ tự
     const keys = [];
     rawKeys.forEach(function (k) {
       const cleanKey = String(k || '').trim();
@@ -53,9 +43,6 @@ function generateDocuments(maSV, docKeysArray, payload) {
     const outputFolder = validated.outputFolder;
     const suffix = resolveDocFilenameSuffix_(shared, maSV);
 
-    // =========================================================================
-    // CHẾ ĐỘ A: MASTER_TEMPLATE_DOC_ID là THƯ MỤC chứa 20 file Google Docs
-    // =========================================================================
     if (validated.mode === 'FOLDER') {
       const results = [];
       const errors = [];
@@ -93,7 +80,7 @@ function generateDocuments(maSV, docKeysArray, payload) {
           const copyFileId = copyFile.getId();
 
           const doc = DocumentApp.openById(copyFileId);
-          processSingleDocumentObject_(doc, items, containers, shared);
+          processSingleDocumentObject_(doc, items, containers, shared, docKey);
           doc.saveAndClose();
 
           results.push({
@@ -135,9 +122,6 @@ function generateDocuments(maSV, docKeysArray, payload) {
       return folderResponse;
     }
 
-    // =========================================================================
-    // CHẾ ĐỘ B: MASTER_TEMPLATE_DOC_ID là 1 FILE GOOGLE DOCS nhiều Tab
-    // =========================================================================
     const masterFile = validated.masterFile;
     const copyFileName =
       keys.length === 1
@@ -184,8 +168,9 @@ function generateDocuments(maSV, docKeysArray, payload) {
         const sections = collectDocumentTabSections_(docTab);
 
         processDynamicTableRows(body, items, containers);
-        replaceGlobalTags(sections, shared);
+        replaceGlobalTags(sections, shared, docKey);
         sanitizeRemainingTags_(sections);
+        cleanupEmptyStaticLabels_(sections);
 
         const tabId = targetTab.getId();
         if (tabId && selectedTabIds.indexOf(tabId) === -1) {
@@ -246,9 +231,9 @@ function generateDocuments(maSV, docKeysArray, payload) {
 }
 
 /**
- * Tạo bản xem trước (Live Preview) cho 1 chứng từ từ file mẫu (MASTER_TEMPLATE_DOC_ID).
- * Sao chép tạm vào DriveApp.getRootFolder() để tránh lỗi phân quyền trên thư mục chia sẻ OUTPUT_FOLDER_ID,
- * giữ nguyên 100% định dạng gốc, xuất PDF dạng base64, xóa ngay file tạm và trả về { success: true, base64Pdf }.
+ * Tạo bản xem trước (Live Preview) cho 1 chứng từ.
+ * Sao chép tạm vào DriveApp.getRootFolder() (tuyệt đối không lưu vào OUTPUT_FOLDER_ID hay thư mục chia sẻ dự án),
+ * giữ nguyên 100% định dạng gốc, xuất PDF dạng base64, và xóa ngay lập tức file tạm trong khối try...finally.
  *
  * @param {string} maSV
  * @param {string} docKey
@@ -314,7 +299,7 @@ function previewDocument(maSV, docKey, payload) {
       tempDocFile = tplFile.makeCopy(tempDocName, rootFolder);
 
       const doc = DocumentApp.openById(tempDocFile.getId());
-      processSingleDocumentObject_(doc, items, containers, shared);
+      processSingleDocumentObject_(doc, items, containers, shared, cleanKey);
       doc.saveAndClose();
 
       pdfBlob = tempDocFile.getAs('application/pdf');
@@ -330,10 +315,12 @@ function previewDocument(maSV, docKey, payload) {
 
       if (!targetTab) {
         doc.saveAndClose();
-        try {
-          tempDocFile.setTrashed(true);
-          tempDocFile = null;
-        } catch (e) {}
+        if (tempDocFile) {
+          try {
+            tempDocFile.setTrashed(true);
+            tempDocFile = null;
+          } catch (e) {}
+        }
 
         return {
           success: false,
@@ -346,8 +333,9 @@ function previewDocument(maSV, docKey, payload) {
       const sections = collectDocumentTabSections_(docTab);
 
       processDynamicTableRows(body, items, containers);
-      replaceGlobalTags(sections, shared);
+      replaceGlobalTags(sections, shared, cleanKey);
       sanitizeRemainingTags_(sections);
+      cleanupEmptyStaticLabels_(sections);
 
       const tabId = targetTab.getId();
       doc.saveAndClose();
@@ -384,13 +372,6 @@ function previewDocument(maSV, docKey, payload) {
 
     const base64Pdf = Utilities.base64Encode(pdfBlob.getBytes());
 
-    if (tempDocFile) {
-      try {
-        tempDocFile.setTrashed(true);
-        tempDocFile = null;
-      } catch (trashDocErr) {}
-    }
-
     const response = {
       success: true,
       docKey: cleanKey,
@@ -407,25 +388,19 @@ function previewDocument(maSV, docKey, payload) {
 
     return response;
   } catch (err) {
-    if (tempDocFile) {
-      try {
-        tempDocFile.setTrashed(true);
-        tempDocFile = null;
-      } catch (e) {}
-    }
     return {
       success: false,
       message: formatEngineErrorMessage_('Lỗi tạo bản xem trước chứng từ', err)
     };
+  } finally {
+    if (tempDocFile) {
+      try {
+        tempDocFile.setTrashed(true);
+      } catch (e) {}
+    }
   }
 }
 
-/**
- * Kiểm tra MASTER_TEMPLATE_DOC_ID (chấp nhận cả THƯ MỤC chứa 20 file Google Docs
- * lẫn 1 file Google Docs nhiều Tab) và tùy chọn kiểm tra OUTPUT_FOLDER_ID.
- * @param {boolean=} requireOutputFolder
- * @return {{mode: string, masterId: string, templateFolder?: GoogleAppsScript.Drive.Folder, masterFile?: GoogleAppsScript.Drive.File, outputFolderId: string, outputFolder: GoogleAppsScript.Drive.Folder|null}}
- */
 function validateMasterTemplateAndFolder_(requireOutputFolder) {
   const shouldCheckOutput = requireOutputFolder !== false;
   const masterId = String(typeof MASTER_TEMPLATE_DOC_ID !== 'undefined' ? MASTER_TEMPLATE_DOC_ID : '').trim();
@@ -501,13 +476,6 @@ function validateMasterTemplateAndFolder_(requireOutputFolder) {
   );
 }
 
-/**
- * Tìm file Google Docs mẫu tương ứng với docKey bên trong thư mục mẫu (ví dụ thư mục "CHỨNG TỪ").
- * @param {GoogleAppsScript.Drive.Folder} templateFolder
- * @param {string} docKey
- * @param {{name?: string, tabName?: string}} tplConfig
- * @return {GoogleAppsScript.Drive.File|null}
- */
 function findTemplateFileInFolder_(templateFolder, docKey, tplConfig) {
   if (!templateFolder) return null;
 
@@ -561,11 +529,6 @@ function findTemplateFileInFolder_(templateFolder, docKey, tplConfig) {
   return null;
 }
 
-/**
- * Chuẩn hóa tên file mẫu để so khớp linh hoạt (không dấu, không phân biệt hoa thường, bỏ dấu cách/gạch dưới).
- * @param {string} name
- * @return {string}
- */
 function normalizeTemplateLookupName_(name) {
   return String(name || '')
     .normalize('NFD')
@@ -576,15 +539,7 @@ function normalizeTemplateLookupName_(name) {
     .replace(/[^A-Z0-9]/g, '');
 }
 
-/**
- * Xử lý 1 file Google Docs đơn lẻ (giữ nguyên 100% định dạng gốc):
- * hỗ trợ cả tài liệu thường lẫn tài liệu có Tab.
- * @param {GoogleAppsScript.Document.Document} doc
- * @param {Array<Object>} items
- * @param {Array<Object>} containers
- * @param {Object} shared
- */
-function processSingleDocumentObject_(doc, items, containers, shared) {
+function processSingleDocumentObject_(doc, items, containers, shared, docKey) {
   if (typeof doc.getTabs === 'function') {
     const topTabs = doc.getTabs();
     const allTabs = collectAllTabsFlat_(topTabs);
@@ -594,8 +549,9 @@ function processSingleDocumentObject_(doc, items, containers, shared) {
         const body = docTab.getBody();
         const sections = collectDocumentTabSections_(docTab);
         processDynamicTableRows(body, items, containers);
-        replaceGlobalTags(sections, shared);
+        replaceGlobalTags(sections, shared, docKey);
         sanitizeRemainingTags_(sections);
+        cleanupEmptyStaticLabels_(sections);
       }
       return;
     }
@@ -604,15 +560,11 @@ function processSingleDocumentObject_(doc, items, containers, shared) {
   const body = doc.getBody();
   const sections = collectSingleDocSections_(doc);
   processDynamicTableRows(body, items, containers);
-  replaceGlobalTags(sections, shared);
+  replaceGlobalTags(sections, shared, docKey);
   sanitizeRemainingTags_(sections);
+  cleanupEmptyStaticLabels_(sections);
 }
 
-/**
- * Lấy Body + Header + Footer của 1 file Google Docs đơn lẻ.
- * @param {GoogleAppsScript.Document.Document} doc
- * @return {Array<GoogleAppsScript.Document.Element>}
- */
 function collectSingleDocSections_(doc) {
   const sections = [];
   const seen = [];
@@ -648,10 +600,6 @@ function collectSingleDocSections_(doc) {
   return sections;
 }
 
-/**
- * Chạy hàm này 1 lần trực tiếp trong trình soạn thảo Apps Script (Run -> authorizePermissions)
- * để kích hoạt màn hình cấp quyền Drive, Docs, Sheets và UrlFetch cho Web App trước khi Deploy lại.
- */
 function authorizePermissions() {
   const ss = getAppSpreadsheet_();
   const sheetTitle = ss.getName();
@@ -683,17 +631,6 @@ function authorizePermissions() {
       DocumentApp.openById(firstDocId).getId();
     }
 
-    Logger.log(
-      'Authorized OK (FOLDER MODE) -> Sheet: ' +
-        sheetTitle +
-        ' | Template Folder: ' +
-        templateFolderName +
-        ' (Google Docs: ' +
-        googleDocCount +
-        ') | Output Folder: ' +
-        folderName
-    );
-
     return {
       success: true,
       mode: 'FOLDER',
@@ -709,19 +646,6 @@ function authorizePermissions() {
   const tabCount = typeof openedDoc.getTabs === 'function' ? openedDoc.getTabs().length : 0;
   const docsApiEnabled = typeof Docs !== 'undefined' && Docs.Documents && typeof Docs.Documents.batchUpdate === 'function';
 
-  Logger.log(
-    'Authorized OK (SINGLE DOC MODE) -> Sheet: ' +
-      sheetTitle +
-      ' | Template: ' +
-      templateName +
-      ' (Tabs: ' +
-      tabCount +
-      ') | Output Folder: ' +
-      folderName +
-      ' | Docs API enabled: ' +
-      docsApiEnabled
-  );
-
   return {
     success: true,
     mode: 'SINGLE_MULTI_TAB_DOC',
@@ -733,12 +657,6 @@ function authorizePermissions() {
   };
 }
 
-/**
- * Chuẩn hóa thông báo lỗi và gợi ý xử lý khi gặp lỗi phân quyền DriveApp / Web App.
- * @param {string} prefix
- * @param {*} err
- * @return {string}
- */
 function formatEngineErrorMessage_(prefix, err) {
   const rawMsg = err && err.message ? String(err.message) : String(err || '');
   const lower = rawMsg.toLowerCase();
@@ -758,36 +676,6 @@ function formatEngineErrorMessage_(prefix, err) {
   return prefix + ': ' + rawMsg;
 }
 
-/**
- * Đưa vào thùng rác các file trùng tên trong thư mục đích (dùng để ghi đè file tạm theo maSV).
- * @param {GoogleAppsScript.Drive.Folder} folder
- * @param {string} fileName
- */
-function trashFilesByName_(folder, fileName) {
-  if (!folder || !fileName) return;
-  const files = folder.getFilesByName(fileName);
-  while (files.hasNext()) {
-    try {
-      files.next().setTrashed(true);
-    } catch (e) {}
-  }
-}
-
-/**
- * Xóa các Tab không nằm trong danh sách được chọn khỏi file Google Docs bản sao
- * thông qua Google Docs API (Docs.Documents.batchUpdate với request deleteTab).
- *
- * HƯỚNG DẪN BẬT DỊCH VỤ TRONG GOOGLE APPS SCRIPT:
- * 1. Mở trình soạn thảo Apps Script (script.google.com).
- * 2. Ở cột bên trái mục "Dịch vụ (Services)", nhấn dấu "+".
- * 3. Chọn "Google Docs API" (định danh mặc định là "Docs", phiên bản v1) -> nhấn "Thêm (Add)".
- * Nếu chưa bật dịch vụ này, khối try...catch bên dưới sẽ giữ nguyên file kết quả mà không làm lỗi tiến trình xuất.
- *
- * @param {string} documentId
- * @param {Array<GoogleAppsScript.Document.Tab>} topLevelTabs
- * @param {Array<string>} selectedTabIds
- * @return {{deletedCount: number, warning?: string}}
- */
 function removeUnselectedTabsViaDocsApi_(documentId, topLevelTabs, selectedTabIds) {
   if (!selectedTabIds || selectedTabIds.length === 0) {
     return { deletedCount: 0 };
@@ -804,12 +692,10 @@ function removeUnselectedTabsViaDocsApi_(documentId, topLevelTabs, selectedTabId
     const allTabs = collectAllTabsFlat_(topLevelTabs);
     const deleteRequests = [];
 
-    // Duyệt từ cuối lên đầu để đảm bảo an toàn thứ tự tab và luôn giữ lại ít nhất các tab đã chọn
     for (let i = allTabs.length - 1; i >= 0; i--) {
       const tab = allTabs[i];
       const tabId = tab.getId();
       if (tabId && selectedTabIds.indexOf(tabId) === -1) {
-        // Nếu có tab con được chọn nằm bên trong tab cha này thì không xóa tab cha
         if (hasSelectedDescendantTab_(tab, selectedTabIds)) {
           continue;
         }
@@ -821,7 +707,6 @@ function removeUnselectedTabsViaDocsApi_(documentId, topLevelTabs, selectedTabId
       }
     }
 
-    // Google Docs API không cho phép xóa toàn bộ mọi tab của tài liệu (phải còn ít nhất 1 tab)
     if (deleteRequests.length > 0 && deleteRequests.length < allTabs.length) {
       Docs.Documents.batchUpdate({ requests: deleteRequests }, documentId);
     }
@@ -835,14 +720,6 @@ function removeUnselectedTabsViaDocsApi_(documentId, topLevelTabs, selectedTabId
   }
 }
 
-/**
- * Nhân bản dòng bảng động từ dưới lên trên (Bottom-Up Target-Row Cloning).
- * Chỉ nhân bản TableRow nếu text của dòng chứa ít nhất 1 thẻ thuộc ITEM_TAGS, CONT_TAGS hoặc TAX_TAGS.
- *
- * @param {GoogleAppsScript.Document.Body} body
- * @param {Array<Object>} items
- * @param {Array<Object>} containers
- */
 function processDynamicTableRows(body, items, containers) {
   const safeItems = Array.isArray(items) ? items : [];
   const safeContainers = Array.isArray(containers) ? containers : [];
@@ -851,7 +728,6 @@ function processDynamicTableRows(body, items, containers) {
   for (let t = 0; t < tables.length; t++) {
     const table = tables[t];
 
-    // Duyệt hàng từ dưới lên trên để việc chèn/xóa không làm lệch chỉ số các hàng phía trên
     for (let r = table.getNumRows() - 1; r >= 0; r--) {
       const row = table.getRow(r);
       const rowText = row.getText();
@@ -869,59 +745,106 @@ function processDynamicTableRows(body, items, containers) {
         if (table.getNumRows() > 1) {
           table.removeRow(r);
         } else {
-          // Bảng chỉ còn 1 dòng duy nhất: xóa sạch thẻ thay vì removeRow để tránh lỗi Google Docs
           row.replaceText('\\{\\{[A-Z0-9_]+\\}\\}', '');
         }
         continue;
       }
 
-      // Chèn N - 1 bản sao ngay bên dưới dòng mẫu r
+      const sttCellIndices = detectTemplateSttCellIndices_(table, r, row);
+
       for (let i = 1; i < count; i++) {
         table.insertTableRow(r + i, row.copy());
       }
 
-      // Thay thế dữ liệu cho tất cả N dòng (từ r đến r + count - 1)
       for (let idx = 0; idx < count; idx++) {
         const targetRow = table.getRow(r + idx);
         const rowData = boundArray[idx] || {};
         replaceRowTags_(targetRow, rowData, tagsInRow, idx);
+        for (let sIdx = 0; sIdx < sttCellIndices.length; sIdx++) {
+          const cellIndex = sttCellIndices[sIdx];
+          if (cellIndex < targetRow.getNumCells()) {
+            populateSttCell_(targetRow.getCell(cellIndex), idx + 1);
+          }
+        }
       }
     }
   }
 }
 
-/**
- * Thay thế toàn bộ biến đơn {{TAG}} trên Body, Header và Footer của Tab
- * bằng dữ liệu từ payload.shared (giữ nguyên số 0 ở đầu dưới dạng chuỗi).
- *
- * @param {Array<GoogleAppsScript.Document.Element>} sections
- * @param {Object} shared
- */
-function replaceGlobalTags(sections, shared) {
+function detectTemplateSttCellIndices_(table, rowIndex, templateRow) {
+  const indices = [];
+  if (!templateRow) return indices;
+
+  const numCells = templateRow.getNumCells();
+  const headerRow = rowIndex > 0 ? table.getRow(0) : null;
+
+  for (let c = 0; c < numCells; c++) {
+    const cellText = String(templateRow.getCell(c).getText() || '').trim();
+    const isSttLiteralOrTag = /^(?:0?1\.?|\{\{(?:STT|NO|ITEM_NO)\}\})$/.test(cellText);
+    if (isSttLiteralOrTag) {
+      indices.push(c);
+      continue;
+    }
+
+    if (c === 0 && cellText === '' && headerRow && headerRow.getNumCells() > 0) {
+      const headerText = String(headerRow.getCell(0).getText() || '').trim();
+      if (/^(?:STT|SỐ\s*TT|NO\.?|ITEM\s*NO\.?)$/i.test(headerText)) {
+        indices.push(0);
+      }
+    }
+  }
+
+  return indices;
+}
+
+function populateSttCell_(cell, seqNumber) {
+  if (!cell) return;
+  const seqStr = String(seqNumber);
+  const currentText = String(cell.getText() || '').trim();
+
+  if (currentText !== '') {
+    cell.replaceText('^.*$', seqStr);
+    return;
+  }
+
+  if (cell.getNumChildren() > 0 && cell.getChild(0).getType() === DocumentApp.ElementType.PARAGRAPH) {
+    cell.getChild(0).asParagraph().setText(seqStr);
+  } else {
+    cell.setText(seqStr);
+  }
+}
+
+function replaceGlobalTags(sections, shared, docKey) {
   const keys = Object.keys(shared).sort(function (a, b) {
     return b.length - a.length;
   });
 
+  const coFormVal = String(shared.CO_FORM_NAME || '').trim();
+  const coFormNoPrefix = coFormVal.replace(/^[Ff][Oo][Rr][Mm]\s+/, '').trim();
+  const hasFormPrefix = coFormNoPrefix !== '' && /^[Ff][Oo][Rr][Mm]\s+/.test(coFormVal);
+
   for (let s = 0; s < sections.length; s++) {
     const section = sections[s];
+    if (hasFormPrefix) {
+      section.replaceText('[Ff][Oo][Rr][Mm]\\s+\\{\\{CO_FORM_NAME\\}\\}', 'Form ' + coFormNoPrefix);
+    }
+
     for (let k = 0; k < keys.length; k++) {
       const key = keys[k];
       const rawVal = shared[key];
-      const strVal = rawVal == null ? '' : String(rawVal);
+      let strVal = rawVal == null ? '' : String(rawVal);
+      if (key === 'CO_FORM_NAME' && docKey === 'SALES_CONTRACT' && hasFormPrefix) {
+        strVal = coFormNoPrefix;
+      }
       section.replaceText('\\{\\{' + escapeRegex_(key) + '\\}\\}', strVal);
+    }
+
+    if (docKey === 'SALES_CONTRACT') {
+      section.replaceText('[Ff][Oo][Rr][Mm]\\s+[Ff][Oo][Rr][Mm]\\b', 'Form');
     }
   }
 }
 
-/* ==========================================================================
- * CÁC HÀM HỖ TRỢ NỘI BỘ (PRIVATE HELPERS)
- * ========================================================================== */
-
-/**
- * Trải phẳng danh sách Tab (bao gồm cả tab con nếu có).
- * @param {Array<GoogleAppsScript.Document.Tab>} tabs
- * @return {Array<GoogleAppsScript.Document.Tab>}
- */
 function collectAllTabsFlat_(tabs) {
   const flat = [];
   if (!Array.isArray(tabs)) return flat;
@@ -942,12 +865,6 @@ function collectAllTabsFlat_(tabs) {
   return flat;
 }
 
-/**
- * Kiểm tra xem một Tab cha có chứa Tab con nào đang được chọn hay không.
- * @param {GoogleAppsScript.Document.Tab} tab
- * @param {Array<string>} selectedTabIds
- * @return {boolean}
- */
 function hasSelectedDescendantTab_(tab, selectedTabIds) {
   if (typeof tab.getChildTabs !== 'function') return false;
   const children = tab.getChildTabs() || [];
@@ -960,12 +877,6 @@ function hasSelectedDescendantTab_(tab, selectedTabIds) {
   return false;
 }
 
-/**
- * Tìm Tab theo tiêu đề tab.getTitle().trim(), so sánh không phân biệt hoa thường.
- * @param {Array<GoogleAppsScript.Document.Tab>} allTabs
- * @param {string} targetTabName
- * @return {GoogleAppsScript.Document.Tab|null}
- */
 function findTabByTitleInsensitive_(allTabs, targetTabName) {
   const normalizedTarget = String(targetTabName || '').trim().toLowerCase();
   if (!normalizedTarget) return null;
@@ -980,11 +891,6 @@ function findTabByTitleInsensitive_(allTabs, targetTabName) {
   return null;
 }
 
-/**
- * Lấy danh sách các vùng nội dung (Body, Header, Footer) thuộc một DocumentTab.
- * @param {GoogleAppsScript.Document.DocumentTab} docTab
- * @return {Array<GoogleAppsScript.Document.Element>}
- */
 function collectDocumentTabSections_(docTab) {
   const sections = [];
   const seen = [];
@@ -1020,24 +926,72 @@ function collectDocumentTabSections_(docTab) {
   return sections;
 }
 
-/**
- * Tạo bản sao payload.shared và tự động sinh các biến tổng hợp:
- * - VES_VOY: VESSEL + " / " + VOYAGE (nếu cả 2 đều có)
- * - CONTAINER_SEAL_DETAILS: ghép payload.containers dạng "CONT / CTYPE / SEAL" nối bằng \n
- *
- * @param {Object} payload
- * @return {Object}
- */
 function buildEnrichedShared_(payload) {
   const sourceShared = (payload && payload.shared && typeof payload.shared === 'object')
     ? payload.shared
     : {};
   const shared = {};
 
+  const CHECKBOX_KEYS = [
+    'DG_YES',
+    'DG_NO',
+    'FREIGHT_PREPAID',
+    'FREIGHT_COLLECT',
+    'OUT_OF_GAUGE',
+    'NON_STACKABLE',
+    'FUMIGATION_NEEDED'
+  ];
+
   Object.keys(sourceShared).forEach(function (key) {
     const val = sourceShared[key];
-    shared[key] = val == null ? '' : String(val);
+    if (typeof val === 'boolean') {
+      shared[key] = val ? '\u2611' : '\u2610';
+    } else {
+      shared[key] = val == null ? '' : String(val);
+    }
   });
+
+  CHECKBOX_KEYS.forEach(function (cbKey) {
+    shared[cbKey] = normalizeCheckboxSymbol_(shared[cbKey]);
+  });
+
+  ['INS_TERM', 'CO_FORM_NAME', 'CTYPE', 'UNIT', 'TOT_UNIT'].forEach(function (codeKey) {
+    if (shared[codeKey] != null && String(shared[codeKey]).trim() !== '') {
+      shared[codeKey] = extractConciseCode_(shared[codeKey], codeKey);
+    }
+  });
+
+  const docsContact = buildParenContactString_([
+    { label: 'Tel', value: shared.DOCS_TEL },
+    { label: 'Email', value: shared.DOCS_EMAIL }
+  ]);
+  shared.DOCS_CONTACT = docsContact;
+  shared.DOCS_TEL_EMAIL = docsContact;
+
+  shared.BUYER_CONTACT = buildParenContactString_([
+    { label: 'Tel', value: shared.BUYER_TEL }
+  ]);
+
+  shared.SHIP_CONTACT = buildParenContactString_([
+    { label: 'Tel', value: shared.SHIP_TEL },
+    { label: 'Email', value: shared.SHIP_EMAIL }
+  ]);
+
+  shared.CNE_CONTACT = buildParenContactString_([
+    { label: 'Tel', value: shared.CNE_TEL },
+    { label: 'Fax', value: shared.CNE_FAX },
+    { label: 'Email', value: shared.CNE_EMAIL }
+  ]);
+
+  shared.NTF_CONTACT = buildParenContactString_([
+    { label: 'Tel', value: shared.NTF_TEL },
+    { label: 'Email', value: shared.NTF_EMAIL }
+  ]);
+
+  shared.CAR_CONTACT = buildParenContactString_([
+    { label: 'Tel', value: shared.CAR_TEL },
+    { label: 'Email', value: shared.CAR_EMAIL }
+  ]);
 
   const vessel = String(shared.VESSEL || '').trim();
   const voyage = String(shared.VOYAGE || '').trim();
@@ -1071,12 +1025,41 @@ function buildEnrichedShared_(payload) {
   return shared;
 }
 
-/**
- * Xác định hậu tố tên file [INV_NO hoặc BK_NO hoặc maSV].
- * @param {Object} shared
- * @param {string} maSV
- * @return {string}
- */
+function normalizeCheckboxSymbol_(val) {
+  if (val === true) return '\u2611';
+  if (val === false || val == null) return '\u2610';
+
+  const trimmed = String(val).trim();
+  if (!trimmed || trimmed === '\u2610') return '\u2610';
+
+  const lower = trimmed.toLowerCase();
+  if (
+    trimmed === '\u2611' ||
+    lower === 'true' ||
+    lower === '1' ||
+    lower === 'x' ||
+    lower === 'yes' ||
+    lower === 'on' ||
+    lower === 'checked'
+  ) {
+    return '\u2611';
+  }
+  return '\u2610';
+}
+
+function buildParenContactString_(pairs) {
+  if (!Array.isArray(pairs)) return '';
+  const parts = [];
+  for (let i = 0; i < pairs.length; i++) {
+    const item = pairs[i];
+    const val = String(item && item.value != null ? item.value : '').trim();
+    if (val) {
+      parts.push(item.label + ': ' + val);
+    }
+  }
+  return parts.length > 0 ? '(' + parts.join(', ') + ')' : '';
+}
+
 function resolveDocFilenameSuffix_(shared, maSV) {
   const invNo = String(shared.INV_NO || '').trim();
   if (invNo) return invNo;
@@ -1088,11 +1071,6 @@ function resolveDocFilenameSuffix_(shared, maSV) {
   return studentId || 'DOC';
 }
 
-/**
- * Trích xuất danh sách tên thẻ {{TAG}} duy nhất trong chuỗi text.
- * @param {string} text
- * @return {Array<string>}
- */
 function extractTagNames_(text) {
   const tags = [];
   if (!text) return tags;
@@ -1107,11 +1085,6 @@ function extractTagNames_(text) {
   return tags;
 }
 
-/**
- * Trả về true nếu dòng chứa ít nhất một thẻ thuộc ITEM_TAGS, CONT_TAGS hoặc TAX_TAGS.
- * @param {Array<string>} tagsInRow
- * @return {boolean}
- */
 function hasDynamicRowTag_(tagsInRow) {
   for (let i = 0; i < tagsInRow.length; i++) {
     const tag = tagsInRow[i];
@@ -1126,31 +1099,37 @@ function hasDynamicRowTag_(tagsInRow) {
   return false;
 }
 
-/**
- * Thay thế các thẻ trong 1 dòng bảng động bằng dữ liệu từ đối tượng container hoặc item tương ứng.
- *
- * @param {GoogleAppsScript.Document.TableRow} row
- * @param {Object} rowObj
- * @param {Array<string>} tagsInRow
- * @param {number} rowIndexZeroBased
- */
 function replaceRowTags_(row, rowObj, tagsInRow, rowIndexZeroBased) {
   const rowSpecificTags = ITEM_TAGS
     .concat(CONT_TAGS)
     .concat(TAX_TAGS)
     .concat(['PACK', 'GW', 'CBM']);
 
+  const seqText = String(rowIndexZeroBased + 1);
+  row.replaceText('\\{\\{STT\\}\\}', seqText);
+  row.replaceText('\\{\\{NO\\}\\}', seqText);
+  row.replaceText('\\{\\{ITEM_NO\\}\\}', seqText);
+
   Object.keys(rowObj).forEach(function (key) {
+    if (key === 'STT' || key === 'NO' || key === 'ITEM_NO') {
+      return;
+    }
     const val = rowObj[key];
-    const strVal = val == null ? '' : String(val);
+    let strVal = val == null ? '' : String(val);
     if ((key === 'MARKS' || key === 'UNIT') && strVal === '') {
       return;
+    }
+    if (key === 'PREF' || key === 'UNIT' || key === 'UNIT_PACK' || key === 'CTYPE' || key === 'CSIZE') {
+      strVal = extractConciseCode_(strVal, key);
     }
     row.replaceText('\\{\\{' + escapeRegex_(key) + '\\}\\}', strVal);
   });
 
   for (let i = 0; i < tagsInRow.length; i++) {
     const tag = tagsInRow[i];
+    if (tag === 'STT' || tag === 'NO' || tag === 'ITEM_NO') {
+      continue;
+    }
     const hasProp = Object.prototype.hasOwnProperty.call(rowObj, tag);
     const hasNonEmptyVal = hasProp && rowObj[tag] != null && String(rowObj[tag]) !== '';
 
@@ -1158,39 +1137,79 @@ function replaceRowTags_(row, rowObj, tagsInRow, rowIndexZeroBased) {
       continue;
     }
 
-    if (tag === 'STT' || tag === 'NO' || tag === 'ITEM_NO') {
-      row.replaceText('\\{\\{' + escapeRegex_(tag) + '\\}\\}', String(rowIndexZeroBased + 1));
-    } else if (rowSpecificTags.indexOf(tag) !== -1 && tag !== 'UNIT' && tag !== 'MARKS') {
+    if (rowSpecificTags.indexOf(tag) !== -1 && tag !== 'UNIT' && tag !== 'MARKS') {
       row.replaceText('\\{\\{' + escapeRegex_(tag) + '\\}\\}', '');
     }
   }
 }
 
-/**
- * Quét dọn toàn bộ thẻ {{TAG}} còn sót lại trên Body, Header và Footer của Tab.
- *
- * @param {Array<GoogleAppsScript.Document.Element>} sections
- */
 function sanitizeRemainingTags_(sections) {
   for (let s = 0; s < sections.length; s++) {
     sections[s].replaceText('\\{\\{[A-Z0-9_]+\\}\\}', '');
   }
 }
 
-/**
- * Escape các ký tự đặc biệt của biểu thức chính quy cho DocumentApp.Element.replaceText().
- * @param {string} str
- * @return {string}
- */
+function cleanupEmptyStaticLabels_(sections) {
+  const telLbl = '(?:[Tt][Ee][Ll]|[Pp][Hh][Oo][Nn][Ee]|[Mm][Oo][Bb][Ii][Ll][E])';
+  const emailLbl = '(?:[Ee]-?[Mm][Aa][Ii][Ll])';
+  const faxLbl = '(?:[Ff][Aa][Xx])';
+  const taxLbl = '(?:[Tt][Aa][Xx](?:\\s+[Cc][Oo][Dd][E])?|[Mm][Ss][Tt])';
+  const attnLbl = '(?:[Aa][Tt][Tt][Nn])';
+  const anyLbl = '(?:' + telLbl + '|' + emailLbl + '|' + faxLbl + '|' + taxLbl + '|' + attnLbl + ')';
+
+  for (let s = 0; s < sections.length; s++) {
+    const section = sections[s];
+    section.replaceText('\\([\\s\\p{P}]*\\b' + telLbl + '\\b[\\s\\p{P}]*\\b' + emailLbl + '\\b[\\s\\p{P}]*\\)', '');
+    section.replaceText('\\([\\s\\p{P}]*\\b' + anyLbl + '\\b\\s*:\\s*,?\\s*\\)', '');
+    section.replaceText('\\b' + anyLbl + '\\s*:\\s*(?=[\\),;\\.\\r\\n]|$)', '');
+  }
+}
+
+function extractConciseCode_(rawVal, fieldKey) {
+  const str = String(rawVal == null ? '' : rawVal).trim();
+  if (!str) return '';
+
+  let depth = 0;
+  let cutIdx = -1;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charAt(i);
+    if (ch === '(') {
+      depth++;
+    } else if (ch === ')' && depth > 0) {
+      depth--;
+    } else if (depth === 0) {
+      if (ch === ':') {
+        cutIdx = i;
+        break;
+      }
+      if ((ch === '-' || ch === '\u2013' || ch === '\u2014') &&
+          i > 0 && str.charAt(i - 1) === ' ' &&
+          i + 1 < str.length && str.charAt(i + 1) === ' ') {
+        cutIdx = i - 1;
+        break;
+      }
+    }
+  }
+
+  let code = (cutIdx !== -1 ? str.slice(0, cutIdx) : str).trim();
+
+  if (fieldKey === 'INS_TERM') {
+    const m = code.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+    if (m && m[1].trim() && m[2].trim().length > 3) {
+      code = m[1].trim();
+    }
+    return code;
+  }
+
+  let prev;
+  do {
+    prev = code;
+    code = code.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  } while (code !== prev && code.length > 0);
+
+  return code;
+}
+
 function escapeRegex_(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
-
-/**
- * Hàm không tham số dùng để kích hoạt nhanh màn hình cấp quyền Google Drive / Docs trong Apps Script Editor.
- * Chọn authorizeDrive ở thanh công cụ phía trên và bấm Run (Chạy) 1 lần trước khi Deploy.
- */
-function authorizeDrive() {
-  DriveApp.getRootFolder();
-}
-

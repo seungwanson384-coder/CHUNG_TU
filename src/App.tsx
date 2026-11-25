@@ -13,6 +13,89 @@ import {
   X,
 } from 'lucide-react';
 import { GAS_FILES, GasSourceFile, buildLivePreviewHtml } from './gasPreviewHelper';
+import codeGs from '../Code.gs?raw';
+import indexHtml from '../Index.html?raw';
+import viewLoginSidebarHtml from '../View_Login_Sidebar.html?raw';
+import jsRenderFormsHtml from '../JS_Render_Forms.html?raw';
+import jsAppStateHtml from '../JS_App_State.html?raw';
+import cssStyleHtml from '../CSS_Style.html?raw';
+import gsDocEngineGs from '../GS_Doc_Engine.gs?raw';
+
+const MODIFIED_FILE_IDS = [
+  'Code.gs',
+  'Index.html',
+  'View_Login_Sidebar.html',
+  'JS_Render_Forms.html',
+  'JS_App_State.html',
+  'CSS_Style.html',
+  'GS_Doc_Engine.gs',
+] as const;
+
+const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
+  const byId = new Map<string, GasSourceFile>();
+  GAS_FILES.forEach((f) => byId.set(f.id, f));
+
+  byId.set('Code.gs', {
+    id: 'Code.gs',
+    filename: 'Code.gs',
+    gasType: 'gs',
+    category: 'Backend (.gs)',
+    description: 'Updated system title & INSURANCE_TERM (Column J) dropdown reader',
+    content: codeGs,
+  });
+  byId.set('Index.html', {
+    id: 'Index.html',
+    filename: 'Index.html',
+    gasType: 'html',
+    category: 'Frontend (.html)',
+    description: 'Updated page title, logo favicon & Base64 auto-injection hook',
+    content: indexHtml,
+  });
+  byId.set('View_Login_Sidebar.html', {
+    id: 'View_Login_Sidebar.html',
+    filename: 'View_Login_Sidebar.html',
+    gasType: 'html',
+    category: 'Frontend (.html)',
+    description: 'Login screen, unclipped .brand-logo-circle & collapsible sidebar accordion groups',
+    content: viewLoginSidebarHtml,
+  });
+  byId.set('JS_Render_Forms.html', {
+    id: 'JS_Render_Forms.html',
+    filename: 'JS_Render_Forms.html',
+    gasType: 'html',
+    category: 'Frontend (.html)',
+    description: 'Cleaned summary blocks, computed fields & sequential STT table renderer',
+    content: jsRenderFormsHtml,
+  });
+  byId.set('JS_App_State.html', {
+    id: 'JS_App_State.html',
+    filename: 'JS_App_State.html',
+    gasType: 'html',
+    category: 'Frontend (.html)',
+    description: 'Sidebar accordion toggles, EN/VI number-to-words & real-time XK/NK tax engine',
+    content: jsAppStateHtml,
+  });
+  byId.set('CSS_Style.html', {
+    id: 'CSS_Style.html',
+    filename: 'CSS_Style.html',
+    gasType: 'html',
+    category: 'Frontend (.html)',
+    description: 'Unclipped circular logo styles & collapsible sidebar group header pills',
+    content: cssStyleHtml,
+  });
+  byId.set('GS_Doc_Engine.gs', {
+    id: 'GS_Doc_Engine.gs',
+    filename: 'GS_Doc_Engine.gs',
+    gasType: 'gs',
+    category: 'Backend (.gs)',
+    description: 'Google Docs engine with automatic sequential STT (1..N) row numbering',
+    content: gsDocEngineGs,
+  });
+
+  return MODIFIED_FILE_IDS.map((id) => byId.get(id)).filter(
+    (f): f is GasSourceFile => Boolean(f)
+  );
+})();
 
 interface GeneratedPreviewPayload {
   docKeys: string[];
@@ -24,7 +107,7 @@ interface GeneratedPreviewPayload {
 
 export default function App() {
   const [activeMode, setActiveMode] = useState<'preview' | 'code'>('preview');
-  const [selectedFileId, setSelectedFileId] = useState<string>(GAS_FILES[0].id);
+  const [selectedFileId, setSelectedFileId] = useState<string>(DISPLAY_GAS_FILES[0].id);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lastGenerated, setLastGenerated] = useState<GeneratedPreviewPayload | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -32,7 +115,7 @@ export default function App() {
 
   const previewHtml = useMemo(() => buildLivePreviewHtml(), []);
   const selectedFile: GasSourceFile =
-    GAS_FILES.find((f) => f.id === selectedFileId) || GAS_FILES[0];
+    DISPLAY_GAS_FILES.find((f) => f.id === selectedFileId) || DISPLAY_GAS_FILES[0];
 
   useEffect(() => {
     const onMessage = (ev: MessageEvent) => {
@@ -53,7 +136,6 @@ export default function App() {
       setCopiedId(file.id);
       setTimeout(() => setCopiedId((prev) => (prev === file.id ? null : prev)), 2000);
     } catch {
-      // Fallback textarea copy
       const ta = document.createElement('textarea');
       ta.value = file.content;
       document.body.appendChild(ta);
@@ -79,13 +161,11 @@ export default function App() {
     iframeRef.current?.contentWindow?.postMessage({ type }, '*');
   };
 
-  const gsFiles = GAS_FILES.filter((f) => f.gasType === 'gs');
-  const htmlFiles = GAS_FILES.filter((f) => f.gasType === 'html');
-  const jsonFiles = GAS_FILES.filter((f) => f.gasType === 'json');
+  const gsFiles = DISPLAY_GAS_FILES.filter((f) => f.gasType === 'gs');
+  const htmlFiles = DISPLAY_GAS_FILES.filter((f) => f.gasType === 'html');
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#6EB592] via-[#96D1B4] to-[#B8E4CE] text-[#0B261C]">
-      {/* Top Studio Review Bar */}
       <header className="sticky top-0 z-30 bg-[#AEE0C6] border-b border-[#7EB89A] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-[#144535] text-white font-bold text-sm flex items-center justify-center">
@@ -96,7 +176,7 @@ export default function App() {
               Hệ thống Chứng từ XNK — Review &amp; Copy Source Code
             </h1>
             <p className="text-xs font-medium text-[#0B261C]">
-              Hiển thị {GAS_FILES.length} file đã chỉnh sửa sẵn sàng dán vào Google Apps Script
+              Hiển thị {DISPLAY_GAS_FILES.length} file đã chỉnh sửa sẵn sàng dán vào Google Apps Script
             </p>
           </div>
         </div>
@@ -125,28 +205,23 @@ export default function App() {
               }`}
             >
               <Code2 className="w-3.5 h-3.5" />
-              Xem &amp; Copy Code ({GAS_FILES.length} files)
+              Xem &amp; Copy Code ({DISPLAY_GAS_FILES.length} files)
             </button>
           </div>
         </div>
       </header>
 
-      {/* MODE 1: LIVE SANDBOX PREVIEW */}
       <div className={activeMode === 'preview' ? 'flex-1 flex flex-col' : 'hidden'}>
-        {/* Quick Test Controls */}
         <div className="bg-[#B8E2CC] border-b border-[#7EB89A] px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2 flex-wrap text-[#0B261C]">
-            <span className="font-semibold">Tài khoản test:</span>
+            <span className="font-semibold">Tài khoản test Admin:</span>
             <code className="px-1.5 py-0.5 rounded bg-white border border-[#7EB89A] font-mono font-semibold">
-              Rohwan
+              admin
             </code>
             <span>/</span>
             <code className="px-1.5 py-0.5 rounded bg-white border border-[#7EB89A] font-mono font-semibold">
-              NV003
+              AD001
             </code>
-            <span className="text-[#0B261C] font-medium hidden sm:inline">
-              (Môi trường chạy thử dùng dữ liệu danh mục mẫu)
-            </span>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -156,7 +231,7 @@ export default function App() {
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#144535] text-white font-semibold hover:bg-[#0E3327] transition cursor-pointer"
             >
               <UserCheck className="w-3.5 h-3.5" />
-              Đăng nhập nhanh (Rohwan)
+              Đăng nhập nhanh (Admin)
             </button>
             <button
               type="button"
@@ -187,10 +262,8 @@ export default function App() {
         />
       </div>
 
-      {/* MODE 2: COPYABLE CODE VIEWER FOR MODIFIED GAS FILES */}
       {activeMode === 'code' && (
         <div className="flex-1 flex flex-col lg:flex-row min-h-[calc(100vh-60px)]">
-          {/* File Explorer Sidebar */}
           <aside className="w-full lg:w-80 bg-[#B8E2CC] border-b lg:border-b-0 lg:border-r border-[#7EB89A] p-4 shrink-0 overflow-y-auto">
             {gsFiles.length > 0 && (
               <div className="mb-5">
@@ -215,11 +288,7 @@ export default function App() {
                           <FileCode2 className="w-4 h-4 shrink-0" />
                           <span className="truncate">{file.filename}</span>
                         </span>
-                        <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                            active ? 'bg-white/20 text-white' : 'bg-white text-[#1E293B]'
-                          }`}
-                        >
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${active ? 'bg-white/20 text-white' : 'bg-white text-[#1E293B]'}`}>
                           .gs
                         </span>
                       </button>
@@ -252,49 +321,8 @@ export default function App() {
                           <FileText className="w-4 h-4 shrink-0" />
                           <span className="truncate">{file.filename}</span>
                         </span>
-                        <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                            active ? 'bg-white/20 text-white' : 'bg-white text-[#1E293B]'
-                          }`}
-                        >
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${active ? 'bg-white/20 text-white' : 'bg-white text-[#1E293B]'}`}>
                           .html
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {jsonFiles.length > 0 && (
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider text-[#0B261C] mb-2">
-                  Manifest Config ({jsonFiles.length} file)
-                </div>
-                <div className="space-y-1">
-                  {jsonFiles.map((file) => {
-                    const active = file.id === selectedFile.id;
-                    return (
-                      <button
-                        key={file.id}
-                        type="button"
-                        onClick={() => setSelectedFileId(file.id)}
-                        className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition cursor-pointer flex items-center justify-between gap-2 ${
-                          active
-                            ? 'bg-[#144535] border-[#144535] border-l-4 border-l-[#0B261C] text-white font-semibold'
-                            : 'bg-white/80 border-[#7EB89A] text-[#0B261C] font-semibold hover:bg-[#A0D4B9]'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2 truncate">
-                          <FileCode2 className="w-4 h-4 shrink-0" />
-                          <span className="truncate">{file.filename}</span>
-                        </span>
-                        <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                            active ? 'bg-white/20 text-white' : 'bg-white text-[#1E293B]'
-                          }`}
-                        >
-                          .json
                         </span>
                       </button>
                     );
@@ -306,12 +334,11 @@ export default function App() {
             <div className="mt-6 p-3 rounded-lg bg-white border border-[#7EB89A] shadow-sm text-xs text-[#1E293B] space-y-1.5">
               <div className="font-bold text-[#0B261C]">Hướng dẫn dán vào GAS:</div>
               <p>1. Mở project trên <strong>script.google.com</strong>.</p>
-              <p>2. Copy đúng <strong>{GAS_FILES.length} file</strong> đang hiển thị ở trên vào Google Apps Script.</p>
+              <p>2. Copy đúng <strong>{DISPLAY_GAS_FILES.length} file</strong> đang hiển thị ở trên vào Google Apps Script.</p>
               <p>3. Bấm <strong>Save</strong> rồi <strong>Deploy &rarr; Manage deployments &rarr; Edit &rarr; New version</strong>.</p>
             </div>
           </aside>
 
-          {/* Code Display Panel */}
           <section className="flex-1 min-w-0 flex flex-col bg-slate-950 text-slate-100">
             <div className="px-5 py-3 bg-slate-900 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -368,7 +395,6 @@ export default function App() {
         </div>
       )}
 
-      {/* GENERATED TAG PAYLOAD INSPECTOR MODAL */}
       {inspectorOpen && lastGenerated && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[88vh] flex flex-col overflow-hidden">

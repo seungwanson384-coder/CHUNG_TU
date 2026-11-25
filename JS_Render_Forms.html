@@ -1,14 +1,8 @@
 <script>
 /**
  * JS_Render_Forms.html
- * Configuration-driven renderer for Thông tin chung + 20 documents,
- * custom translucent jade-green comboboxes (<input data-combo="...">),
- * and high-contrast synced tables.
+ * Configuration-driven renderer for Thông tin chung, Admin Accounts (with column mapping & separate tables), + 20 documents.
  */
-
-/* ==========================================================================
-   TABLE COLUMN DEFINITIONS
-   ========================================================================== */
 
 const ITEM_COLUMNS = {
   PCODE: { label: 'Mã hàng', width: '100px' },
@@ -52,10 +46,6 @@ const CONT_COLUMNS = {
   VGM_WEI: { label: 'Khối lượng VGM', width: '115px', num: true },
   CBM: { label: 'Thể tích CBM', width: '100px', num: true }
 };
-
-/* ==========================================================================
-   21-VIEW CONFIGURATION SCHEMA (Thông tin chung + 20 DOCUMENTS)
-   ========================================================================== */
 
 const DOC_FORM_CONFIGS = {
   MASTER_PARTIES: {
@@ -108,6 +98,13 @@ const DOC_FORM_CONFIGS = {
     ]
   },
 
+  ADMIN_ACCOUNTS: {
+    title: 'Quản lý Tài khoản hệ thống (Admin)',
+    isMaster: true,
+    isAdminScreen: true,
+    sections: []
+  },
+
   QUOTATION: {
     title: 'Quotation',
     sections: [
@@ -130,7 +127,8 @@ const DOC_FORM_CONFIGS = {
     ],
     totals: [
       { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
-      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true }
+      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true },
+      { key: 'TOT_AMT_WORDS', label: 'Tổng tiền bằng chữ', span: 3 }
     ]
   },
 
@@ -152,7 +150,7 @@ const DOC_FORM_CONFIGS = {
           { key: 'PACK_SPEC', label: 'Quy cách đóng gói' },
           { key: 'CONT_LOAD', label: 'Định mức đóng container' },
           { key: 'SHIPMENT_DEADLINE', label: 'Thời hạn giao hàng' },
-          { key: 'INS_TERM', label: 'Điều kiện bảo hiểm' },
+          { key: 'INS_TERM', label: 'Điều kiện bảo hiểm', type: 'combobox', source: 'INSURANCE_TERM' },
           { key: 'LC_OPENING_TIME', label: 'Thời hạn mở L/C' },
           { key: 'CO_FORM_NAME', label: 'Loại Form C/O', type: 'combobox', source: 'CO_FORM' },
           { key: 'ORG', label: 'Nước xuất xứ', type: 'combobox', source: 'QUOC_GIA' },
@@ -166,14 +164,17 @@ const DOC_FORM_CONFIGS = {
           { key: 'INCOTERM_PLACE', label: 'Địa điểm giao hàng' },
           { key: 'PAY_TERM', label: 'Phương thức thanh toán', type: 'combobox', source: 'PAY_TERM' },
           { key: 'CURR', label: 'Đồng tiền thanh toán', type: 'combobox', source: 'CURR' },
-          { key: 'FREIGHT', label: 'Điều khoản cước', type: 'combobox', source: 'FREIGHT' },
-          { key: 'TOT_AMT_WORDS', label: 'Tổng tiền bằng chữ', span: 3 }
+          { key: 'FREIGHT', label: 'Điều khoản cước', type: 'combobox', source: 'FREIGHT' }
         ]
       }
     ],
     tables: [
       { type: 'items', title: 'Danh mục hàng hóa hợp đồng', cols: ['PROD', 'PRICE', 'UNIT', 'QTY', 'AMT'] },
       { type: 'containers', title: 'Danh sách Container / Seal', cols: ['CONT', 'SEAL'] }
+    ],
+    totals: [
+      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true },
+      { key: 'TOT_AMT_WORDS', label: 'Tổng tiền bằng chữ', span: 2 }
     ]
   },
 
@@ -227,12 +228,6 @@ const DOC_FORM_CONFIGS = {
     tables: [
       { type: 'items', title: 'Chi tiết đóng gói hàng hóa', cols: ['PCODE', 'PROD', 'UNIT', 'PACK', 'NW', 'GW', 'CBM'] },
       { type: 'containers', title: 'Chi tiết Container', cols: ['CONT', 'CTYPE', 'SEAL'] }
-    ],
-    totals: [
-      { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
-      { key: 'TOT_NW', label: 'Tổng Net Weight', readonly: true },
-      { key: 'TOT_GW', label: 'Tổng Gross Weight', readonly: true },
-      { key: 'TOT_CBM', label: 'Tổng thể tích CBM', readonly: true }
     ]
   },
 
@@ -254,19 +249,25 @@ const DOC_FORM_CONFIGS = {
           { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
           { key: 'ETD_DT', label: 'Ngày tàu chạy dự kiến', type: 'date' },
           { key: 'INCOTERM', label: 'Điều kiện giao hàng', type: 'combobox', source: 'INCOTERM' },
-          { key: 'INCOTERM_PLACE', label: 'Địa điểm giao hàng' },
-          { key: 'FREIGHT_PREPAID', label: 'Cước trả trước', type: 'checkbox' },
-          { key: 'FREIGHT_COLLECT', label: 'Cước trả sau', type: 'checkbox' },
-          { key: 'DG_YES', label: 'Hàng nguy hiểm', type: 'checkbox' },
-          { key: 'DG_NO', label: 'Hàng thường', type: 'checkbox' },
+          { key: 'INCOTERM_PLACE', label: 'Địa điểm giao hàng' }
+        ]
+      },
+      {
+        title: 'Tùy chọn cước & Yêu cầu xử lý đặc biệt',
+        gridCols: 4,
+        fields: [
+          { key: 'FREIGHT_PREPAID', label: 'Cước trả trước', type: 'checkbox', noSpacer: true },
+          { key: 'FREIGHT_COLLECT', label: 'Cước trả sau', type: 'checkbox', noSpacer: true },
+          { key: 'DG_YES', label: 'Hàng nguy hiểm', type: 'checkbox', noSpacer: true },
+          { key: 'DG_NO', label: 'Hàng thường', type: 'checkbox', noSpacer: true },
           { key: 'DG_CLASS_UN', label: 'Mã phân loại nguy hiểm' },
           { key: 'TEMP', label: 'Nhiệt độ' },
           { key: 'VENT', label: 'Thông gió' },
           { key: 'HUMIDITY', label: 'Độ ẩm' },
-          { key: 'OUT_OF_GAUGE', label: 'Hàng quá khổ', type: 'checkbox' },
-          { key: 'NON_STACKABLE', label: 'Không xếp chồng', type: 'checkbox' },
-          { key: 'FUMIGATION_NEEDED', label: 'Yêu cầu hun trùng', type: 'checkbox' },
-          { key: 'SPECIAL_HANDLING', label: 'Ghi chú xử lý đặc biệt', type: 'textarea', span: 3 }
+          { key: 'OUT_OF_GAUGE', label: 'Hàng quá khổ', type: 'checkbox', noSpacer: true },
+          { key: 'NON_STACKABLE', label: 'Không xếp chồng', type: 'checkbox', noSpacer: true },
+          { key: 'FUMIGATION_NEEDED', label: 'Yêu cầu hun trùng', type: 'checkbox', noSpacer: true },
+          { key: 'SPECIAL_HANDLING', label: 'Ghi chú xử lý đặc biệt', type: 'textarea', span: 'full' }
         ]
       }
     ],
@@ -291,9 +292,6 @@ const DOC_FORM_CONFIGS = {
     ],
     tables: [
       { type: 'containers', title: 'Bảng kê khối lượng VGM', cols: ['CONT', 'CSIZE', 'MAX_GW', 'VGM_WEI'] }
-    ],
-    totals: [
-      { key: 'TOT_VGM', label: 'Tổng khối lượng VGM', readonly: true }
     ]
   },
 
@@ -301,28 +299,29 @@ const DOC_FORM_CONFIGS = {
     title: 'Shipping Instruction',
     sections: [
       {
-        title: 'Thông tin Hướng dẫn lập Vận đơn',
+        title: 'Thông tin Hướng dẫn giao hàng',
         fields: [
+          { key: 'SI_NO', label: 'Số hướng dẫn giao hàng' },
           { key: 'SI_DT', label: 'Ngày phát hành S/I', type: 'date' },
+          { key: 'CAR_NAME', label: 'Tên hãng tàu', type: 'combobox', source: 'CAR_NAME' },
+          { key: 'CAR_ADDR', label: 'Địa chỉ hãng tàu', span: 2 },
           { key: 'BK_NO', label: 'Số Booking' },
-          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
-          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
           { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
           { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
-          { key: 'FREIGHT_PREPAID', label: 'Cước trả trước', type: 'checkbox' },
-          { key: 'FREIGHT_COLLECT', label: 'Cước trả sau', type: 'checkbox' },
-          { key: 'DESCRIPTION_OF_GOODS', label: 'Mô tả hàng hóa trên vận đơn', type: 'textarea', span: 3 }
+          { key: 'FINAL_DESTINATION', label: 'Cảng đích cuối' },
+          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
+          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
+          { key: 'ETD_DT', label: 'Ngày tàu chạy dự kiến', type: 'date' },
+          { key: 'FREIGHT', label: 'Điều khoản cước', type: 'combobox', source: 'FREIGHT' },
+          { key: 'SERVICE_TYPE', label: 'Loại hình dịch vụ', type: 'combobox', source: 'SERVICE_TYPE' },
+          { key: 'CO_FORM_NAME', label: 'Loại Form C/O', type: 'combobox', source: 'CO_FORM' },
+          { key: 'DESCRIPTION_OF_GOODS', label: 'Mô tả hàng hóa', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'containers', title: 'Chi tiết Container / Seal', cols: ['CONT', 'SEAL', 'CTYPE', 'PACK', 'UNIT_PACK', 'GW', 'CBM', 'VGM_WEI'] }
-    ],
-    totals: [
-      { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
-      { key: 'TOT_GW', label: 'Tổng Gross Weight', readonly: true },
-      { key: 'TOT_CBM', label: 'Tổng thể tích CBM', readonly: true },
-      { key: 'TOT_VGM', label: 'Tổng khối lượng VGM', readonly: true }
+      { type: 'items', title: 'Danh mục hàng hóa S/I', cols: ['PROD', 'HS', 'ORG', 'PACK', 'NW', 'GW', 'CBM'] },
+      { type: 'containers', title: 'Danh sách Container / Seal', cols: ['CONT', 'SEAL'] }
     ]
   },
 
@@ -330,34 +329,18 @@ const DOC_FORM_CONFIGS = {
     title: 'Veterinary Certificate',
     sections: [
       {
-        title: 'Thông tin Kiểm dịch Động vật',
+        title: 'Thông tin Giấy chứng nhận Kiểm dịch động vật',
         fields: [
-          { key: 'VET_CERT_NO', label: 'Số giấy chứng nhận' },
-          { key: 'ISS_DT', label: 'Ngày cấp', type: 'date' },
-          { key: 'ORIGIN_FARM_REGION', label: 'Vùng chăn nuôi' },
-          { key: 'PURPOSE_OF_USE', label: 'Mục đích sử dụng' },
-          { key: 'USAGE_CATEGORY', label: 'Nhóm đối tượng' },
-          { key: 'INSPECTION_CONTENT', label: 'Nội dung kiểm dịch' },
-          { key: 'INSPECTION_METHOD', label: 'Phương pháp kiểm dịch' },
-          { key: 'INSPECTION_RESULT', label: 'Kết quả kiểm dịch' },
-          { key: 'INSPECTION_CONCLUSION', label: 'Kết luận kiểm dịch' },
-          { key: 'VALIDITY_PERIOD', label: 'Thời hạn hiệu lực' },
-          { key: 'TRANS_MODE', label: 'Phương thức vận tải' },
-          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
-          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
-          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
-          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
-          { key: 'ORG', label: 'Nước xuất xứ', type: 'combobox', source: 'QUOC_GIA' }
+          { key: 'VET_CERT_NO', label: 'Số giấy chứng nhận thú y' },
+          { key: 'VET_CERT_DT', label: 'Ngày cấp', type: 'date' },
+          { key: 'ANIMAL_ORIGIN', label: 'Nguồn gốc động vật' },
+          { key: 'SLAUGHTER_HOUSE', label: 'Cơ sở giết mổ / chế biến' },
+          { key: 'VET_INSPECTOR', label: 'Cán bộ kiểm dịch thú y' }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Danh mục sản phẩm kiểm dịch', cols: ['PROD', 'DES', 'LOT_NO', 'UNIT', 'QTY', 'NW'] },
-      { type: 'containers', title: 'Danh sách Container', cols: ['CONT'] }
-    ],
-    totals: [
-      { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
-      { key: 'TOT_GW', label: 'Tổng Gross Weight', readonly: true }
+      { type: 'items', title: 'Sản phẩm động vật kiểm dịch', cols: ['PROD', 'PACK', 'NW', 'GW', 'MARKS'] }
     ]
   },
 
@@ -365,29 +348,18 @@ const DOC_FORM_CONFIGS = {
     title: 'Phytosanitary Certificate',
     sections: [
       {
-        title: 'Thông tin Kiểm dịch Thực vật',
+        title: 'Thông tin Giấy chứng nhận Kiểm dịch thực vật',
         fields: [
-          { key: 'PHYTO_CERT_NO', label: 'Số giấy chứng nhận' },
-          { key: 'ISS_DT', label: 'Ngày cấp', type: 'date' },
-          { key: 'ISSUE_PLACE', label: 'Nơi cấp' },
-          { key: 'PACKAGE_TYPE', label: 'Loại bao bì' },
-          { key: 'PACKING_SPECIFICATION', label: 'Quy cách đóng gói' },
-          { key: 'BOTANICAL_NAME', label: 'Tên khoa học thực vật' },
-          { key: 'TREAT_DT', label: 'Ngày xử lý', type: 'date' },
-          { key: 'CONCENTRATION', label: 'Nồng độ thuốc' },
-          { key: 'DEST_CTRY', label: 'Nước nhập khẩu', type: 'combobox', source: 'QUOC_GIA' },
-          { key: 'ORG', label: 'Nước xuất xứ', type: 'combobox', source: 'QUOC_GIA' },
-          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
-          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
-          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
-          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
-          { key: 'BL_NO', label: 'Số vận đơn' },
-          { key: 'ADDITIONAL_INFO', label: 'Khai báo bổ sung', type: 'textarea', span: 3 }
+          { key: 'PHYTO_CERT_NO', label: 'Số giấy chứng nhận kiểm dịch thực vật' },
+          { key: 'PHYTO_CERT_DT', label: 'Ngày cấp', type: 'date' },
+          { key: 'PLANT_ORIGIN', label: 'Vùng trồng / Xuất xứ thực vật' },
+          { key: 'DISINFESTATION_METHOD', label: 'Phương pháp khử trùng / xử lý' },
+          { key: 'CHEMICAL_NAME', label: 'Tên hóa chất xử lý' }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Danh mục hàng hóa thực vật', cols: ['PROD', 'HS', 'PACK', 'NW', 'GW'] }
+      { type: 'items', title: 'Sản phẩm thực vật kiểm dịch', cols: ['PROD', 'HS', 'PACK', 'NW', 'GW', 'MARKS'] }
     ]
   },
 
@@ -395,31 +367,17 @@ const DOC_FORM_CONFIGS = {
     title: 'Quality Certificate',
     sections: [
       {
-        title: 'Thông tin Chứng nhận Chất lượng',
+        title: 'Thông tin Giấy chứng nhận Chất lượng',
         fields: [
-          { key: 'QUAL_CERT_NO', label: 'Số chứng thư' },
-          { key: 'ISS_DT', label: 'Ngày cấp', type: 'date' },
-          { key: 'ISSUE_PLACE', label: 'Nơi cấp' },
-          { key: 'LOT_NO', label: 'Số lô' },
-          { key: 'ADDITIVE_RATIO', label: 'Tỷ lệ phụ gia' },
-          { key: 'PROD_DT', label: 'Ngày sản xuất', type: 'date' },
-          { key: 'FINENESS_45UM', label: 'Độ mịn 45um' },
-          { key: 'SPECIFIC_SURFACE', label: 'Bề mặt riêng' },
-          { key: 'INITIAL_SETTING', label: 'Thời gian đông kết bắt đầu' },
-          { key: 'FINAL_SETTING', label: 'Thời gian đông kết kết thúc' },
-          { key: 'SOUNDNESS', label: 'Độ ổn định thể tích' },
-          { key: 'COMPRESSIVE_STRENGTH_3D', label: 'Cường độ nén 3 ngày' },
-          { key: 'COMPRESSIVE_STRENGTH_7D', label: 'Cường độ nén 7 ngày' },
-          { key: 'COMPRESSIVE_STRENGTH_28D', label: 'Cường độ nén 28 ngày' },
-          { key: 'SO3_CONTENT', label: 'Hàm lượng SO3' },
-          { key: 'LOSS_ON_IGNITION', label: 'Mất khi nung' },
-          { key: 'FREE_CAO', label: 'Hàm lượng CaO tự do' },
-          { key: 'INSPECTION_CONCLUSION', label: 'Kết luận chất lượng', type: 'textarea', span: 3 }
+          { key: 'QUAL_CERT_NO', label: 'Số giấy chứng nhận chất lượng' },
+          { key: 'QUAL_CERT_DT', label: 'Ngày cấp', type: 'date' },
+          { key: 'INSPECTING_BODY', label: 'Tổ chức giám định chất lượng' },
+          { key: 'TEST_RESULT', label: 'Kết quả kiểm tra chất lượng' }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Chi tiết sản phẩm kiểm nghiệm', cols: ['PROD', 'LOT_NO'] }
+      { type: 'items', title: 'Hàng hóa giám định chất lượng', cols: ['PROD', 'SPEC_MOISTURE', 'SPEC_BROKEN', 'QTY', 'UNIT'] }
     ]
   },
 
@@ -427,36 +385,19 @@ const DOC_FORM_CONFIGS = {
     title: 'Fumigation Certificate',
     sections: [
       {
-        title: 'Thông tin Hun trùng',
+        title: 'Thông tin Giấy chứng nhận Hun trùng',
         fields: [
-          { key: 'FUM_CERT_NO', label: 'Số chứng thư' },
-          { key: 'ISS_DT', label: 'Ngày cấp', type: 'date' },
-          { key: 'ISSUE_PLACE', label: 'Nơi cấp' },
-          { key: 'MINISTRY_AUTHORITY', label: 'Cơ quan chủ quản' },
-          { key: 'FUMIGATION_COMPANY', label: 'Công ty hun trùng' },
-          { key: 'FUMIGATION_BRANCH', label: 'Chi nhánh hun trùng' },
-          { key: 'CHEMICAL', label: 'Hóa chất sử dụng' },
-          { key: 'DOSAGE', label: 'Liều lượng' },
-          { key: 'EXPOSURE_DURATION', label: 'Thời gian ủ thuốc' },
-          { key: 'FUMIGATION_PLACE', label: 'Địa điểm hun trùng' },
-          { key: 'FUM_DT', label: 'Ngày hun trùng', type: 'date' },
-          { key: 'TOT_UNIT', label: 'Đơn vị tính tổng', type: 'combobox', source: 'UNIT' },
-          { key: 'BL_NO', label: 'Số vận đơn' },
-          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
-          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
-          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
-          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
-          { key: 'DESCRIPTION_OF_GOODS', label: 'Mô tả hàng hóa', type: 'textarea', span: 3 }
+          { key: 'FUM_CERT_NO', label: 'Số giấy chứng nhận hun trùng' },
+          { key: 'FUM_CERT_DT', label: 'Ngày cấp', type: 'date' },
+          { key: 'FUM_CHEMICAL', label: 'Hóa chất hun trùng (Methyl Bromide...)' },
+          { key: 'FUM_DOSAGE', label: 'Liều lượng sử dụng' },
+          { key: 'FUM_EXPOSURE_TIME', label: 'Thời gian ủ thuốc (giờ)' },
+          { key: 'FUM_TEMP', label: 'Nhiệt độ hun trùng' }
         ]
       }
     ],
     tables: [
-      { type: 'containers', title: 'Container hun trùng', cols: ['CONT', 'SEAL'] }
-    ],
-    totals: [
-      { key: 'TOT_GW', label: 'Tổng Gross Weight', readonly: true },
-      { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
-      { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true }
+      { type: 'containers', title: 'Danh sách Container hun trùng', cols: ['CONT', 'SEAL', 'PACK'] }
     ]
   },
 
@@ -464,30 +405,20 @@ const DOC_FORM_CONFIGS = {
     title: 'Certificate of Origin',
     sections: [
       {
-        title: 'Thông tin Chứng nhận Xuất xứ',
+        title: 'Thông tin Giấy chứng nhận Xuất xứ (C/O)',
         fields: [
-          { key: 'CO_FORM_NAME', label: 'Loại Form C/O', type: 'combobox', source: 'CO_FORM' },
           { key: 'CO_REF_NO', label: 'Số tham chiếu C/O' },
-          { key: 'CO_PLACE', label: 'Nơi cấp C/O' },
-          { key: 'CO_DT', label: 'Ngày cấp C/O', type: 'date' },
+          { key: 'CO_ISSUE_DT', label: 'Ngày cấp C/O', type: 'date' },
+          { key: 'CO_FORM_NAME', label: 'Mẫu C/O', type: 'combobox', source: 'CO_FORM' },
           { key: 'TRADE_AGREEMENT', label: 'Hiệp định thương mại', type: 'combobox', source: 'TRADE_AGREEMENT' },
-          { key: 'TRADE_PARTNER', label: 'Đối tác FTA' },
           { key: 'ORG', label: 'Nước xuất xứ', type: 'combobox', source: 'QUOC_GIA' },
           { key: 'DEST_CTRY', label: 'Nước nhập khẩu', type: 'combobox', source: 'QUOC_GIA' },
-          { key: 'POL', label: 'Cảng xếp hàng', type: 'combobox', source: 'POL' },
-          { key: 'POD', label: 'Cảng dỡ hàng', type: 'combobox', source: 'POD' },
-          { key: 'VESSEL', label: 'Tên tàu', type: 'combobox', source: 'VESSEL' },
-          { key: 'VOYAGE', label: 'Số chuyến', type: 'combobox', source: 'VOYAGE' },
-          { key: 'ETD_DT', label: 'Ngày tàu chạy dự kiến', type: 'date' },
-          { key: 'BL_NO', label: 'Số vận đơn' },
-          { key: 'INV_NO', label: 'Số hóa đơn' },
-          { key: 'INV_DT', label: 'Ngày hóa đơn', type: 'date' },
-          { key: 'CURR', label: 'Đồng tiền thanh toán', type: 'combobox', source: 'CURR' }
+          { key: 'INCOTERM', label: 'Điều kiện giao hàng', type: 'combobox', source: 'INCOTERM' }
         ]
       }
     ],
     tables: [
-      { type: 'items', title: 'Danh mục hàng hóa khai báo xuất xứ', cols: ['PCODE', 'MARKS', 'PROD', 'DES', 'PACK', 'HS', 'GW', 'AMT'] }
+      { type: 'items', title: 'Hàng hóa chứng nhận xuất xứ', cols: ['PROD', 'HS', 'PREF', 'QTY', 'UNIT', 'INVOICE_REF'] }
     ]
   },
 
@@ -553,11 +484,6 @@ const DOC_FORM_CONFIGS = {
     ],
     tables: [
       { type: 'containers', title: 'Danh sách Container xác nhận', cols: ['CONT', 'CTYPE', 'SEAL'] }
-    ],
-    totals: [
-      { key: 'TOT_NW', label: 'Tổng Net Weight', readonly: true },
-      { key: 'TOT_GW', label: 'Tổng Gross Weight', readonly: true },
-      { key: 'TOT_CBM', label: 'Tổng thể tích CBM', readonly: true }
     ]
   },
 
@@ -622,11 +548,6 @@ const DOC_FORM_CONFIGS = {
     ],
     tables: [
       { type: 'containers', title: 'Danh sách Container / Seal', cols: ['CONT', 'SEAL'] }
-    ],
-    totals: [
-      { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
-      { key: 'TOT_GW', label: 'Tổng Gross Weight', readonly: true },
-      { key: 'TOT_CBM', label: 'Tổng thể tích CBM', readonly: true }
     ]
   },
 
@@ -656,11 +577,6 @@ const DOC_FORM_CONFIGS = {
     ],
     tables: [
       { type: 'containers', title: 'Container nhận hàng', cols: ['CONT', 'SEAL'] }
-    ],
-    totals: [
-      { key: 'TOT_PACK', label: 'Tổng số kiện', readonly: true },
-      { key: 'TOT_GW', label: 'Tổng Gross Weight', readonly: true },
-      { key: 'TOT_CBM', label: 'Tổng thể tích CBM', readonly: true }
     ]
   },
 
@@ -792,7 +708,7 @@ const DOC_FORM_CONFIGS = {
           { key: 'INCOTERM', label: 'Điều kiện giao hàng', type: 'combobox', source: 'INCOTERM' },
           { key: 'INCOTERM_PLACE', label: 'Địa điểm giao hàng' },
           { key: 'CURR', label: 'Đồng tiền thanh toán', type: 'combobox', source: 'CURR' },
-          { key: 'INS_TERM', label: 'Điều kiện bảo hiểm' },
+          { key: 'INS_TERM', label: 'Điều kiện bảo hiểm', type: 'combobox', source: 'INSURANCE_TERM' },
           { key: 'FREIGHT_AMT', label: 'Cước phí' },
           { key: 'INS_AMT', label: 'Phí bảo hiểm' }
         ]
@@ -800,22 +716,81 @@ const DOC_FORM_CONFIGS = {
     ],
     tables: [
       { type: 'items', title: 'Mô tả hàng hóa', cols: ['PROD', 'DES', 'ORG', 'PRICE', 'QTY', 'AMT'] }
-    ],
-    totals: [
-      { key: 'TOT_QTY', label: 'Tổng số lượng', readonly: true },
-      { key: 'TOT_AMT', label: 'Tổng tiền hàng', readonly: true }
     ]
   }
 };
-
-/* ==========================================================================
-   MASTER RENDERER & EVENT DELEGATION
-   ========================================================================== */
 
 let workspaceListenersAttached = false;
 let activeComboInput = null;
 let comboActiveIndex = -1;
 let comboListenersAttached = false;
+
+function getComboboxOptionsForSource(source) {
+  const key = String(source || '').trim();
+  if (!key || typeof APP_STATE === 'undefined' || !APP_STATE.dropdowns) return [];
+
+  const dm = APP_STATE.dropdowns.danhMucChung || {};
+  const cuocTau = Array.isArray(APP_STATE.dropdowns.cuocTau) ? APP_STATE.dropdowns.cuocTau : [];
+
+  if (key === 'QUOC_GIA') {
+    const base = Array.isArray(dm.QUOC_GIA) ? dm.QUOC_GIA : [];
+    const fromRoutes = cuocTau.map(function (r) { return String(r.Quoc_Gia || '').trim(); }).filter(Boolean);
+    return Array.from(new Set(base.concat(fromRoutes)));
+  }
+
+  if (key === 'FREIGHT') {
+    const base = Array.isArray(dm.FREIGHT) && dm.FREIGHT.length > 0 ? dm.FREIGHT : ['PREPAID', 'COLLECT'];
+    return base;
+  }
+
+  if (key === 'XNK_XK' || key === 'XNK_NK') {
+    const dir = key === 'XNK_XK' ? 'Xuất' : 'Nhập';
+    const rows = typeof getFilteredLoaiHinhXnk === 'function' ? getFilteredLoaiHinhXnk(dir) : [];
+    return rows.map(function (r) {
+      const code = String(r.Ma_loai_hinh || r.ma || r.code || '').trim();
+      const name = String(r.Ten_loai_hinh || r.ten || r.name || '').trim();
+      return code && name ? (code + ' - ' + name) : (code || name);
+    }).filter(Boolean);
+  }
+
+  if (key === 'TOTAL_CONTAINERS_TEXT') {
+    const cur = APP_STATE.shared && APP_STATE.shared.TOTAL_CONTAINERS_TEXT ? String(APP_STATE.shared.TOTAL_CONTAINERS_TEXT).trim() : '';
+    return cur ? [cur] : [];
+  }
+
+  if (Array.isArray(dm[key])) {
+    return dm[key];
+  }
+
+  return [];
+}
+
+function initCustomComboboxSystem() {
+  const scheduleSources = { POL: true, POD: true, CAR_NAME: true, VESSEL: true, VOYAGE: true };
+  document.querySelectorAll('input[data-combo]').forEach(function (inp) {
+    const source = inp.getAttribute('data-combo');
+    if (!source) return;
+
+    const dlId = scheduleSources[source] ? ('dl_' + source) : ('dl_combo_' + source);
+    inp.setAttribute('list', dlId);
+
+    if (scheduleSources[source] && document.getElementById(dlId)) {
+      return;
+    }
+
+    let dl = document.getElementById(dlId);
+    if (!dl) {
+      dl = document.createElement('datalist');
+      dl.id = dlId;
+      document.body.appendChild(dl);
+    }
+
+    const opts = getComboboxOptionsForSource(source);
+    dl.innerHTML = opts.map(function (v) {
+      return '<option value="' + escapeHtml(v) + '"></option>';
+    }).join('');
+  });
+}
 
 function renderAllFormViews() {
   const container = document.getElementById('workspacePanels');
@@ -832,7 +807,10 @@ function renderAllFormViews() {
   validateContainerInputsInDOM();
   renderBatchExportChecklist();
 
-  // Re-render any existing export results
+  if (APP_STATE.user && APP_STATE.user.role === 'ADMIN') {
+    loadAdminAccountsTables();
+  }
+
   Object.keys(APP_STATE.exportResults).forEach(function (docKey) {
     renderSingleExportResultBox(docKey);
   });
@@ -859,7 +837,72 @@ function buildPanelHtml(docKey, cfg) {
   const isActive = APP_STATE.activeTab === docKey ? ' active' : '';
   let html = '<section class="doc-panel' + isActive + '" data-tab-panel="' + docKey + '">';
 
-  // Panel Header
+  if (cfg.isAdminScreen) {
+    html += '<div class="doc-panel-header"><div><h2 class="doc-panel-title">' + escapeHtml(cfg.title) + '</h2></div></div>';
+    
+    // Section 1: Single Account
+    html += '<div class="card form-card section-box"><div class="card-header"><h3 class="card-title">1. Thêm tài khoản thủ công</h3></div><div class="card-body">';
+    html += '<form id="adminAddForm" onsubmit="handleAddAccountSubmit(event)" class="form-grid form-grid-3">';
+    html += '<div class="form-group"><label class="form-label">Mã sinh viên (Mật khẩu)</label><input type="text" id="adminNewMaSV" class="form-control" placeholder="NV004" required /></div>';
+    html += '<div class="form-group"><label class="form-label">Tên sinh viên (Tên đăng nhập)</label><input type="text" id="adminNewTenSV" class="form-control" placeholder="Nguyen Van D" required /></div>';
+    html += '<div class="form-group"><label class="form-label">Vai trò</label><select id="adminNewVaiTro" class="form-control"><option value="SV">Sinh viên (SV)</option><option value="ADMIN">Quản trị viên (ADMIN)</option></select></div>';
+    html += '<div class="form-group span-full" style="flex-direction:row; justify-content:flex-end;"><button type="submit" class="btn btn-primary">Thêm tài khoản</button></div>';
+    html += '</form></div></div>';
+
+    // Section 2: Bulk Import & Column Mapping
+    html += '<div class="card form-card section-box"><div class="card-header"><h3 class="card-title">2. Nạp hàng loạt từ file Excel / CSV hoặc Google Sheets (Có ánh xạ cột &amp; Xem trước)</h3></div><div class="card-body" style="display:flex; flex-direction:column; gap:16px;">';
+    html += '<div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">';
+    html += '<div class="form-group" style="flex:1; min-width:260px;"><label class="form-label">Chọn file Excel / CSV cục bộ</label><input type="file" id="adminExcelFileInput" class="form-control" accept=".xlsx, .xls, .csv" onchange="handleExcelFileSelected(event)" /></div>';
+    html += '</div>';
+    html += '<div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">';
+    html += '<div class="form-group" style="flex:1; min-width:280px;"><label class="form-label">Link hoặc ID Google Sheets bên ngoài</label><input type="text" id="adminSheetUrlInput" class="form-control" placeholder="https://docs.google.com/spreadsheets/d/..." /></div>';
+    html += '<button type="button" class="btn btn-secondary" onclick="handleScanGoogleSheet()">Quét Google Sheets</button>';
+    html += '</div>';
+
+    // Column Mapping Container (hidden until file/sheet is scanned)
+    html += '<div id="columnMappingContainer" class="hidden" style="border: 1.5px dashed #4A8B6C; border-radius: 8px; padding: 16px; background: #F7FCF9; display: flex; flex-direction: column; gap: 14px;">';
+    html += '<div style="font-weight:700; color:#0B261C;">Ánh xạ cột dữ liệu &amp; Xem trước trước khi nạp:</div>';
+    html += '<div class="form-grid form-grid-3">';
+    html += '<div class="form-group"><label class="form-label">Cột Mã sinh viên (Mật khẩu) *</label><select id="mapColMaSV" class="form-control" onchange="updateMappingPreview()"></select></div>';
+    html += '<div class="form-group"><label class="form-label">Cột Tên sinh viên (Tên đăng nhập) *</label><select id="mapColTenSV" class="form-control" onchange="updateMappingPreview()"></select></div>';
+    html += '<div class="form-group"><label class="form-label">Ghép thêm cột Tên (nếu file tách Họ &amp; Tên)</label><select id="mapColTenSub" class="form-control" onchange="updateMappingPreview()"><option value="">-- Không ghép --</option></select></div>';
+    html += '<div class="form-group"><label class="form-label">Cột Vai trò (Tùy chọn)</label><select id="mapColVaiTro" class="form-control" onchange="updateMappingPreview()"><option value="">-- Mặc định tất cả là Sinh viên (SV) --</option></select></div>';
+    html += '</div>';
+    html += '<div class="table-scroll" style="max-height:220px;"><table class="data-table"><thead><tr><th style="width:46px;">STT</th><th>Mã SV</th><th>Tên SV</th><th>Vai trò</th><th>Trạng thái hợp lệ</th></tr></thead><tbody id="mappingPreviewTbody"></tbody></table></div>';
+    html += '<div style="display:flex; justify-content:flex-end;"><button type="button" class="btn btn-success" onclick="confirmBulkImport()">Xác nhận nạp vào hệ thống</button></div>';
+    html += '</div>';
+
+    html += '</div></div>';
+
+    // Section 3A: Admin Accounts Table
+    html += '<div class="card form-card table-card dynamic-table-wrapper"><div class="card-header table-card-header"><div><h3 class="card-title">3A. Danh sách Quản trị viên (ADMIN)</h3></div><button type="button" class="btn btn-table-add btn-sm" onclick="loadAdminAccountsTables()">Làm mới</button></div>';
+    html += '<div class="card-body table-card-body" style="padding:12px;"><div class="table-scroll"><table class="data-table"><thead><tr>';
+    html += '<th style="width:46px; text-align:center;">STT</th>';
+    html += '<th style="min-width:130px;">Mã Admin</th>';
+    html += '<th style="min-width:180px;">Tên Admin</th>';
+    html += '<th style="min-width:110px;">Vai trò</th>';
+    html += '<th style="width:70px; text-align:center;">Thao tác</th>';
+    html += '</tr></thead><tbody id="adminAdminsTableBody"><tr><td colspan="5" class="empty-table-note">Đang tải danh sách Quản trị viên...</td></tr></tbody></table></div></div></div>';
+
+    // Section 3B: Student Accounts Table with Bulk Delete
+    html += '<div class="card form-card table-card dynamic-table-wrapper"><div class="card-header table-card-header"><div><h3 class="card-title">3B. Danh sách Sinh viên (SV)</h3></div>';
+    html += '<div style="display:flex; gap:8px; align-items:center;">';
+    html += '<button type="button" class="btn btn-sm btn-danger-outline" onclick="handleDeleteSelectedStudents()">Xóa mục đã chọn</button>';
+    html += '<button type="button" class="btn btn-sm btn-danger-outline" onclick="handleDeleteAllStudents()">Xóa tất cả Sinh viên</button>';
+    html += '</div></div>';
+    html += '<div class="card-body table-card-body" style="padding:12px;"><div class="table-scroll"><table class="data-table"><thead><tr>';
+    html += '<th style="width:40px; text-align:center;"><input type="checkbox" id="selectAllStudentsCheckbox" onclick="toggleSelectAllStudents(this)" /></th>';
+    html += '<th style="width:46px; text-align:center;">STT</th>';
+    html += '<th style="min-width:130px;">Mã SV</th>';
+    html += '<th style="min-width:180px;">Tên SV</th>';
+    html += '<th style="min-width:110px;">Vai trò</th>';
+    html += '<th style="width:70px; text-align:center;">Thao tác</th>';
+    html += '</tr></thead><tbody id="adminStudentsTableBody"><tr><td colspan="6" class="empty-table-note">Đang tải danh sách Sinh viên...</td></tr></tbody></table></div></div></div>';
+
+    html += '</section>';
+    return html;
+  }
+
   html += '<div class="doc-panel-header">';
   html += '<div>';
   html += '<h2 class="doc-panel-title">' + escapeHtml(cfg.title) + '</h2>';
@@ -872,7 +915,6 @@ function buildPanelHtml(docKey, cfg) {
   }
   html += '</div>';
 
-  // Compact Context Banner (SHIP_NAME ➔ CNE_NAME) for all 20 Document Tabs
   if (!cfg.isMaster) {
     const ship = String(APP_STATE.shared.SHIP_NAME || '').trim() || 'Chưa nhập Người xuất khẩu';
     const cne = String(APP_STATE.shared.CNE_NAME || '').trim() || 'Chưa nhập Người nhập khẩu';
@@ -882,23 +924,21 @@ function buildPanelHtml(docKey, cfg) {
     html += '</div>';
   }
 
-  // Export Result Placeholder for single document
   if (!cfg.isMaster) {
     html += '<div id="exportResult_' + docKey + '" class="export-result-box hidden" style="margin-top:0; margin-bottom:18px;"></div>';
   }
 
-  // Form Sections
   (cfg.sections || []).forEach(function (sec) {
+    const gridClass = sec.gridCols === 4 ? 'form-grid form-grid-4' : 'form-grid form-grid-3';
     html += '<div class="card form-card section-box">';
     html += '<div class="card-header"><h3 class="card-title">' + escapeHtml(sec.title) + '</h3></div>';
-    html += '<div class="card-body"><div class="form-grid-3">';
+    html += '<div class="card-body"><div class="' + gridClass + '">';
     sec.fields.forEach(function (field) {
       html += buildFieldHtml(docKey, field);
     });
     html += '</div></div></div>';
   });
 
-  // Dynamic Tables
   (cfg.tables || []).forEach(function (tbl) {
     const logicalType = tbl.type === 'tax' ? 'items' : tbl.type;
     html += '<div class="card form-card table-card dynamic-table-wrapper">';
@@ -916,11 +956,10 @@ function buildPanelHtml(docKey, cfg) {
     html += '</div></div></div>';
   });
 
-  // Totals Section
   if (cfg.totals && cfg.totals.length > 0) {
-    html += '<div class="card form-card section-box">';
+    html += '<div class="card form-card section-box summary-card">';
     html += '<div class="card-header"><h3 class="card-title">Tổng hợp &amp; Quy đổi bằng chữ</h3></div>';
-    html += '<div class="card-body"><div class="form-grid-3">';
+    html += '<div class="card-body"><div class="form-grid form-grid-3">';
     cfg.totals.forEach(function (field) {
       html += buildFieldHtml(docKey, field);
     });
@@ -932,13 +971,17 @@ function buildPanelHtml(docKey, cfg) {
 }
 
 function buildFieldHtml(docKey, field) {
-  const spanClass = field.span === 3 ? ' span-3' : (field.span === 2 ? ' span-2' : '');
+  const spanClass = field.span === 'full'
+    ? ' span-full'
+    : (field.span === 4 ? ' span-4' : (field.span === 3 ? ' span-3' : (field.span === 2 ? ' span-2' : '')));
   const id = 'field_' + docKey + '_' + field.key;
   const roAttr = field.readonly ? ' readonly' : '';
 
   if (field.type === 'checkbox') {
     let html = '<div class="form-group' + spanClass + '">';
-    html += '<span class="form-label">&nbsp;</span>';
+    if (!field.noSpacer) {
+      html += '<span class="form-label">&nbsp;</span>';
+    }
     html += '<label class="checkbox-field-wrap" for="' + id + '">';
     html += '<input id="' + id + '" type="checkbox" data-sync="' + escapeHtml(field.key) + '" />';
     html += '<span class="checkbox-field-text">' + escapeHtml(field.label) + '</span>';
@@ -973,10 +1016,10 @@ function buildTableHtml(tableMode, cols) {
   }
 
   let html = '<table class="data-table"><thead><tr>';
-  html += '<th style="width:36px; text-align:center;">#</th>';
+  html += '<th style="width:46px; text-align:center;">STT</th>';
   cols.forEach(function (colKey) {
     const meta = colMetaMap[colKey] || { label: colKey, width: '100px' };
-    html += '<th style="min-width:' + meta.width + ';">' + escapeHtml(meta.label) + '</th>';
+    html += '<th style="min-width:' + meta.width + '; text-align:center;">' + escapeHtml(meta.label) + '</th>';
   });
   html += '<th style="width:44px; text-align:center;">Xóa</th>';
   html += '</tr></thead><tbody>';
@@ -1020,290 +1063,9 @@ function rerenderAllSyncedTables(logicalType) {
     wrapper.innerHTML = buildTableHtml(tableMode, cols);
   });
 
-  if (logicalType === 'containers') {
-    validateContainerInputsInDOM();
+  if (typeof initCustomComboboxSystem === 'function') {
+    initCustomComboboxSystem();
   }
-}
-
-/* ==========================================================================
-   CUSTOM JADE-GREEN TRANSLUCENT COMBOBOX POPUP SYSTEM
-   ========================================================================== */
-
-function getUniqueCuocTauColumn_(fieldName) {
-  const cuocTau = (APP_STATE.dropdowns && APP_STATE.dropdowns.cuocTau) || [];
-  const seen = {};
-  const list = [];
-  cuocTau.forEach(function (r) {
-    const val = String(r && r[fieldName] ? r[fieldName] : '').trim();
-    if (val && !seen[val]) {
-      seen[val] = true;
-      list.push({ value: val, label: val });
-    }
-  });
-  return list;
-}
-
-function getDropdownOptionsList(source) {
-  const dd = APP_STATE.dropdowns || {};
-  const dm = dd.danhMucChung || {};
-
-  if (source === 'POL') {
-    return getUniqueCuocTauColumn_('POL');
-  }
-
-  if (source === 'POD') {
-    const currentPol = APP_STATE.shared.POL || '';
-    const seen = {};
-    const list = [];
-    (dd.cuocTau || []).forEach(function (r) {
-      if (!currentPol || r.POL === currentPol) {
-        if (r.POD && !seen[r.POD]) {
-          seen[r.POD] = true;
-          list.push({ value: r.POD, label: r.POD });
-        }
-      }
-    });
-    if (list.length === 0) {
-      return getUniqueCuocTauColumn_('POD');
-    }
-    return list;
-  }
-
-  if (source === 'QUOC_GIA') {
-    return getUniqueCuocTauColumn_('Quoc_Gia');
-  }
-
-  if (source === 'CAR_NAME') {
-    return getUniqueCuocTauColumn_('Ten_hang_tau');
-  }
-
-  if (source === 'VESSEL') {
-    return getUniqueCuocTauColumn_('Ten_tau');
-  }
-
-  if (source === 'VOYAGE') {
-    return getUniqueCuocTauColumn_('So_chuyen');
-  }
-
-  if (source === 'XNK_XK') {
-    return getFilteredLoaiHinhXnk('Xuất khẩu').map(function (r) {
-      return { value: r.Ma_loai_hinh, label: r.Ma_loai_hinh + ' - ' + r.Ten_loai_hinh };
-    });
-  }
-
-  if (source === 'XNK_NK') {
-    return getFilteredLoaiHinhXnk('Nhập khẩu').map(function (r) {
-      return { value: r.Ma_loai_hinh, label: r.Ma_loai_hinh + ' - ' + r.Ten_loai_hinh };
-    });
-  }
-
-  if (source === 'FREIGHT') {
-    return [
-      { value: 'FREIGHT PREPAID', label: 'FREIGHT PREPAID' },
-      { value: 'FREIGHT COLLECT', label: 'FREIGHT COLLECT' }
-    ];
-  }
-
-  if (source === 'TOTAL_CONTAINERS_TEXT') {
-    const nums = [];
-    for (let i = 1; i <= 10; i++) {
-      nums.push({ value: String(i), label: String(i) });
-    }
-    return nums;
-  }
-
-  const colList = dm[source] || [];
-  return colList.map(function (val) {
-    return { value: val, label: val };
-  });
-}
-
-function getOrCreateComboDropdownEl_() {
-  let el = document.getElementById('customComboDropdown');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'customComboDropdown';
-    el.className = 'custom-combo-dropdown hidden';
-    el.setAttribute('role', 'listbox');
-    document.body.appendChild(el);
-
-    el.addEventListener('mousedown', function (ev) {
-      const optEl = ev.target && ev.target.closest ? ev.target.closest('.custom-combo-option') : null;
-      if (!optEl || !activeComboInput) return;
-      ev.preventDefault();
-      const chosenVal = optEl.getAttribute('data-value') || '';
-      selectComboOption(activeComboInput, chosenVal);
-    });
-  }
-  return el;
-}
-
-function positionComboDropdown_(inputEl, dropdownEl) {
-  const rect = inputEl.getBoundingClientRect();
-  const minW = Math.max(rect.width, 180);
-  const spaceBelow = window.innerHeight - rect.bottom - 12;
-  const spaceAbove = rect.top - 12;
-
-  dropdownEl.style.width = minW + 'px';
-  dropdownEl.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - minW - 8)) + 'px';
-
-  if (spaceBelow < 160 && spaceAbove > spaceBelow) {
-    dropdownEl.style.top = 'auto';
-    dropdownEl.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
-    dropdownEl.style.maxHeight = Math.min(240, spaceAbove) + 'px';
-  } else {
-    dropdownEl.style.bottom = 'auto';
-    dropdownEl.style.top = (rect.bottom + 4) + 'px';
-    dropdownEl.style.maxHeight = Math.min(240, Math.max(120, spaceBelow)) + 'px';
-  }
-}
-
-function openCustomComboDropdown(inputEl, filterQuery) {
-  if (!inputEl || inputEl.readOnly) return;
-  const source = inputEl.getAttribute('data-combo');
-  if (!source) return;
-
-  const allOptions = getDropdownOptionsList(source);
-  const query = String(filterQuery || '').trim().toLowerCase();
-  const filtered = query
-    ? allOptions.filter(function (opt) {
-        return opt.value.toLowerCase().indexOf(query) !== -1 || opt.label.toLowerCase().indexOf(query) !== -1;
-      })
-    : allOptions;
-
-  const dropdownEl = getOrCreateComboDropdownEl_();
-  if (filtered.length === 0) {
-    closeCustomComboDropdown();
-    return;
-  }
-
-  activeComboInput = inputEl;
-  comboActiveIndex = -1;
-
-  dropdownEl.innerHTML = filtered
-    .map(function (opt, idx) {
-      return (
-        '<div class="custom-combo-option" role="option" data-idx="' + idx + '" data-value="' + escapeHtml(opt.value) + '">' +
-          escapeHtml(opt.label) +
-        '</div>'
-      );
-    })
-    .join('');
-
-  dropdownEl.classList.remove('hidden');
-  positionComboDropdown_(inputEl, dropdownEl);
-}
-
-function closeCustomComboDropdown() {
-  const el = document.getElementById('customComboDropdown');
-  if (el) el.classList.add('hidden');
-  activeComboInput = null;
-  comboActiveIndex = -1;
-}
-
-function selectComboOption(inputEl, chosenValue) {
-  inputEl.value = chosenValue;
-  closeCustomComboDropdown();
-
-  if (inputEl.hasAttribute('data-sync')) {
-    handleWorkspaceFieldChange(inputEl);
-  } else if (inputEl.hasAttribute('data-table-type')) {
-    handleTableCellChange(inputEl);
-  }
-}
-
-function initCustomComboboxSystem() {
-  getOrCreateComboDropdownEl_();
-  if (comboListenersAttached) return;
-  comboListenersAttached = true;
-
-  const container = document.getElementById('workspacePanels');
-  if (!container) return;
-
-  container.addEventListener('focusin', function (ev) {
-    const target = ev.target;
-    if (target && target.matches && target.matches('input[data-combo]')) {
-      openCustomComboDropdown(target, '');
-    }
-  });
-
-  container.addEventListener('click', function (ev) {
-    const target = ev.target;
-    if (target && target.matches && target.matches('input[data-combo]')) {
-      openCustomComboDropdown(target, '');
-    }
-  });
-
-  container.addEventListener('input', function (ev) {
-    const target = ev.target;
-    if (target && target.matches && target.matches('input[data-combo]')) {
-      openCustomComboDropdown(target, target.value);
-    }
-  });
-
-  container.addEventListener('keydown', function (ev) {
-    const target = ev.target;
-    if (!target || !target.matches || !target.matches('input[data-combo]')) return;
-    const dropdownEl = document.getElementById('customComboDropdown');
-    if (!dropdownEl || dropdownEl.classList.contains('hidden')) return;
-
-    const items = dropdownEl.querySelectorAll('.custom-combo-option');
-    if (!items.length) return;
-
-    if (ev.key === 'ArrowDown') {
-      ev.preventDefault();
-      comboActiveIndex = (comboActiveIndex + 1) % items.length;
-      updateComboHighlight_(items);
-    } else if (ev.key === 'ArrowUp') {
-      ev.preventDefault();
-      comboActiveIndex = comboActiveIndex <= 0 ? items.length - 1 : comboActiveIndex - 1;
-      updateComboHighlight_(items);
-    } else if (ev.key === 'Enter' && comboActiveIndex >= 0 && items[comboActiveIndex]) {
-      ev.preventDefault();
-      selectComboOption(target, items[comboActiveIndex].getAttribute('data-value') || '');
-    } else if (ev.key === 'Escape') {
-      closeCustomComboDropdown();
-    }
-  });
-
-  container.addEventListener('focusout', function () {
-    setTimeout(function () {
-      if (document.activeElement !== activeComboInput) {
-        closeCustomComboDropdown();
-      }
-    }, 120);
-  });
-
-  window.addEventListener('resize', function () {
-    if (activeComboInput) {
-      const dropdownEl = document.getElementById('customComboDropdown');
-      if (dropdownEl && !dropdownEl.classList.contains('hidden')) {
-        positionComboDropdown_(activeComboInput, dropdownEl);
-      }
-    }
-  });
-
-  window.addEventListener('scroll', function (ev) {
-    const dropdownEl = document.getElementById('customComboDropdown');
-    if (!dropdownEl || dropdownEl.classList.contains('hidden')) return;
-    if (ev.target && ev.target === dropdownEl) return;
-    if (activeComboInput) {
-      positionComboDropdown_(activeComboInput, dropdownEl);
-    }
-  }, true);
-}
-
-function updateComboHighlight_(items) {
-  items.forEach(function (el, idx) {
-    el.classList.toggle('active', idx === comboActiveIndex);
-    if (idx === comboActiveIndex && el.scrollIntoView) {
-      el.scrollIntoView({ block: 'nearest' });
-    }
-  });
-}
-
-function populateAllDropdownSelects() {
-  initCustomComboboxSystem();
 }
 
 function syncAllStateValuesToDOM() {

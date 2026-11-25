@@ -2,7 +2,8 @@
 /**
  * JS_App_State.html
  * Central APP_STATE, Google Apps Script RPC calls, Two-Way Sync Engine,
- * Cascading Dropdowns, Auto-Calculations, Currency Words, and ISO 6346 Validation.
+ * Cascading Dropdowns, Auto-Calculations, Currency Words, ISO 6346 Validation,
+ * and Admin Account Management RPC frontend.
  */
 
 const ISO_6346_REGEX = /^[A-Z]{4}\d{7}$/;
@@ -125,19 +126,53 @@ const APP_STATE = {
       CURR: [],
       CO_FORM: [],
       CO_CRITERIA: [],
-      TRADE_AGREEMENT: []
+      TRADE_AGREEMENT: [],
+      INSURANCE_TERM: []
     }
   },
   shared: {},
   items: [createEmptyItem()],
   containers: [createEmptyContainer()],
   exportResults: {},
-  previewDocKey: null
+  previewDocKey: null,
+  logoDataUrl: '',
+  lastTaxTab: 'To_khai_XK',
+  manualFlags: {
+    IM_VAL: false,
+    SCT_VAL: false,
+    VAT_VAL: false,
+    TOTAL_CONTAINERS_TEXT: false
+  }
 };
 
-/* ==========================================================================
-   UI UTILITIES: LOADING, TOASTS, ESCAPING, SIDEBAR & MODALS
-   ========================================================================== */
+function applyBrandLogoDataUrl(logoUrl) {
+  if (!logoUrl || typeof logoUrl !== 'string') return;
+  APP_STATE.logoDataUrl = logoUrl;
+  document.querySelectorAll('.brand-logo-img, #loginBrandLogo, #headerBrandLogo').forEach(function (img) {
+    if (img.getAttribute('src') !== logoUrl) {
+      img.setAttribute('src', logoUrl);
+    }
+  });
+  const favicon = document.getElementById('appFavicon');
+  if (favicon && logoUrl.indexOf('data:image/') === 0) {
+    favicon.setAttribute('href', logoUrl);
+  }
+}
+
+function loadBrandLogoOnStart() {
+  if (APP_STATE.logoDataUrl && APP_STATE.logoDataUrl.indexOf('data:image/') === 0) {
+    applyBrandLogoDataUrl(APP_STATE.logoDataUrl);
+    return;
+  }
+  if (window.google && google.script && google.script.run && typeof google.script.run.getBrandLogoBase64 === 'function') {
+    google.script.run
+      .withSuccessHandler(function (dataUri) {
+        if (dataUri) applyBrandLogoDataUrl(dataUri);
+      })
+      .withFailureHandler(function () {})
+      .getBrandLogoBase64();
+  }
+}
 
 function showLoading(message) {
   const overlay = document.getElementById('loadingOverlay');
@@ -181,11 +216,45 @@ function toggleMobileSidebar() {
   if (sidebar) sidebar.classList.toggle('open');
 }
 
+function setSidebarGroupExpanded(groupId, expanded) {
+  if (!groupId) return;
+  const groupEl = document.querySelector('.sidebar-group[data-group-id="' + groupId + '"]');
+  if (!groupEl) return;
+
+  groupEl.classList.toggle('collapsed', !expanded);
+  const toggleBtn = groupEl.querySelector('.sidebar-group-toggle');
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    const chevron = toggleBtn.querySelector('.sidebar-chevron');
+    if (chevron) {
+      chevron.textContent = expanded ? '\u25BC' : '\u25B6';
+    }
+  }
+}
+
+function toggleSidebarGroup(groupId) {
+  const groupEl = document.querySelector('.sidebar-group[data-group-id="' + groupId + '"]');
+  if (!groupEl) return;
+  const isCollapsed = groupEl.classList.contains('collapsed');
+  setSidebarGroupExpanded(groupId, isCollapsed);
+}
+
 function switchTab(tabKey) {
   APP_STATE.activeTab = tabKey;
 
+  if (tabKey === 'To_khai_XK' || tabKey === 'To_khai_NK') {
+    APP_STATE.lastTaxTab = tabKey;
+  }
+
   document.querySelectorAll('.sidebar-nav-btn[data-nav]').forEach(function (btn) {
-    btn.classList.toggle('active', btn.getAttribute('data-nav') === tabKey);
+    const isActive = btn.getAttribute('data-nav') === tabKey;
+    btn.classList.toggle('active', isActive);
+    if (isActive) {
+      const parentGroup = btn.closest('.sidebar-group[data-group-id]');
+      if (parentGroup) {
+        setSidebarGroupExpanded(parentGroup.getAttribute('data-group-id'), true);
+      }
+    }
   });
 
   document.querySelectorAll('.doc-panel[data-tab-panel]').forEach(function (panel) {
@@ -196,10 +265,16 @@ function switchTab(tabKey) {
   if (sidebar && sidebar.classList.contains('open')) {
     sidebar.classList.remove('open');
   }
+
+  recalculateAllTotals(true, false, { sourceKey: 'TAB_SWITCH' });
+
+  if (tabKey === 'ADMIN_ACCOUNTS' && APP_STATE.user && APP_STATE.user.role === 'ADMIN') {
+    loadAdminAccountsTables();
+  }
 }
 
 /* ==========================================================================
-   AUTHENTICATION, DROPDOWN BOOTSTRAP, DRAFT SAVE & CLEAR
+   AUTHENTICATION & ADMIN MANAGEMENT
    ========================================================================== */
 
 function handleLoginSubmit(event) {
@@ -237,9 +312,19 @@ function handleLoginSubmit(event) {
       if (badgeText) {
         const displayName = String(res.user.tenSV || '').trim();
         const displayId = String(res.user.maSV || '').trim();
-        badgeText.textContent = displayName && displayId
+        const roleLabel = res.user.role === 'ADMIN' ? ' [ADMIN]' : '';
+        badgeText.textContent = (displayName && displayId
           ? displayName + ' (' + displayId + ')'
-          : (displayName || displayId || 'Sinh viên');
+          : (displayName || displayId || 'Sinh viên')) + roleLabel;
+      }
+
+      const adminGroup = document.getElementById('adminSidebarGroup');
+      if (adminGroup) {
+        if (res.user.role === 'ADMIN') {
+          adminGroup.classList.remove('hidden');
+        } else {
+          adminGroup.classList.add('hidden');
+        }
       }
 
       loadInitialDropdowns();
@@ -250,6 +335,252 @@ function handleLoginSubmit(event) {
       errorBox.classList.remove('hidden');
     })
     .loginUser(username, password);
+}
+
+function loadAdminAccountsTables() {
+  if (!APP_STATE.user || APP_STATE.user.role !== 'ADMIN') return;
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      const adminsTbody = document.getElementById('adminAdminsTableBody');
+      const studentsTbody = document.getElementById('adminStudentsTableBody');
+      const legacyTbody = document.getElementById('adminAccountsTableBody');
+
+      if (!res || !res.success) {
+        const errMsg = escapeHtml(res && res.message ? res.message : 'Không tải được danh sách tài khoản');
+        if (adminsTbody) adminsTbody.innerHTML = '<tr><td colspan="5" class="empty-table-note" style="color:var(--danger);">' + errMsg + '</td></tr>';
+        if (studentsTbody) studentsTbody.innerHTML = '<tr><td colspan="6" class="empty-table-note" style="color:var(--danger);">' + errMsg + '</td></tr>';
+        if (legacyTbody) legacyTbody.innerHTML = '<tr><td colspan="5" class="empty-table-note" style="color:var(--danger);">' + errMsg + '</td></tr>';
+        return;
+      }
+
+      const accounts = res.accounts || [];
+      const admins = accounts.filter(function (a) { return String(a.vaiTro || '').toUpperCase() === 'ADMIN'; });
+      const students = accounts.filter(function (a) { return String(a.vaiTro || '').toUpperCase() !== 'ADMIN'; });
+
+      if (adminsTbody) {
+        adminsTbody.innerHTML = admins.length === 0
+          ? '<tr><td colspan="5" class="empty-table-note">Chưa có tài khoản Quản trị viên.</td></tr>'
+          : admins.map(function (acc, idx) {
+              return (
+                '<tr>' +
+                  '<td class="table-row-num">' + (idx + 1) + '</td>' +
+                  '<td><strong>' + escapeHtml(acc.maSV) + '</strong></td>' +
+                  '<td>' + escapeHtml(acc.tenSV) + '</td>' +
+                  '<td><span style="padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; background:#FEF2F2; color:#DC2626; border:1px solid #FECACA;">ADMIN</span></td>' +
+                  '<td style="text-align:center;"><button type="button" class="btn-del-row" title="Xóa tài khoản" onclick="handleDeleteAccount(\'' + escapeHtml(acc.maSV) + '\')">&times;</button></td>' +
+                '</tr>'
+              );
+            }).join('');
+      }
+
+      if (studentsTbody) {
+        studentsTbody.innerHTML = students.length === 0
+          ? '<tr><td colspan="6" class="empty-table-note">Chưa có tài khoản Sinh viên nào trong hệ thống.</td></tr>'
+          : students.map(function (acc, idx) {
+              return (
+                '<tr>' +
+                  '<td style="text-align:center;"><input type="checkbox" class="student-row-checkbox" value="' + escapeHtml(acc.maSV) + '" /></td>' +
+                  '<td class="table-row-num">' + (idx + 1) + '</td>' +
+                  '<td><strong>' + escapeHtml(acc.maSV) + '</strong></td>' +
+                  '<td>' + escapeHtml(acc.tenSV) + '</td>' +
+                  '<td><span style="padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; background:#ECFDF5; color:#059669; border:1px solid #A7F3D0;">SV</span></td>' +
+                  '<td style="text-align:center;"><button type="button" class="btn-del-row" title="Xóa tài khoản" onclick="handleDeleteAccount(\'' + escapeHtml(acc.maSV) + '\')">&times;</button></td>' +
+                '</tr>'
+              );
+            }).join('');
+      }
+
+      if (legacyTbody) {
+        legacyTbody.innerHTML = accounts.length === 0
+          ? '<tr><td colspan="5" class="empty-table-note">Chưa có tài khoản nào trong hệ thống.</td></tr>'
+          : accounts.map(function (acc, idx) {
+              return (
+                '<tr>' +
+                  '<td class="table-row-num">' + (idx + 1) + '</td>' +
+                  '<td><strong>' + escapeHtml(acc.maSV) + '</strong></td>' +
+                  '<td>' + escapeHtml(acc.tenSV) + '</td>' +
+                  '<td><span style="padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; background:' + (acc.vaiTro === 'ADMIN' ? '#FEF2F2; color:#DC2626; border:1px solid #FECACA;' : '#ECFDF5; color:#059669; border:1px solid #A7F3D0;') + '">' + escapeHtml(acc.vaiTro) + '</span></td>' +
+                  '<td style="text-align:center;"><button type="button" class="btn-del-row" title="Xóa tài khoản" onclick="handleDeleteAccount(\'' + escapeHtml(acc.maSV) + '\')">&times;</button></td>' +
+                '</tr>'
+              );
+            }).join('');
+      }
+    })
+    .withFailureHandler(function (err) {
+      const errMsg = 'Lỗi tải tài khoản: ' + escapeHtml(err.message);
+      const adminsTbody = document.getElementById('adminAdminsTableBody');
+      const studentsTbody = document.getElementById('adminStudentsTableBody');
+      const legacyTbody = document.getElementById('adminAccountsTableBody');
+      if (adminsTbody) adminsTbody.innerHTML = '<tr><td colspan="5" class="empty-table-note" style="color:var(--danger);">' + errMsg + '</td></tr>';
+      if (studentsTbody) studentsTbody.innerHTML = '<tr><td colspan="6" class="empty-table-note" style="color:var(--danger);">' + errMsg + '</td></tr>';
+      if (legacyTbody) legacyTbody.innerHTML = '<tr><td colspan="5" class="empty-table-note" style="color:var(--danger);">' + errMsg + '</td></tr>';
+    })
+    .adminGetAccounts(APP_STATE.user.maSV);
+}
+
+function loadAdminAccountsTable() {
+  loadAdminAccountsTables();
+}
+
+function handleAddAccountSubmit(event) {
+  event.preventDefault();
+  if (!APP_STATE.user || APP_STATE.user.role !== 'ADMIN') return;
+
+  const maSV = document.getElementById('adminNewMaSV').value.trim();
+  const tenSV = document.getElementById('adminNewTenSV').value.trim();
+  const vaiTro = document.getElementById('adminNewVaiTro').value;
+
+  if (!maSV || !tenSV) {
+    showToast('Vui lòng nhập đầy đủ Mã SV và Tên SV.', 'warning');
+    return;
+  }
+
+  showLoading('Loading...');
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      hideLoading();
+      if (!res || !res.success) {
+        showToast((res && res.message) || 'Thêm tài khoản thất bại.', 'error');
+        return;
+      }
+
+      document.getElementById('adminNewMaSV').value = '';
+      document.getElementById('adminNewTenSV').value = '';
+      showToast('Đã thêm tài khoản thành công!', 'success');
+      loadAdminAccountsTable();
+    })
+    .withFailureHandler(function (err) {
+      hideLoading();
+      showToast('Lỗi thêm tài khoản: ' + (err && err.message ? err.message : err), 'error');
+    })
+    .adminAddAccount(APP_STATE.user.maSV, { maSV: maSV, tenSV: tenSV, vaiTro: vaiTro });
+}
+
+function handleExcelFileSelected(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  if (typeof XLSX === 'undefined') {
+    showToast('Thư viện đọc file Excel (SheetJS) chưa được tải.', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const jsonRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+      if (jsonRows.length < 2) {
+        showToast('File Excel không có dữ liệu hợp lệ.', 'warning');
+        return;
+      }
+
+      const headers = jsonRows[0].map(function (h) { return String(h || '').trim().toLowerCase(); });
+      let maIdx = headers.indexOf('ma_sv');
+      let tenIdx = headers.indexOf('ten_sv');
+      let roleIdx = headers.indexOf('vai_tro');
+
+      if (maIdx === -1) maIdx = headers.indexOf('masv') !== -1 ? headers.indexOf('masv') : 0;
+      if (tenIdx === -1) tenIdx = headers.indexOf('tensv') !== -1 ? headers.indexOf('tensv') : 1;
+      if (roleIdx === -1) roleIdx = headers.indexOf('vaitro') !== -1 ? headers.indexOf('vaitro') : 2;
+
+      const accountsArray = [];
+      for (let r = 1; r < jsonRows.length; r++) {
+        const row = jsonRows[r];
+        if (!row || row.length === 0) continue;
+        const maSV = String(row[maIdx] != null ? row[maIdx] : '').trim();
+        const tenSV = String(row[tenIdx] != null ? row[tenIdx] : '').trim();
+        const vaiTro = String(roleIdx < row.length && row[roleIdx] != null ? row[roleIdx] : 'SV').trim();
+        if (maSV && tenSV) {
+          accountsArray.push({ maSV: maSV, tenSV: tenSV, vaiTro: vaiTro });
+        }
+      }
+
+      if (accountsArray.length === 0) {
+        showToast('Không tìm thấy dòng tài khoản hợp lệ trong file Excel.', 'warning');
+        return;
+      }
+
+      showLoading('Loading...');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          hideLoading();
+          if (!res || !res.success) {
+            showToast((res && res.message) || 'Nạp hàng loạt thất bại.', 'error');
+            return;
+          }
+          showToast('Đã nạp thành công ' + (res.addedCount || accountsArray.length) + ' tài khoản từ file Excel!', 'success');
+          loadAdminAccountsTable();
+          event.target.value = '';
+        })
+        .withFailureHandler(function (err) {
+          hideLoading();
+          showToast('Lỗi nạp file Excel: ' + (err && err.message ? err.message : err), 'error');
+        })
+        .adminBulkAddAccounts(APP_STATE.user.maSV, accountsArray);
+    } catch (parseErr) {
+      showToast('Lỗi đọc file Excel: ' + parseErr.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function handleImportGoogleSheet() {
+  const urlInput = document.getElementById('adminSheetUrlInput');
+  const sheetUrlOrId = urlInput ? urlInput.value.trim() : '';
+  if (!sheetUrlOrId) {
+    showToast('Vui lòng nhập Link hoặc ID Google Sheets.', 'warning');
+    return;
+  }
+
+  showLoading('Loading...');
+  google.script.run
+    .withSuccessHandler(function (res) {
+      hideLoading();
+      if (!res || !res.success) {
+        showToast((res && res.message) || 'Tải từ Google Sheets thất bại.', 'error');
+        return;
+      }
+      showToast('Đã nhập thành công ' + (res.addedCount || 0) + ' tài khoản từ Google Sheets!', 'success');
+      loadAdminAccountsTables();
+      if (urlInput) urlInput.value = '';
+    })
+    .withFailureHandler(function (err) {
+      hideLoading();
+      showToast('Lỗi nhập Google Sheets: ' + (err && err.message ? err.message : err), 'error');
+    })
+    .adminImportFromGoogleSheet(APP_STATE.user.maSV, sheetUrlOrId);
+}
+
+function handleScanGoogleSheet() {
+  handleImportGoogleSheet();
+}
+
+function handleDeleteAccount(targetMaSV) {
+  if (!confirm('Bạn có chắc chắn muốn xóa tài khoản "' + targetMaSV + '" không?')) return;
+
+  showLoading('Loading...');
+  google.script.run
+    .withSuccessHandler(function (res) {
+      hideLoading();
+      if (!res || !res.success) {
+        showToast((res && res.message) || 'Xóa tài khoản thất bại.', 'error');
+        return;
+      }
+      showToast('Đã xóa tài khoản thành công!', 'success');
+      loadAdminAccountsTable();
+    })
+    .withFailureHandler(function (err) {
+      hideLoading();
+      showToast('Lỗi xóa tài khoản: ' + (err && err.message ? err.message : err), 'error');
+    })
+    .adminDeleteAccount(APP_STATE.user.maSV, targetMaSV);
 }
 
 function getTodayYYMMDD_() {
@@ -289,6 +620,34 @@ function initDefaultDocumentNumbers(forceOverwrite) {
   });
 }
 
+const CHECKBOX_FIELD_KEYS = [
+  'FREIGHT_PREPAID',
+  'FREIGHT_COLLECT',
+  'DG_YES',
+  'DG_NO',
+  'OUT_OF_GAUGE',
+  'NON_STACKABLE',
+  'FUMIGATION_NEEDED'
+];
+
+function normalizeCheckboxSymbol(val) {
+  if (val === true) return '\u2611';
+  if (val === false || val == null) return '\u2610';
+  const str = String(val).trim();
+  if (!str || str === '\u2610') return '\u2610';
+  const lower = str.toLowerCase();
+  if (str === '\u2611' || lower === 'true' || lower === '1' || lower === 'x' || lower === 'yes' || lower === 'on') {
+    return '\u2611';
+  }
+  return '\u2610';
+}
+
+function normalizeCheckboxFieldsInState() {
+  CHECKBOX_FIELD_KEYS.forEach(function (cbKey) {
+    APP_STATE.shared[cbKey] = normalizeCheckboxSymbol(APP_STATE.shared[cbKey]);
+  });
+}
+
 function restoreDraftState(draftJson) {
   APP_STATE.shared = {};
   APP_STATE.items = [createEmptyItem()];
@@ -320,6 +679,7 @@ function restoreDraftState(draftJson) {
   }
 
   initDefaultDocumentNumbers(false);
+  normalizeCheckboxFieldsInState();
 }
 
 function loadInitialDropdowns() {
@@ -332,6 +692,9 @@ function loadInitialDropdowns() {
       if (!res || !res.success) {
         showToast((res && res.message) || 'Không tải được dữ liệu danh mục.', 'error');
       } else {
+        if (res.logoDataUrl) {
+          applyBrandLogoDataUrl(res.logoDataUrl);
+        }
         APP_STATE.dropdowns = {
           cuocTau: Array.isArray(res.cuocTau) ? res.cuocTau : [],
           loaiHinhXNK: Array.isArray(res.loaiHinhXNK) ? res.loaiHinhXNK : [],
@@ -345,6 +708,7 @@ function loadInitialDropdowns() {
       initDefaultDocumentNumbers(false);
       recalculateAllTotals(false);
       renderAllFormViews();
+      refreshScheduleDropdownSuggestions_();
       switchTab('MASTER_PARTIES');
       showToast('Đăng nhập thành công! Chào mừng ' + (APP_STATE.user.tenSV || APP_STATE.user.maSV), 'success');
     })
@@ -400,7 +764,15 @@ function confirmClearData() {
   APP_STATE.items = [createEmptyItem()];
   APP_STATE.containers = [createEmptyContainer()];
   APP_STATE.exportResults = {};
+  APP_STATE.manualFlags = {
+    IM_VAL: false,
+    SCT_VAL: false,
+    VAT_VAL: false,
+    TOTAL_CONTAINERS_TEXT: false
+  };
   initDefaultDocumentNumbers(true);
+  normalizeCheckboxFieldsInState();
+  recalculateAllTotals(false, true);
 
   renderAllFormViews();
   switchTab(APP_STATE.activeTab || 'MASTER_PARTIES');
@@ -421,10 +793,6 @@ function handleLogout() {
   document.getElementById('loginScreen').classList.remove('hidden');
   showToast('Bạn đã đăng xuất khỏi hệ thống.', 'info');
 }
-
-/* ==========================================================================
-   DOCUMENT PREVIEW MODAL (Review Document via PDF.js Canvas)
-   ========================================================================== */
 
 let currentPreviewBlobUrl = null;
 let pdfJsLoadPromise_ = null;
@@ -660,18 +1028,6 @@ function handlePreviewDocument(docKey) {
         } else {
           if (loadingEl) loadingEl.classList.add('hidden');
         }
-      } else if (res.htmlPreview) {
-        if (loadingEl) loadingEl.classList.add('hidden');
-        if (frame) {
-          frame.srcdoc = res.htmlPreview;
-          frame.classList.remove('hidden');
-        }
-      } else if (res.previewUrl) {
-        if (loadingEl) loadingEl.classList.add('hidden');
-        if (frame) {
-          frame.src = res.previewUrl;
-          frame.classList.remove('hidden');
-        }
       } else {
         if (loadingEl) loadingEl.classList.add('hidden');
         if (errorText) errorText.textContent = 'Máy chủ không trả về dữ liệu xem trước.';
@@ -687,7 +1043,7 @@ function handlePreviewDocument(docKey) {
       if (errorText) errorText.textContent = 'Lỗi xem trước chứng từ: ' + (err && err.message ? err.message : err);
       if (errorWrap) errorWrap.classList.remove('hidden');
     })
-    .previewDocument(APP_STATE.user.maSV, docKey, buildExportPayload());
+    .previewDocument(APP_STATE.user.maSV, docKey, buildExportPayload(docKey));
 }
 
 function closeDocPreviewModal() {
@@ -721,16 +1077,90 @@ function handleExportFromPreview() {
   }
 }
 
-/* ==========================================================================
-   DOCUMENT EXPORT (SINGLE & BATCH)
-   ========================================================================== */
+function extractShortCodeForExport_(rawVal, fieldKey) {
+  const str = String(rawVal == null ? '' : rawVal).trim();
+  if (!str) return '';
 
-function buildExportPayload() {
-  recalculateAllTotals(false);
+  let depth = 0;
+  let cutIdx = -1;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charAt(i);
+    if (ch === '(') {
+      depth++;
+    } else if (ch === ')' && depth > 0) {
+      depth--;
+    } else if (depth === 0) {
+      if (ch === ':') {
+        cutIdx = i;
+        break;
+      }
+      if ((ch === '-' || ch === '\u2013' || ch === '\u2014') &&
+          i > 0 && str.charAt(i - 1) === ' ' &&
+          i + 1 < str.length && str.charAt(i + 1) === ' ') {
+        cutIdx = i - 1;
+        break;
+      }
+    }
+  }
+
+  let code = (cutIdx !== -1 ? str.slice(0, cutIdx) : str).trim();
+
+  if (fieldKey === 'INS_TERM') {
+    const m = code.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+    if (m && m[1].trim() && m[2].trim().length > 3) {
+      code = m[1].trim();
+    }
+    return code;
+  }
+
+  let prev;
+  do {
+    prev = code;
+    code = code.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  } while (code !== prev && code.length > 0);
+
+  return code;
+}
+
+function buildExportPayload(targetDocKey) {
+  recalculateAllTotals(false, false, { targetDocKey: targetDocKey || '' });
+  normalizeCheckboxFieldsInState();
+
+  const sharedClone = {};
+  Object.keys(APP_STATE.shared || {}).forEach(function (k) {
+    sharedClone[k] = APP_STATE.shared[k];
+  });
+
+  ['INS_TERM', 'CO_FORM_NAME', 'CTYPE', 'UNIT', 'TOT_UNIT'].forEach(function (k) {
+    if (sharedClone[k] != null && String(sharedClone[k]).trim() !== '') {
+      sharedClone[k] = extractShortCodeForExport_(sharedClone[k], k);
+    }
+  });
+
+  const itemsClone = (APP_STATE.items || []).map(function (row) {
+    const copy = Object.assign({}, row);
+    ['PREF', 'UNIT', 'UNIT_PACK', 'CTYPE'].forEach(function (col) {
+      if (copy[col] != null && String(copy[col]).trim() !== '') {
+        copy[col] = extractShortCodeForExport_(copy[col], col);
+      }
+    });
+    return copy;
+  });
+
+  const containersClone = (APP_STATE.containers || []).map(function (row) {
+    const copy = Object.assign({}, row);
+    ['CTYPE', 'CSIZE', 'UNIT_PACK'].forEach(function (col) {
+      if (copy[col] != null && String(copy[col]).trim() !== '') {
+        copy[col] = extractShortCodeForExport_(copy[col], col);
+      }
+    });
+    return copy;
+  });
+
   return {
-    shared: APP_STATE.shared,
-    items: APP_STATE.items,
-    containers: APP_STATE.containers
+    shared: sharedClone,
+    items: itemsClone,
+    containers: containersClone
   };
 }
 
@@ -738,11 +1168,6 @@ function handleExportSingle(docKey) {
   if (!APP_STATE.user || !APP_STATE.user.maSV) {
     showToast('Vui lòng đăng nhập để xuất chứng từ.', 'error');
     return;
-  }
-
-  const invalidConts = getInvalidIsoContainers();
-  if (invalidConts.length > 0) {
-    showToast('Cảnh báo: Có số Container chưa đúng chuẩn ISO 6346 (' + invalidConts.join(', ') + '). Vẫn tiếp tục xuất.', 'warning');
   }
 
   showLoading('Loading...');
@@ -765,7 +1190,7 @@ function handleExportSingle(docKey) {
       hideLoading();
       showToast('Lỗi xuất chứng từ: ' + (err && err.message ? err.message : err), 'error');
     })
-    .generateDocuments(APP_STATE.user.maSV, [docKey], buildExportPayload());
+    .generateDocuments(APP_STATE.user.maSV, [docKey], buildExportPayload(docKey));
 }
 
 function openBatchExportModal() {
@@ -830,12 +1255,7 @@ function handleExportBatch() {
       });
 
       boxEl.classList.remove('hidden');
-
-      if (res.errors && res.errors.length > 0) {
-        showToast('Đã xuất ' + res.results.length + ' chứng từ. Có ' + res.errors.length + ' chứng từ lỗi hoặc chưa có file mẫu.', 'warning');
-      } else {
-        showToast('Đã xuất thành công ' + res.results.length + ' chứng từ!', 'success');
-      }
+      showToast('Đã xuất thành công ' + res.results.length + ' chứng từ!', 'success');
     })
     .withFailureHandler(function (err) {
       hideLoading();
@@ -844,69 +1264,76 @@ function handleExportBatch() {
     .generateDocuments(APP_STATE.user.maSV, selectedKeys, buildExportPayload());
 }
 
-/* ==========================================================================
-   TWO-WAY SYNC & CASCADING DROPDOWNS
-   ========================================================================== */
+const CALC_TRIGGER_FIELDS = {
+  CURR: true,
+  VAT_GST: true,
+  EX_RATE: true,
+  IM_VAL: true,
+  IM_RATE: true,
+  SCT_VAL: true,
+  SCT_RATE: true,
+  EPT_VAL: true,
+  EPT_RATE: true,
+  VAT_VAL: true,
+  VAT_RATE: true
+};
+
+const NK_TAX_TRIGGER_FIELDS = {
+  IM_VAL: true,
+  IM_RATE: true,
+  SCT_VAL: true,
+  SCT_RATE: true,
+  EPT_VAL: true,
+  EPT_RATE: true,
+  VAT_VAL: true,
+  VAT_RATE: true
+};
 
 function handleWorkspaceFieldChange(target) {
   const key = target.getAttribute('data-sync');
   if (!key) return;
 
-  // Preserve leading zeros by storing raw string value verbatim (or checkbox symbol)
-  const value = target.type === 'checkbox' ? (target.checked ? '☑' : '') : target.value;
+  const value = target.type === 'checkbox' ? (target.checked ? '\u2611' : '\u2610') : target.value;
   APP_STATE.shared[key] = value;
 
-  // Mirror across all other views without disturbing active focus
+  if (!APP_STATE.manualFlags) {
+    APP_STATE.manualFlags = { IM_VAL: false, SCT_VAL: false, VAT_VAL: false, TOTAL_CONTAINERS_TEXT: false };
+  }
+
+  if (key === 'IM_VAL') {
+    APP_STATE.manualFlags.IM_VAL = String(value).trim() !== '';
+  } else if (key === 'SCT_VAL') {
+    APP_STATE.manualFlags.SCT_VAL = String(value).trim() !== '';
+  } else if (key === 'VAT_VAL') {
+    APP_STATE.manualFlags.VAT_VAL = String(value).trim() !== '';
+  } else if (key === 'TOTAL_CONTAINERS_TEXT') {
+    APP_STATE.manualFlags.TOTAL_CONTAINERS_TEXT = String(value).trim() !== '';
+  } else if (key === 'EX_RATE') {
+    APP_STATE.manualFlags.IM_VAL = false;
+  }
+
+  if (NK_TAX_TRIGGER_FIELDS[key]) {
+    APP_STATE.lastTaxTab = 'To_khai_NK';
+  }
+
   syncSharedFieldToDOM(key, value, target);
 
-  // Cascading & Combobox Logic
-  if (key === 'POL') {
+  if (key === 'SERVICE_TYPE') {
+    handleServiceTypeChanged(value);
+  } else if (key === 'POL') {
     handlePolChanged(value);
   } else if (key === 'POD') {
     handlePodChanged(value);
-  } else if (key === 'DEC_TYPE') {
-    const dir = APP_STATE.activeTab === 'To_khai_NK' ? 'Nhập khẩu' : 'Xuất khẩu';
-    handleXnkTypeChanged(dir, value, dir === 'Nhập khẩu' ? 'IMP_TYPE_NAME' : 'EXP_TYPE_NAME');
-  } else if (key === 'CO_FORM_NAME') {
-    handleCoFormChanged(value);
+  } else if (key === 'CAR_NAME') {
+    handleCarNameChanged(value);
   } else if (key === 'VESSEL' || key === 'VOYAGE') {
     updateVesVoyDerived();
   } else if (key === 'SHIP_NAME' || key === 'CNE_NAME') {
     updateAllContextBanners();
   }
 
-  // Import Customs Declaration shared tax fields
-  if (key === 'IM_VAL' || key === 'IM_RATE') {
-    const imVal = parseNum(APP_STATE.shared.IM_VAL);
-    const imRate = parseNum(APP_STATE.shared.IM_RATE);
-    const imAmt = (APP_STATE.shared.IM_VAL !== '' && APP_STATE.shared.IM_RATE !== '') ? formatNum((imVal * imRate) / 100, 2) : '';
-    setSharedFieldAndSync('IM_AMT', imAmt);
-  } else if (key === 'SCT_VAL' || key === 'SCT_RATE') {
-    const sctVal = parseNum(APP_STATE.shared.SCT_VAL);
-    const sctRate = parseNum(APP_STATE.shared.SCT_RATE);
-    const sctAmt = (APP_STATE.shared.SCT_VAL !== '' && APP_STATE.shared.SCT_RATE !== '') ? formatNum((sctVal * sctRate) / 100, 2) : '';
-    setSharedFieldAndSync('SCT_AMT', sctAmt);
-  } else if (key === 'EPT_VAL' || key === 'EPT_RATE') {
-    const eptVal = parseNum(APP_STATE.shared.EPT_VAL);
-    const eptRate = parseNum(APP_STATE.shared.EPT_RATE);
-    const eptAmt = (APP_STATE.shared.EPT_VAL !== '' && APP_STATE.shared.EPT_RATE !== '') ? formatNum((eptVal * eptRate) / 100, 2) : '';
-    setSharedFieldAndSync('EPT_AMT', eptAmt);
-  } else if (key === 'VAT_VAL' || key === 'VAT_RATE') {
-    const vatVal = parseNum(APP_STATE.shared.VAT_VAL);
-    const vatRate = parseNum(APP_STATE.shared.VAT_RATE);
-    const vatAmt = (APP_STATE.shared.VAT_VAL !== '' && APP_STATE.shared.VAT_RATE !== '') ? formatNum((vatVal * vatRate) / 100, 2) : '';
-    setSharedFieldAndSync('VAT_AMT', vatAmt);
-  }
-
-  if (
-    key === 'VAT_GST' ||
-    key === 'CURR' ||
-    key === 'IM_VAL' || key === 'IM_RATE' || key === 'IM_AMT' ||
-    key === 'SCT_VAL' || key === 'SCT_RATE' || key === 'SCT_AMT' ||
-    key === 'EPT_VAL' || key === 'EPT_RATE' || key === 'EPT_AMT' ||
-    key === 'VAT_VAL' || key === 'VAT_RATE' || key === 'VAT_AMT'
-  ) {
-    recalculateAllTotals(true);
+  if (CALC_TRIGGER_FIELDS[key]) {
+    recalculateAllTotals(true, false, { sourceKey: key });
   }
 }
 
@@ -914,11 +1341,8 @@ function syncSharedFieldToDOM(key, value, sourceElement) {
   document.querySelectorAll('[data-sync="' + key + '"]').forEach(function (el) {
     if (el === sourceElement) return;
     if (el.type === 'checkbox') {
-      el.checked = (value === '☑' || value === 'true' || value === 'X' || value === '1');
+      el.checked = normalizeCheckboxSymbol(value) === '\u2611';
       return;
-    }
-    if (el.tagName === 'SELECT') {
-      ensureSelectHasOption(el, value);
     }
     el.value = value;
   });
@@ -930,82 +1354,221 @@ function setSharedFieldAndSync(key, value) {
   syncSharedFieldToDOM(key, strVal, null);
 }
 
-function ensureSelectHasOption(selectEl, value) {
-  if (!value) return;
-  const exists = Array.prototype.some.call(selectEl.options, function (opt) {
-    return opt.value === value;
+function getRowServiceType_(row) {
+  return String((row && (row.loaiHinhVanTai || row.Loai_hinh_van_tai)) || '').trim().toUpperCase();
+}
+
+function getRowPot_(row) {
+  return String((row && (row.pot || row.POT)) || '').trim();
+}
+
+function matchesServiceType_(row, serviceType, anyRowHasType) {
+  const selected = String(serviceType || '').trim().toUpperCase();
+  if (!selected) return true;
+  const rowType = getRowServiceType_(row);
+  if (!rowType) {
+    return !anyRowHasType;
+  }
+  return rowType.indexOf(selected) !== -1;
+}
+
+function getFilteredCuocTauByServiceType_(serviceTypeOverride) {
+  const cuocTau = APP_STATE.dropdowns.cuocTau || [];
+  const selectedService = serviceTypeOverride !== undefined
+    ? serviceTypeOverride
+    : (APP_STATE.shared.SERVICE_TYPE || '');
+  const anyRowHasType = cuocTau.some(function (r) { return getRowServiceType_(r) !== ''; });
+  return cuocTau.filter(function (row) {
+    return matchesServiceType_(row, selectedService, anyRowHasType);
   });
-  if (!exists) {
-    const opt = document.createElement('option');
-    opt.value = value;
-    opt.textContent = value;
-    selectEl.appendChild(opt);
+}
+
+function collectUniqueValues_(rows, getter) {
+  const list = [];
+  const seen = {};
+  (rows || []).forEach(function (row) {
+    const val = String(getter(row) || '').trim();
+    if (val && !seen[val]) {
+      seen[val] = true;
+      list.push(val);
+    }
+  });
+  return list;
+}
+
+function ensureDatalistForField_(fieldKey, values) {
+  let datalistId = 'dl_' + fieldKey;
+  const inputs = document.querySelectorAll('input[data-sync="' + fieldKey + '"]');
+  inputs.forEach(function (inp) {
+    const existingList = inp.getAttribute('list');
+    if (existingList) {
+      datalistId = existingList;
+    } else {
+      inp.setAttribute('list', datalistId);
+    }
+  });
+
+  let dl = document.getElementById(datalistId);
+  if (!dl && inputs.length > 0) {
+    dl = document.createElement('datalist');
+    dl.id = datalistId;
+    document.body.appendChild(dl);
+  }
+  if (dl) {
+    dl.innerHTML = (values || [])
+      .map(function (v) { return '<option value="' + escapeHtml(v) + '"></option>'; })
+      .join('');
+  }
+}
+
+function refreshScheduleDropdownSuggestions_() {
+  const serviceRows = getFilteredCuocTauByServiceType_();
+  const currentPol = String(APP_STATE.shared.POL || '').trim();
+  const currentPod = String(APP_STATE.shared.POD || '').trim();
+
+  const polValues = collectUniqueValues_(serviceRows, function (r) { return r.POL; });
+  ensureDatalistForField_('POL', polValues);
+
+  const podRows = currentPol
+    ? serviceRows.filter(function (r) { return r.POL === currentPol; })
+    : serviceRows;
+  const podValues = collectUniqueValues_(podRows.length > 0 ? podRows : serviceRows, function (r) { return r.POD; });
+  ensureDatalistForField_('POD', podValues);
+
+  let carrierRows = serviceRows;
+  if (currentPol || currentPod) {
+    const routeRows = serviceRows.filter(function (r) {
+      return (!currentPol || r.POL === currentPol) && (!currentPod || r.POD === currentPod);
+    });
+    if (routeRows.length > 0) {
+      carrierRows = routeRows;
+    }
+  }
+  const carrierValues = collectUniqueValues_(carrierRows, function (r) { return r.Ten_hang_tau; });
+  ensureDatalistForField_('CAR_NAME', carrierValues);
+
+  const potValues = collectUniqueValues_(carrierRows, function (r) { return getRowPot_(r); });
+  ensureDatalistForField_('POT', potValues);
+
+  const vesselValues = collectUniqueValues_(carrierRows, function (r) { return r.Ten_tau; });
+  ensureDatalistForField_('VESSEL', vesselValues);
+
+  const voyageValues = collectUniqueValues_(carrierRows, function (r) { return r.So_chuyen; });
+  ensureDatalistForField_('VOYAGE', voyageValues);
+}
+
+function applyCuocTauRow_(match) {
+  if (!match) return;
+  if (match.Quoc_Gia) {
+    setSharedFieldAndSync('DEST_CTRY', match.Quoc_Gia);
+    setSharedFieldAndSync('EXP_CTRY', match.Quoc_Gia);
+  }
+  const potVal = getRowPot_(match);
+  if (potVal) {
+    setSharedFieldAndSync('POT', potVal);
+  }
+  if (match.Ten_hang_tau) setSharedFieldAndSync('CAR_NAME', match.Ten_hang_tau);
+  if (match.Ten_tau) setSharedFieldAndSync('VESSEL', match.Ten_tau);
+  if (match.So_chuyen) setSharedFieldAndSync('VOYAGE', match.So_chuyen);
+  updateVesVoyDerived();
+}
+
+function handleServiceTypeChanged(serviceTypeValue) {
+  APP_STATE.shared.SERVICE_TYPE = serviceTypeValue == null ? '' : String(serviceTypeValue);
+  refreshScheduleDropdownSuggestions_();
+
+  const currentPol = String(APP_STATE.shared.POL || '').trim();
+  const currentPod = String(APP_STATE.shared.POD || '').trim();
+  const currentCar = String(APP_STATE.shared.CAR_NAME || '').trim();
+  if (currentPod) {
+    const serviceRows = getFilteredCuocTauByServiceType_(serviceTypeValue);
+    const match = serviceRows.find(function (r) {
+      return (!currentPol || r.POL === currentPol) &&
+        r.POD === currentPod &&
+        (!currentCar || r.Ten_hang_tau === currentCar);
+    }) || serviceRows.find(function (r) {
+      return (!currentPol || r.POL === currentPol) && r.POD === currentPod;
+    });
+    if (match) {
+      applyCuocTauRow_(match);
+    }
   }
 }
 
 function handlePolChanged(polValue) {
-  const cuocTau = APP_STATE.dropdowns.cuocTau || [];
-  const filteredPods = [];
-  const seen = {};
-
-  cuocTau.forEach(function (row) {
-    if (!polValue || row.POL === polValue) {
-      if (row.POD && !seen[row.POD]) {
-        seen[row.POD] = true;
-        filteredPods.push(row.POD);
-      }
-    }
-  });
-
-  // Fallback to all PODs if custom POL was typed that isn't in Cuoc_Tau
-  if (filteredPods.length === 0 && cuocTau.length > 0) {
-    cuocTau.forEach(function (row) {
-      if (row.POD && !seen[row.POD]) {
-        seen[row.POD] = true;
-        filteredPods.push(row.POD);
-      }
-    });
-  }
-
-  const podDatalist = document.getElementById('dl_POD');
-  if (podDatalist) {
-    podDatalist.innerHTML = filteredPods
-      .map(function (pod) {
-        return '<option value="' + escapeHtml(pod) + '"></option>';
-      })
-      .join('');
-  }
-
-  const currentPod = APP_STATE.shared.POD || '';
-  if (currentPod && seen[currentPod]) {
+  refreshScheduleDropdownSuggestions_();
+  const currentPod = String(APP_STATE.shared.POD || '').trim();
+  if (currentPod) {
     handlePodChanged(currentPod);
   }
 }
 
 function handlePodChanged(podValue) {
+  refreshScheduleDropdownSuggestions_();
   if (!podValue) return;
-  const cuocTau = APP_STATE.dropdowns.cuocTau || [];
-  const currentPol = APP_STATE.shared.POL || '';
 
-  let match = cuocTau.find(function (row) {
-    return (!currentPol || row.POL === currentPol) && row.POD === podValue;
+  const serviceRows = getFilteredCuocTauByServiceType_();
+  const allRows = APP_STATE.dropdowns.cuocTau || [];
+  const currentPol = String(APP_STATE.shared.POL || '').trim();
+  const currentCar = String(APP_STATE.shared.CAR_NAME || '').trim();
+
+  let match = serviceRows.find(function (row) {
+    return (!currentPol || row.POL === currentPol) &&
+      row.POD === podValue &&
+      (!currentCar || row.Ten_hang_tau === currentCar);
   });
 
   if (!match) {
-    match = cuocTau.find(function (row) {
-      return row.POD === podValue;
+    match = serviceRows.find(function (row) {
+      return (!currentPol || row.POL === currentPol) && row.POD === podValue;
+    });
+  }
+
+  if (!match) {
+    match = serviceRows.find(function (row) { return row.POD === podValue; });
+  }
+
+  if (!match) {
+    match = allRows.find(function (row) {
+      return (!currentPol || row.POL === currentPol) && row.POD === podValue;
+    }) || allRows.find(function (row) { return row.POD === podValue; });
+  }
+
+  if (match) {
+    applyCuocTauRow_(match);
+  }
+}
+
+function handleCarNameChanged(carValue) {
+  if (!carValue) return;
+  const serviceRows = getFilteredCuocTauByServiceType_();
+  const allRows = APP_STATE.dropdowns.cuocTau || [];
+  const currentPol = String(APP_STATE.shared.POL || '').trim();
+  const currentPod = String(APP_STATE.shared.POD || '').trim();
+
+  let match = serviceRows.find(function (row) {
+    return row.Ten_hang_tau === carValue &&
+      (!currentPol || row.POL === currentPol) &&
+      (!currentPod || row.POD === currentPod);
+  });
+
+  if (!match && !currentPol && !currentPod) {
+    const carMatches = serviceRows.filter(function (row) { return row.Ten_hang_tau === carValue; });
+    if (carMatches.length === 1) {
+      match = carMatches[0];
+    }
+  }
+
+  if (!match) {
+    match = allRows.find(function (row) {
+      return row.Ten_hang_tau === carValue &&
+        (!currentPol || row.POL === currentPol) &&
+        (!currentPod || row.POD === currentPod);
     });
   }
 
   if (match) {
-    if (match.Quoc_Gia) {
-      setSharedFieldAndSync('DEST_CTRY', match.Quoc_Gia);
-      setSharedFieldAndSync('EXP_CTRY', match.Quoc_Gia);
-    }
-    if (match.Ten_hang_tau) setSharedFieldAndSync('CAR_NAME', match.Ten_hang_tau);
-    if (match.Ten_tau) setSharedFieldAndSync('VESSEL', match.Ten_tau);
-    if (match.So_chuyen) setSharedFieldAndSync('VOYAGE', match.So_chuyen);
-    updateVesVoyDerived();
+    applyCuocTauRow_(match);
   }
 }
 
@@ -1014,64 +1577,6 @@ function updateVesVoyDerived() {
   const voyage = String(APP_STATE.shared.VOYAGE || '').trim();
   const vesVoy = vessel && voyage ? (vessel + ' / ' + voyage) : (vessel || voyage || '');
   setSharedFieldAndSync('VES_VOY', vesVoy);
-}
-
-function handleXnkTypeChanged(directionLabel, selectedVal, targetNameKey) {
-  const list = getFilteredLoaiHinhXnk(directionLabel);
-  const raw = String(selectedVal || '').trim();
-  const codePart = raw.split(' - ')[0].trim();
-  const found = list.find(function (r) {
-    return r.Ma_loai_hinh === raw || r.Ma_loai_hinh === codePart;
-  });
-  setSharedFieldAndSync(targetNameKey, found ? found.Ten_loai_hinh : '');
-}
-
-function handleCoFormChanged(coFormVal) {
-  const norm = String(coFormVal || '').trim().toUpperCase();
-  if (!norm) return;
-
-  const dmAgreements = (APP_STATE.dropdowns && APP_STATE.dropdowns.danhMucChung && APP_STATE.dropdowns.danhMucChung.TRADE_AGREEMENT) || [];
-  const formMap = [
-    { match: 'FORM D', candidates: ['ATIGA', 'ASEAN'] },
-    { match: 'FORM E', candidates: ['ACFTA', 'ASEAN-CHINA'] },
-    { match: 'FORM AK', candidates: ['AKFTA', 'ASEAN-KOREA'] },
-    { match: 'FORM AJ', candidates: ['AJCEP', 'VJEPA'] },
-    { match: 'FORM VJ', candidates: ['VJEPA'] },
-    { match: 'FORM VK', candidates: ['VKFTA'] },
-    { match: 'FORM VC', candidates: ['VCFTA'] },
-    { match: 'FORM EUR.1', candidates: ['EVFTA', 'EU-VIETNAM'] },
-    { match: 'EUR.1', candidates: ['EVFTA'] },
-    { match: 'CPTPP', candidates: ['CPTPP'] },
-    { match: 'RCEP', candidates: ['RCEP'] },
-    { match: 'AANZ', candidates: ['AANZFTA'] },
-    { match: 'FORM AI', candidates: ['AIFTA'] },
-    { match: 'FORM A', candidates: ['GSP'] },
-    { match: 'FORM B', candidates: ['MFN', 'NON-PREFERENTIAL'] }
-  ];
-
-  let matchedAgreement = '';
-  for (let i = 0; i < formMap.length; i++) {
-    if (norm.indexOf(formMap[i].match) !== -1) {
-      for (let c = 0; c < formMap[i].candidates.length; c++) {
-        const cand = formMap[i].candidates[c];
-        const inSheet = dmAgreements.find(function (a) {
-          return String(a).toUpperCase().indexOf(cand) !== -1;
-        });
-        if (inSheet) {
-          matchedAgreement = inSheet;
-          break;
-        }
-      }
-      if (!matchedAgreement) {
-        matchedAgreement = formMap[i].candidates[0];
-      }
-      break;
-    }
-  }
-
-  if (matchedAgreement) {
-    setSharedFieldAndSync('TRADE_AGREEMENT', matchedAgreement);
-  }
 }
 
 function getFilteredLoaiHinhXnk(direction) {
@@ -1097,10 +1602,6 @@ function updateAllContextBanners() {
   });
 }
 
-/* ==========================================================================
-   DYNAMIC TABLES SYNC (items[] & containers[])
-   ========================================================================== */
-
 function handleTableCellChange(target) {
   const tableType = target.getAttribute('data-table-type');
   const rowIdx = parseInt(target.getAttribute('data-row-idx'), 10);
@@ -1110,18 +1611,14 @@ function handleTableCellChange(target) {
   const targetArray = tableType === 'containers' ? APP_STATE.containers : APP_STATE.items;
   if (!targetArray[rowIdx]) return;
 
-  // Store raw string to preserve leading zeros (HS code, LOT_NO, SEAL, CONT, etc.)
   let rawVal = target.value;
   if (colKey === 'CONT') {
     rawVal = rawVal.toUpperCase();
-    if (target.value !== rawVal) {
-      target.value = rawVal;
-    }
+    if (target.value !== rawVal) target.value = rawVal;
   }
 
   targetArray[rowIdx][colKey] = rawVal;
 
-  // Auto-calculate row-level amounts for items[]
   if (tableType === 'items') {
     const item = targetArray[rowIdx];
     if (colKey === 'QTY' || colKey === 'PRICE') {
@@ -1129,149 +1626,76 @@ function handleTableCellChange(target) {
       const price = parseNum(item.PRICE);
       item.AMT = (item.QTY !== '' || item.PRICE !== '') ? formatNum(qty * price, 2) : '';
       syncTableCellToDOM('items', rowIdx, 'AMT', item.AMT, null);
+      if (APP_STATE.manualFlags) {
+        APP_STATE.manualFlags.IM_VAL = false;
+      }
+      const exRate = parseNum(APP_STATE.shared.EX_RATE);
+      if (exRate > 0) {
+        item.EX_VAL = item.AMT !== '' ? formatNum(parseNum(item.AMT) * exRate, 2) : '';
+        syncTableCellToDOM('items', rowIdx, 'EX_VAL', item.EX_VAL, null);
+      }
+    } else if (colKey === 'EX_VAL' || colKey === 'EX_TAX_RATE' || colKey === 'FEE_VAL' || colKey === 'FEE_RATE') {
+      APP_STATE.lastTaxTab = 'To_khai_XK';
     }
-
-    if (colKey === 'EX_VAL' || colKey === 'EX_TAX_RATE') {
-      const exVal = parseNum(item.EX_VAL);
-      const exRate = parseNum(item.EX_TAX_RATE);
-      item.EX_AMT = (item.EX_VAL !== '' && item.EX_TAX_RATE !== '') ? formatNum((exVal * exRate) / 100, 2) : '';
-      syncTableCellToDOM('items', rowIdx, 'EX_AMT', item.EX_AMT, null);
-    }
-
-    if (colKey === 'IM_VAL' || colKey === 'IM_RATE') {
-      const imVal = parseNum(item.IM_VAL);
-      const imRate = parseNum(item.IM_RATE);
-      item.IM_AMT = (item.IM_VAL !== '' && item.IM_RATE !== '') ? formatNum((imVal * imRate) / 100, 2) : '';
-      syncTableCellToDOM('items', rowIdx, 'IM_AMT', item.IM_AMT, null);
-    }
-
-    if (colKey === 'SCT_VAL' || colKey === 'SCT_RATE') {
-      const sctVal = parseNum(item.SCT_VAL);
-      const sctRate = parseNum(item.SCT_RATE);
-      item.SCT_AMT = (item.SCT_VAL !== '' && item.SCT_RATE !== '') ? formatNum((sctVal * sctRate) / 100, 2) : '';
-      syncTableCellToDOM('items', rowIdx, 'SCT_AMT', item.SCT_AMT, null);
-    }
-
-    if (colKey === 'EPT_VAL' || colKey === 'EPT_RATE') {
-      const eptVal = parseNum(item.EPT_VAL);
-      const eptRate = parseNum(item.EPT_RATE);
-      item.EPT_AMT = (item.EPT_VAL !== '' && item.EPT_RATE !== '') ? formatNum((eptVal * eptRate) / 100, 2) : '';
-      syncTableCellToDOM('items', rowIdx, 'EPT_AMT', item.EPT_AMT, null);
-    }
-
-    if (colKey === 'VAT_VAL' || colKey === 'VAT_RATE') {
-      const vatVal = parseNum(item.VAT_VAL);
-      const vatRate = parseNum(item.VAT_RATE);
-      item.VAT_AMT = (item.VAT_VAL !== '' && item.VAT_RATE !== '') ? formatNum((vatVal * vatRate) / 100, 2) : '';
-      syncTableCellToDOM('items', rowIdx, 'VAT_AMT', item.VAT_AMT, null);
-    }
-
-    if (colKey === 'FEE_VAL' || colKey === 'FEE_RATE') {
-      const feeVal = parseNum(item.FEE_VAL);
-      const feeRate = parseNum(item.FEE_RATE);
-      item.FEE_AMT = (item.FEE_VAL !== '' && item.FEE_RATE !== '') ? formatNum((feeVal * feeRate) / 100, 2) : '';
-      syncTableCellToDOM('items', rowIdx, 'FEE_AMT', item.FEE_AMT, null);
+  } else if (tableType === 'containers') {
+    if (APP_STATE.manualFlags) {
+      APP_STATE.manualFlags.TOTAL_CONTAINERS_TEXT = false;
     }
   }
 
-  // Mirror edited cell across all other tabs' tables without losing focus
   syncTableCellToDOM(tableType, rowIdx, colKey, rawVal, target);
-
-  // ISO 6346 live validation on CONT inputs
-  if (tableType === 'containers' && colKey === 'CONT') {
-    validateContainerInputsInDOM();
-  }
-
-  recalculateAllTotals(true, tableType === 'containers');
+  recalculateAllTotals(true, tableType === 'containers', { sourceKey: colKey, rowIdx: rowIdx });
 }
 
 function syncTableCellToDOM(tableType, rowIdx, colKey, value, sourceElement) {
-  const selector =
-    '[data-table-type="' + tableType + '"][data-row-idx="' + rowIdx + '"][data-col-key="' + colKey + '"]';
-
+  const selector = '[data-table-type="' + tableType + '"][data-row-idx="' + rowIdx + '"][data-col-key="' + colKey + '"]';
   document.querySelectorAll(selector).forEach(function (el) {
     if (el === sourceElement) return;
-    if (el.tagName === 'SELECT') {
-      ensureSelectHasOption(el, value);
-    }
     el.value = value;
   });
 }
 
 function addItemRow() {
   APP_STATE.items.push(createEmptyItem());
-  recalculateAllTotals(true);
+  if (APP_STATE.manualFlags) {
+    APP_STATE.manualFlags.IM_VAL = false;
+  }
+  recalculateAllTotals(true, false, { sourceKey: 'ITEM_MUTATION' });
   rerenderAllSyncedTables('items');
 }
 
 function deleteItemRow(rowIdx) {
   APP_STATE.items.splice(rowIdx, 1);
-  recalculateAllTotals(true);
+  if (APP_STATE.manualFlags) {
+    APP_STATE.manualFlags.IM_VAL = false;
+  }
+  recalculateAllTotals(true, false, { sourceKey: 'ITEM_MUTATION' });
   rerenderAllSyncedTables('items');
 }
 
 function addContainerRow() {
   APP_STATE.containers.push(createEmptyContainer());
-  recalculateAllTotals(true, true);
+  if (APP_STATE.manualFlags) {
+    APP_STATE.manualFlags.TOTAL_CONTAINERS_TEXT = false;
+  }
+  recalculateAllTotals(true, true, { sourceKey: 'CONTAINER_MUTATION' });
   rerenderAllSyncedTables('containers');
 }
 
 function deleteContainerRow(rowIdx) {
   APP_STATE.containers.splice(rowIdx, 1);
-  recalculateAllTotals(true, true);
+  if (APP_STATE.manualFlags) {
+    APP_STATE.manualFlags.TOTAL_CONTAINERS_TEXT = false;
+  }
+  recalculateAllTotals(true, true, { sourceKey: 'CONTAINER_MUTATION' });
   rerenderAllSyncedTables('containers');
 }
 
-/* ==========================================================================
-   ISO 6346 CONTAINER VALIDATION (^[A-Z]{4}\d{7}$)
-   ========================================================================== */
-
-function isValidIsoContainer(contNo) {
-  const trimmed = String(contNo || '').trim().toUpperCase();
-  if (!trimmed) return true; // empty is allowed (e.g. LCL)
-  return ISO_6346_REGEX.test(trimmed);
-}
-
-function getInvalidIsoContainers() {
-  const invalid = [];
-  (APP_STATE.containers || []).forEach(function (c) {
-    const val = String(c.CONT || '').trim().toUpperCase();
-    if (val && !ISO_6346_REGEX.test(val)) {
-      invalid.push(val);
-    }
-  });
-  return invalid;
-}
-
-function validateContainerInputsInDOM() {
-  document.querySelectorAll('[data-table-type="containers"][data-col-key="CONT"]').forEach(function (input) {
-    const val = String(input.value || '').trim().toUpperCase();
-    const valid = isValidIsoContainer(val);
-    input.classList.toggle('iso-invalid', !valid);
-
-    const cell = input.parentNode;
-    if (!cell) return;
-    let badge = cell.querySelector('.badge-warning-iso');
-    if (!valid) {
-      if (!badge) {
-        badge = document.createElement('div');
-        badge.className = 'badge-warning-iso';
-        badge.textContent = 'Số Container chưa đúng chuẩn (4 chữ + 7 số)';
-        cell.appendChild(badge);
-      }
-    } else if (badge) {
-      badge.parentNode.removeChild(badge);
-    }
-  });
-}
-
-/* ==========================================================================
-   REAL-TIME AUTO-CALCULATIONS & CURRENCY WORDS
-   ========================================================================== */
+function validateContainerInputsInDOM() {}
 
 function parseNum(val) {
   if (val == null || val === '') return 0;
-  const cleaned = String(val).replace(/,/g, '').trim();
+  const cleaned = String(val).replace(/[%,\s]/g, '').trim();
   const num = Number(cleaned);
   return isNaN(num) ? 0 : num;
 }
@@ -1284,13 +1708,229 @@ function formatNum(num, maxDecimals) {
   return String(rounded);
 }
 
-function recalculateTotals(syncDom, updateContainerCount) {
-  recalculateAllTotals(syncDom !== false, updateContainerCount);
+/* ==========================================================================
+   NUMBER-TO-WORDS HELPERS (ENGLISH COMMERCIAL, VIETNAMESE & CONTAINERS)
+   ========================================================================== */
+
+const EN_ONES_ = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
+  'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+const EN_TENS_ = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+const EN_SCALES_ = ['', 'THOUSAND', 'MILLION', 'BILLION', 'TRILLION'];
+
+function numberToEnglishIntWords_(num) {
+  let n = Math.floor(Math.abs(Number(num) || 0));
+  if (n === 0) return 'ZERO';
+
+  const parts = [];
+  let scaleIdx = 0;
+
+  while (n > 0) {
+    const chunk = n % 1000;
+    if (chunk > 0) {
+      const chunkWords = [];
+      const hundreds = Math.floor(chunk / 100);
+      const rem = chunk % 100;
+      if (hundreds > 0) {
+        chunkWords.push(EN_ONES_[hundreds] + ' HUNDRED');
+      }
+      if (rem > 0) {
+        if (rem < 20) {
+          chunkWords.push(EN_ONES_[rem]);
+        } else {
+          const tens = Math.floor(rem / 10);
+          const ones = rem % 10;
+          chunkWords.push(ones > 0 ? (EN_TENS_[tens] + '-' + EN_ONES_[ones]) : EN_TENS_[tens]);
+        }
+      }
+      if (EN_SCALES_[scaleIdx]) {
+        chunkWords.push(EN_SCALES_[scaleIdx]);
+      }
+      parts.unshift(chunkWords.join(' '));
+    }
+    n = Math.floor(n / 1000);
+    scaleIdx++;
+  }
+
+  return parts.join(' ');
 }
 
-function recalculateAllTotals(syncDom, updateContainerCount) {
+function numberToEnglishCurrencyWords(amount, currencyCode) {
+  const num = Number(amount);
+  if (isNaN(num) || num <= 0) return '';
+
+  const code = String(currencyCode || 'USD').trim().toUpperCase() || 'USD';
+  if (code === 'VND') {
+    return numberToVietnameseWords(num, 'đồng');
+  }
+
+  const currencyMap = {
+    USD: { plural: 'US DOLLARS', singular: 'US DOLLAR', subPlural: 'CENTS', subSingular: 'CENT', hasCents: true },
+    EUR: { plural: 'EUROS', singular: 'EURO', subPlural: 'CENTS', subSingular: 'CENT', hasCents: true },
+    GBP: { plural: 'BRITISH POUNDS', singular: 'BRITISH POUND', subPlural: 'PENCE', subSingular: 'PENNY', hasCents: true },
+    JPY: { plural: 'JAPANESE YEN', singular: 'JAPANESE YEN', subPlural: '', subSingular: '', hasCents: false },
+    KRW: { plural: 'SOUTH KOREAN WON', singular: 'SOUTH KOREAN WON', subPlural: '', subSingular: '', hasCents: false },
+    CNY: { plural: 'CHINESE YUAN', singular: 'CHINESE YUAN', subPlural: 'FEN', subSingular: 'FEN', hasCents: true },
+    RMB: { plural: 'CHINESE YUAN', singular: 'CHINESE YUAN', subPlural: 'FEN', subSingular: 'FEN', hasCents: true },
+    AUD: { plural: 'AUSTRALIAN DOLLARS', singular: 'AUSTRALIAN DOLLAR', subPlural: 'CENTS', subSingular: 'CENT', hasCents: true },
+    SGD: { plural: 'SINGAPORE DOLLARS', singular: 'SINGAPORE DOLLAR', subPlural: 'CENTS', subSingular: 'CENT', hasCents: true },
+    THB: { plural: 'THAI BAHT', singular: 'THAI BAHT', subPlural: 'SATANG', subSingular: 'SATANG', hasCents: true }
+  };
+
+  const meta = currencyMap[code] || {
+    plural: code,
+    singular: code,
+    subPlural: 'CENTS',
+    subSingular: 'CENT',
+    hasCents: true
+  };
+
+  if (!meta.hasCents) {
+    const intOnly = Math.round(num);
+    const label = intOnly === 1 ? meta.singular : meta.plural;
+    return 'SAY: ' + label + ' ' + numberToEnglishIntWords_(intOnly) + ' ONLY';
+  }
+
+  const totalCents = Math.round(num * 100);
+  const intPart = Math.floor(totalCents / 100);
+  const fracPart = totalCents % 100;
+  const mainLabel = intPart === 1 ? meta.singular : meta.plural;
+  const intWords = numberToEnglishIntWords_(intPart);
+
+  if (fracPart > 0) {
+    const subLabel = fracPart === 1 ? meta.subSingular : meta.subPlural;
+    const fracWords = numberToEnglishIntWords_(fracPart);
+    return 'SAY: ' + mainLabel + ' ' + intWords + ' AND ' + fracWords + ' ' + subLabel + ' ONLY';
+  }
+
+  return 'SAY: ' + mainLabel + ' ' + intWords + ' ONLY';
+}
+
+const VI_DIGITS_ = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+
+function readVietnameseTriplet_(num, fullHundred) {
+  const hundreds = Math.floor(num / 100);
+  const tens = Math.floor((num % 100) / 10);
+  const ones = num % 10;
+  const parts = [];
+
+  if (hundreds > 0 || fullHundred) {
+    parts.push(VI_DIGITS_[hundreds] + ' trăm');
+    if (tens === 0 && ones > 0) {
+      parts.push('lẻ');
+    }
+  }
+
+  if (tens > 1) {
+    parts.push(VI_DIGITS_[tens] + ' mươi');
+    if (ones === 1) {
+      parts.push('mốt');
+    } else if (ones === 4) {
+      parts.push('tư');
+    } else if (ones === 5) {
+      parts.push('lăm');
+    } else if (ones > 0) {
+      parts.push(VI_DIGITS_[ones]);
+    }
+  } else if (tens === 1) {
+    parts.push('mười');
+    if (ones === 5) {
+      parts.push('lăm');
+    } else if (ones > 0) {
+      parts.push(VI_DIGITS_[ones]);
+    }
+  } else if (ones > 0) {
+    parts.push(VI_DIGITS_[ones]);
+  }
+
+  return parts.join(' ');
+}
+
+function numberToVietnameseWords(amount, unitSuffix) {
+  const num = Math.round(Number(amount) || 0);
+  if (isNaN(num) || num <= 0) return '';
+
+  const scales = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ', 'triệu tỷ'];
+  const groups = [];
+  let temp = num;
+  while (temp > 0) {
+    groups.push(temp % 1000);
+    temp = Math.floor(temp / 1000);
+  }
+
+  const parts = [];
+  for (let i = groups.length - 1; i >= 0; i--) {
+    const grp = groups[i];
+    if (grp === 0) continue;
+    const isMostSignificant = i === groups.length - 1;
+    const text = readVietnameseTriplet_(grp, !isMostSignificant);
+    if (text) {
+      parts.push(scales[i] ? (text + ' ' + scales[i]) : text);
+    }
+  }
+
+  const joined = parts.join(' ').replace(/\s+/g, ' ').trim();
+  if (!joined) return '';
+  const capitalized = joined.charAt(0).toUpperCase() + joined.slice(1);
+  return unitSuffix ? (capitalized + ' ' + unitSuffix) : capitalized;
+}
+
+function generateTotalContainersText(containers) {
+  const list = Array.isArray(containers) ? containers : [];
+  const activeRows = list.filter(function (c) {
+    if (!c || typeof c !== 'object') return false;
+    return [c.CONT, c.SEAL, c.CTYPE, c.CSIZE, c.PACK, c.GW, c.VGM_WEI, c.CBM].some(function (v) {
+      return v != null && String(v).trim() !== '';
+    });
+  });
+
+  if (activeRows.length === 0) return '';
+
+  const countsByType = {};
+  const orderedTypes = [];
+
+  activeRows.forEach(function (c) {
+    const rawType = extractShortCodeForExport_(c.CTYPE || c.CSIZE || '', 'CTYPE').toUpperCase();
+    const key = rawType || '__GENERIC__';
+    if (!countsByType[key]) {
+      countsByType[key] = 0;
+      orderedTypes.push(key);
+    }
+    countsByType[key]++;
+  });
+
+  if (orderedTypes.length === 1) {
+    const typeKey = orderedTypes[0];
+    const count = countsByType[typeKey];
+    const word = numberToEnglishIntWords_(count);
+    const padded = count < 10 ? ('0' + count) : String(count);
+    const contNoun = count === 1 ? 'CONTAINER' : 'CONTAINERS';
+    if (typeKey === '__GENERIC__') {
+      return 'SAY: ' + word + ' (' + padded + ') ' + contNoun + ' ONLY';
+    }
+    return 'SAY: ' + word + ' (' + padded + ') X ' + typeKey + ' ' + contNoun + ' ONLY';
+  }
+
+  const segments = orderedTypes.map(function (typeKey) {
+    const count = countsByType[typeKey];
+    const word = numberToEnglishIntWords_(count);
+    const padded = count < 10 ? ('0' + count) : String(count);
+    return typeKey === '__GENERIC__'
+      ? (word + ' (' + padded + ')')
+      : (word + ' (' + padded + ') X ' + typeKey);
+  });
+
+  return 'SAY: ' + segments.join(' AND ') + ' CONTAINERS ONLY';
+}
+
+function recalculateAllTotals(syncDom, updateContainerCount, options) {
+  const opts = options || {};
+  const sourceKey = opts.sourceKey || '';
+  const targetDocKey = opts.targetDocKey || APP_STATE.activeTab || '';
   const items = APP_STATE.items || [];
   const containers = APP_STATE.containers || [];
+  const manualFlags = APP_STATE.manualFlags || {};
+  const exRate = parseNum(APP_STATE.shared.EX_RATE);
+  const curr = String(APP_STATE.shared.CURR || '').trim();
 
   let totQty = 0;
   let totAmt = 0;
@@ -1298,35 +1938,60 @@ function recalculateAllTotals(syncDom, updateContainerCount) {
   let totNw = 0;
   let totItemGw = 0;
   let totItemCbm = 0;
-  let totExTax = 0;
-  let totFee = 0;
-  let totTax = 0;
   let firstUnit = '';
 
-  items.forEach(function (it) {
+  let totExTax = 0;
+  let totFee = 0;
+
+  items.forEach(function (it, idx) {
     if (!firstUnit && it.UNIT) firstUnit = String(it.UNIT).trim();
-    totQty += parseNum(it.QTY);
-    totAmt += parseNum(it.AMT);
+
+    const qty = parseNum(it.QTY);
+    const price = parseNum(it.PRICE);
+    if ((it.QTY !== '' || it.PRICE !== '') && it.AMT === '') {
+      it.AMT = formatNum(qty * price, 2);
+    }
+    const amt = parseNum(it.AMT);
+
+    totQty += qty;
+    totAmt += amt;
     totItemPack += parseNum(it.PACK);
     totNw += parseNum(it.NW);
     totItemGw += parseNum(it.GW);
     totItemCbm += parseNum(it.CBM);
-    const exAmt = parseNum(it.EX_AMT);
-    const feeAmt = parseNum(it.FEE_AMT);
+
+    // Export Customs Declaration row calculations
+    if (sourceKey === 'EX_RATE' || sourceKey === 'ITEM_MUTATION' || (it.EX_VAL === '' && exRate > 0 && amt > 0)) {
+      if (exRate > 0 && (amt > 0 || it.AMT !== '')) {
+        it.EX_VAL = formatNum(amt * exRate, 2);
+      } else if (sourceKey === 'EX_RATE' && exRate === 0) {
+        it.EX_VAL = '';
+      }
+      if (syncDom) {
+        syncTableCellToDOM('items', idx, 'EX_VAL', it.EX_VAL, null);
+      }
+    }
+
+    const exVal = parseNum(it.EX_VAL);
+    const exTaxRate = parseNum(it.EX_TAX_RATE);
+    const exAmt = exVal * (exTaxRate / 100);
+    const hasExInput = it.EX_VAL !== '' || it.EX_TAX_RATE !== '';
+    it.EX_AMT = hasExInput ? formatNum(exAmt, 2) : '';
+
+    const feeVal = parseNum(it.FEE_VAL);
+    const feeRate = parseNum(it.FEE_RATE);
+    const feeAmt = feeVal * (feeRate / 100);
+    const hasFeeInput = it.FEE_VAL !== '' || it.FEE_RATE !== '';
+    it.FEE_AMT = hasFeeInput ? formatNum(feeAmt, 2) : '';
+
+    if (syncDom) {
+      syncTableCellToDOM('items', idx, 'EX_AMT', it.EX_AMT, null);
+      syncTableCellToDOM('items', idx, 'FEE_AMT', it.FEE_AMT, null);
+    }
+
     totExTax += exAmt;
     totFee += feeAmt;
-    totTax += exAmt + feeAmt + parseNum(it.IM_AMT) + parseNum(it.SCT_AMT) + parseNum(it.EPT_AMT) + parseNum(it.VAT_AMT);
   });
-
-  const rowTaxTotal = totExTax + totFee + items.reduce(function (acc, it) {
-    return acc + parseNum(it.IM_AMT) + parseNum(it.SCT_AMT) + parseNum(it.EPT_AMT) + parseNum(it.VAT_AMT);
-  }, 0);
-  const sharedNkTax =
-    parseNum(APP_STATE.shared.IM_AMT) +
-    parseNum(APP_STATE.shared.SCT_AMT) +
-    parseNum(APP_STATE.shared.EPT_AMT) +
-    parseNum(APP_STATE.shared.VAT_AMT);
-  totTax = rowTaxTotal + sharedNkTax;
 
   let totContPack = 0;
   let totContGw = 0;
@@ -1346,53 +2011,107 @@ function recalculateAllTotals(syncDom, updateContainerCount) {
   const totGw = totItemGw > 0 ? totItemGw : totContGw;
   const totCbm = totItemCbm > 0 ? totItemCbm : totContCbm;
 
-  const vatRate = parseNum(APP_STATE.shared.VAT_GST);
-  const vatAmt = vatRate > 0 ? (totAmt * vatRate) / 100 : 0;
-  const grandTotal = totAmt + vatAmt;
+  // Commercial Invoice VAT & Grand Total
+  const vatGstRate = parseNum(APP_STATE.shared.VAT_GST);
+  const vatTotalNum = totAmt * (vatGstRate / 100);
+  const grandTotalNum = totAmt + vatTotalNum;
 
-  const curr = String(APP_STATE.shared.CURR || 'USD').trim().toUpperCase();
-  const amtForWords = vatRate > 0 ? grandTotal : totAmt;
+  // Export Customs Declaration totals
+  const xkTotTax = totExTax + totFee;
+
+  // Import Customs Declaration cascading calculations
+  let imValNum = parseNum(APP_STATE.shared.IM_VAL);
+  const shouldAutoImVal =
+    !manualFlags.IM_VAL &&
+    (sourceKey === 'EX_RATE' || sourceKey === 'QTY' || sourceKey === 'PRICE' || sourceKey === 'ITEM_MUTATION' ||
+      (APP_STATE.shared.IM_VAL == null || String(APP_STATE.shared.IM_VAL).trim() === ''));
+
+  if (shouldAutoImVal && totAmt > 0 && exRate > 0) {
+    imValNum = totAmt * exRate;
+  } else if (shouldAutoImVal && (totAmt === 0 || exRate === 0) && (sourceKey === 'EX_RATE' || sourceKey === 'ITEM_MUTATION')) {
+    imValNum = 0;
+  }
+
+  const imRateNum = parseNum(APP_STATE.shared.IM_RATE);
+  const imAmtNum = imValNum * (imRateNum / 100);
+
+  const sctRateNum = parseNum(APP_STATE.shared.SCT_RATE);
+  let sctValNum = parseNum(APP_STATE.shared.SCT_VAL);
+  if (!manualFlags.SCT_VAL) {
+    sctValNum = sctRateNum > 0 ? (imValNum + imAmtNum) : 0;
+  }
+  const sctAmtNum = sctValNum * (sctRateNum / 100);
+
+  const eptValNum = parseNum(APP_STATE.shared.EPT_VAL);
+  const eptRateNum = parseNum(APP_STATE.shared.EPT_RATE);
+  const eptAmtNum = eptValNum * eptRateNum;
+
+  const vatRateNkNum = parseNum(APP_STATE.shared.VAT_RATE);
+  let vatValNkNum = parseNum(APP_STATE.shared.VAT_VAL);
+  if (!manualFlags.VAT_VAL) {
+    vatValNkNum = vatRateNkNum > 0 ? (imValNum + imAmtNum + sctAmtNum + eptAmtNum) : 0;
+  }
+  const vatAmtNkNum = vatValNkNum * (vatRateNkNum / 100);
+
+  const nkTotTax = imAmtNum + sctAmtNum + eptAmtNum + vatAmtNkNum;
+
+  // Determine active/relevant TOT_TAX (To_khai_XK vs To_khai_NK)
+  const useNkTax =
+    targetDocKey === 'To_khai_NK' ||
+    (targetDocKey !== 'To_khai_XK' &&
+      (APP_STATE.lastTaxTab === 'To_khai_NK' || (nkTotTax > 0 && xkTotTax === 0)));
+
+  const activeTotTax = useNkTax ? nkTotTax : xkTotTax;
+  const hasAnyTaxActivity = useNkTax
+    ? (imValNum > 0 || imRateNum > 0 || sctRateNum > 0 || eptRateNum > 0 || vatRateNkNum > 0)
+    : (totExTax > 0 || totFee > 0 || items.some(function (it) { return it.EX_VAL !== '' || it.EX_TAX_RATE !== '' || it.FEE_VAL !== '' || it.FEE_RATE !== ''; }));
+
+  // Word conversions
+  const wordsTargetAmount =
+    (targetDocKey === 'QUOTATION' || targetDocKey === 'SALES_CONTRACT')
+      ? totAmt
+      : grandTotalNum;
 
   const updates = {
     TOT_QTY: totQty > 0 ? formatNum(totQty, 3) : (items.length ? '0' : ''),
     TOT_AMT: totAmt > 0 ? formatNum(totAmt, 2) : (items.length ? '0' : ''),
-    VAT_TOTAL: vatRate > 0 ? formatNum(vatAmt, 2) : '',
-    GRAND_TOTAL: grandTotal > 0 ? formatNum(grandTotal, 2) : (items.length ? '0' : ''),
+    VAT_TOTAL: (APP_STATE.shared.VAT_GST !== undefined && String(APP_STATE.shared.VAT_GST).trim() !== '')
+      ? formatNum(vatTotalNum, 2)
+      : (totAmt > 0 ? '0' : ''),
+    GRAND_TOTAL: grandTotalNum > 0 ? formatNum(grandTotalNum, 2) : (items.length ? '0' : ''),
+    TOT_AMT_WORDS: wordsTargetAmount > 0 ? numberToEnglishCurrencyWords(wordsTargetAmount, curr) : '',
     TOT_PACK: totPack > 0 ? formatNum(totPack, 2) : '',
     TOT_NW: totNw > 0 ? formatNum(totNw, 3) : '',
     TOT_GW: totGw > 0 ? formatNum(totGw, 3) : '',
     TOT_CBM: totCbm > 0 ? formatNum(totCbm, 3) : '',
     TOT_VGM: totVgm > 0 ? formatNum(totVgm, 3) : '',
-    TOT_EX_TAX: totExTax > 0 ? formatNum(totExTax, 2) : '',
-    TOT_FEE: totFee > 0 ? formatNum(totFee, 2) : '',
-    TOT_TAX: totTax > 0 ? formatNum(totTax, 2) : '',
-    TOT_AMT_WORDS: amtForWords > 0
-      ? (curr === 'VND'
-        ? numberToVietnameseWords(amtForWords, 'VND')
-        : numberToEnglishWords(amtForWords, curr))
-      : '',
-    TOT_TAX_WORDS: totTax > 0 ? numberToVietnameseWords(totTax, 'VND') : ''
+    TOT_EX_TAX: formatNum(totExTax, 2),
+    TOT_FEE: formatNum(totFee, 2),
+    IM_AMT: (imValNum > 0 || imRateNum > 0) ? formatNum(imAmtNum, 2) : '',
+    SCT_AMT: (sctValNum > 0 || sctRateNum > 0) ? formatNum(sctAmtNum, 2) : '',
+    EPT_AMT: (eptValNum > 0 || eptRateNum > 0) ? formatNum(eptAmtNum, 2) : '',
+    VAT_AMT: (vatValNkNum > 0 || vatRateNkNum > 0) ? formatNum(vatAmtNkNum, 2) : '',
+    TOT_TAX: hasAnyTaxActivity ? formatNum(activeTotTax, 2) : '',
+    TOT_TAX_WORDS: activeTotTax > 0 ? numberToVietnameseWords(activeTotTax, 'đồng') : ''
   };
 
-  if (updateContainerCount || !APP_STATE.shared.TOTAL_CONTAINERS_TEXT) {
-    updates.TOTAL_CONTAINERS_TEXT = containers.length > 0 ? String(containers.length) : '';
+  if (shouldAutoImVal) {
+    updates.IM_VAL = imValNum > 0 ? formatNum(imValNum, 2) : '';
+  }
+  if (!manualFlags.SCT_VAL) {
+    updates.SCT_VAL = sctRateNum > 0 ? formatNum(sctValNum, 2) : '';
+  }
+  if (!manualFlags.VAT_VAL) {
+    updates.VAT_VAL = vatRateNkNum > 0 ? formatNum(vatValNkNum, 2) : '';
+  }
+
+  if (updateContainerCount || !manualFlags.TOTAL_CONTAINERS_TEXT || !APP_STATE.shared.TOTAL_CONTAINERS_TEXT) {
+    updates.TOTAL_CONTAINERS_TEXT = generateTotalContainersText(containers);
   }
 
   if (!APP_STATE.shared.TOT_UNIT && firstUnit) {
-    updates.TOT_UNIT = firstUnit;
+    updates.TOT_UNIT = extractShortCodeForExport_(firstUnit, 'UNIT');
   }
-
-  // Auto-generate CONTAINER_SEAL_DETAILS preview in shared
-  const contDetails = containers
-    .map(function (c) {
-      return [c.CONT, c.CTYPE, c.SEAL]
-        .map(function (v) { return String(v || '').trim(); })
-        .filter(Boolean)
-        .join(' / ');
-    })
-    .filter(Boolean)
-    .join('\n');
-  updates.CONTAINER_SEAL_DETAILS = contDetails;
 
   Object.keys(updates).forEach(function (k) {
     if (syncDom) {
@@ -1401,132 +2120,5 @@ function recalculateAllTotals(syncDom, updateContainerCount) {
       APP_STATE.shared[k] = updates[k];
     }
   });
-}
-
-/* ==========================================================================
-   ENGLISH & VIETNAMESE CURRENCY IN WORDS
-   ========================================================================== */
-
-function numberToEnglishWords(amount, currencyCode) {
-  const num = Number(amount);
-  if (isNaN(num) || num <= 0) return '';
-
-  const rounded = Math.round(num * 100) / 100;
-  const intPart = Math.floor(rounded);
-  const decPart = Math.round((rounded - intPart) * 100);
-
-  const ones = [
-    '', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
-    'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN',
-    'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'
-  ];
-  const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
-  const scales = ['', 'THOUSAND', 'MILLION', 'BILLION', 'TRILLION'];
-
-  function threeDigitsToEn(n) {
-    let words = [];
-    const h = Math.floor(n / 100);
-    const rem = n % 100;
-    if (h > 0) words.push(ones[h] + ' HUNDRED');
-    if (rem > 0) {
-      if (rem < 20) {
-        words.push(ones[rem]);
-      } else {
-        const t = Math.floor(rem / 10);
-        const o = rem % 10;
-        words.push(o > 0 ? tens[t] + '-' + ones[o] : tens[t]);
-      }
-    }
-    return words.join(' ');
-  }
-
-  function convertInt(n) {
-    if (n === 0) return 'ZERO';
-    let parts = [];
-    let scaleIdx = 0;
-    while (n > 0) {
-      const chunk = n % 1000;
-      if (chunk > 0) {
-        const chunkStr = threeDigitsToEn(chunk);
-        parts.unshift(scales[scaleIdx] ? chunkStr + ' ' + scales[scaleIdx] : chunkStr);
-      }
-      n = Math.floor(n / 1000);
-      scaleIdx++;
-    }
-    return parts.join(' ');
-  }
-
-  const currNames = {
-    USD: { major: 'US DOLLARS', minor: 'CENTS' },
-    EUR: { major: 'EUROS', minor: 'CENTS' },
-    JPY: { major: 'JAPANESE YEN', minor: 'SEN' },
-    GBP: { major: 'POUNDS STERLING', minor: 'PENCE' },
-    CNY: { major: 'CHINESE YUAN', minor: 'FEN' },
-    SGD: { major: 'SINGAPORE DOLLARS', minor: 'CENTS' },
-    AUD: { major: 'AUSTRALIAN DOLLARS', minor: 'CENTS' },
-    KRW: { major: 'KOREAN WON', minor: 'JEON' },
-    VND: { major: 'VIETNAM DONG', minor: 'XU' }
-  };
-
-  const curr = currNames[currencyCode] || { major: currencyCode || 'US DOLLARS', minor: 'CENTS' };
-  let result = 'SAY TOTAL: ' + curr.major + ' ' + convertInt(intPart);
-  if (decPart > 0) {
-    result += ' AND ' + convertInt(decPart) + ' ' + curr.minor;
-  }
-  return result + ' ONLY.';
-}
-
-function numberToVietnameseWords(amount, currencyCode) {
-  const num = Math.round(Number(amount));
-  if (isNaN(num) || num <= 0) return '';
-
-  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
-  const units = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ', 'triệu tỷ'];
-
-  function readThreeDigits(n, showZeroHundred) {
-    const tram = Math.floor(n / 100);
-    const chuc = Math.floor((n % 100) / 10);
-    const donvi = n % 10;
-    let res = '';
-
-    if (tram > 0 || showZeroHundred) {
-      res += digits[tram] + ' trăm ';
-    }
-    if (chuc > 1) {
-      res += digits[chuc] + ' mươi ';
-      if (donvi === 1) res += 'mốt';
-      else if (donvi === 5) res += 'lăm';
-      else if (donvi > 0) res += digits[donvi];
-    } else if (chuc === 1) {
-      res += 'mười ';
-      if (donvi === 5) res += 'lăm';
-      else if (donvi > 0) res += digits[donvi];
-    } else if (donvi > 0) {
-      if (tram > 0 || showZeroHundred) res += 'lẻ ';
-      res += digits[donvi];
-    }
-    return res.trim();
-  }
-
-  let n = num;
-  const groups = [];
-  while (n > 0) {
-    groups.push(n % 1000);
-    n = Math.floor(n / 1000);
-  }
-
-  let parts = [];
-  for (let i = groups.length - 1; i >= 0; i--) {
-    if (groups[i] > 0) {
-      const showZero = i < groups.length - 1;
-      const text = readThreeDigits(groups[i], showZero);
-      parts.push(units[i] ? text + ' ' + units[i] : text);
-    }
-  }
-
-  let joined = parts.join(' ').replace(/\s+/g, ' ').trim();
-  joined = joined.charAt(0).toUpperCase() + joined.slice(1);
-  const unitLabel = currencyCode && currencyCode !== 'VND' ? currencyCode : 'đồng';
-  return joined + ' ' + unitLabel + ' chẵn.';
 }
 </script>

@@ -4,13 +4,16 @@
 <section id="loginScreen" class="login-screen login-wrapper">
   <div class="login-card">
     <div class="login-brand">
-      <img
-        class="brand-logo-circle brand-logo-login"
-        src="https://drive.google.com/thumbnail?id=1EOJF-nYJdWkcUGOEUVlfW1Wc5SlOHWdk&sz=w300"
-        alt="Logo"
-      />
+      <div class="brand-logo-circle brand-logo-circle-login">
+        <img
+          id="loginBrandLogo"
+          class="brand-logo-img"
+          src="https://drive.google.com/thumbnail?id=1Hjf2eCislKARBB8twtPHunvKviVJS6vq&sz=w300"
+          alt="Logo"
+        />
+      </div>
       <div>
-        <h1 class="login-title">Hệ thống Chứng từ XNK</h1>
+        <h1 class="login-title">Hệ thống xuất chứng từ XNK tự động</h1>
       </div>
     </div>
 
@@ -23,7 +26,7 @@
           id="loginMaSV"
           type="text"
           class="form-control"
-          placeholder="Rohwan"
+          placeholder="admin"
           autocomplete="username"
           required
         />
@@ -35,7 +38,7 @@
           id="loginMatKhau"
           type="password"
           class="form-control"
-          placeholder="NV003"
+          placeholder="AD001"
           autocomplete="current-password"
           required
         />
@@ -57,13 +60,16 @@
       <button type="button" class="mobile-menu-btn" onclick="toggleMobileSidebar()" title="Menu">
         &#9776;
       </button>
-      <img
-        class="brand-logo-circle brand-logo-header"
-        src="https://drive.google.com/thumbnail?id=1EOJF-nYJdWkcUGOEUVlfW1Wc5SlOHWdk&sz=w300"
-        alt="Logo"
-      />
+      <div class="brand-logo-circle">
+        <img
+          id="headerBrandLogo"
+          class="brand-logo-img"
+          src="https://drive.google.com/thumbnail?id=1Hjf2eCislKARBB8twtPHunvKviVJS6vq&sz=w300"
+          alt="Logo"
+        />
+      </div>
       <div class="header-title-wrap">
-        <h1 class="header-title">Hệ thống Chứng từ XNK</h1>
+        <h1 class="header-title">Hệ thống xuất chứng từ XNK tự động</h1>
       </div>
     </div>
 
@@ -89,143 +95,180 @@
 
   <div class="app-body">
     <aside id="appSidebar" class="sidebar" aria-label="Danh mục chứng từ">
-      <!-- Thông tin chung -->
-      <div class="sidebar-group">
-        <div class="sidebar-group-title">Thông tin chung</div>
+      <!-- QUẢN TRỊ HỆ THỐNG (Admin Only) - PLACED AT THE VERY TOP -->
+      <div id="adminSidebarGroup" class="sidebar-group hidden">
+        <div class="sidebar-group-title" style="color:#DC2626 !important;">Quản trị hệ thống</div>
         <ul class="sidebar-nav-list">
           <li>
-            <button type="button" class="sidebar-nav-btn active" data-nav="MASTER_PARTIES" onclick="switchTab('MASTER_PARTIES')">
-              <span>Thông tin chung</span>
+            <button type="button" class="sidebar-nav-btn" data-nav="ADMIN_ACCOUNTS" onclick="switchTab('ADMIN_ACCOUNTS')">
+              <span>Quản lý Tài khoản</span>
             </button>
           </li>
         </ul>
+      </div>
+
+      <!-- Thông tin chung -->
+      <div class="sidebar-group sidebar-group-collapsible" data-group-id="GROUP_I">
+        <button type="button" class="sidebar-group-toggle" aria-expanded="true" onclick="toggleSidebarGroup('GROUP_I')">
+          <span>THÔNG TIN CHUNG</span>
+          <span class="sidebar-chevron" aria-hidden="true">&#9660;</span>
+        </button>
+        <div class="sidebar-group-body">
+          <ul class="sidebar-nav-list">
+            <li>
+              <button type="button" class="sidebar-nav-btn active" data-nav="MASTER_PARTIES" onclick="switchTab('MASTER_PARTIES')">
+                <span>Thông tin chung</span>
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <!-- Người xuất khẩu chuẩn bị -->
-      <div class="sidebar-group">
-        <div class="sidebar-group-title">Người xuất khẩu chuẩn bị</div>
-        <ul class="sidebar-nav-list">
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="QUOTATION" onclick="switchTab('QUOTATION')">
-              <span>Quotation</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="SALES_CONTRACT" onclick="switchTab('SALES_CONTRACT')">
-              <span>Sales Contract</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="COMMERCIAL_INVOICE" onclick="switchTab('COMMERCIAL_INVOICE')">
-              <span>Commercial Invoice</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="PACKING_LIST" onclick="switchTab('PACKING_LIST')">
-              <span>Packing List</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_REQUEST" onclick="switchTab('BOOKING_REQUEST')">
-              <span>Booking Request</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="VGM" onclick="switchTab('VGM')">
-              <span>VGM</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="SHIPPING_INSTRUCTION" onclick="switchTab('SHIPPING_INSTRUCTION')">
-              <span>Shipping Instruction</span>
-            </button>
-          </li>
-        </ul>
+      <div class="sidebar-group sidebar-group-collapsible" data-group-id="GROUP_II">
+        <button type="button" class="sidebar-group-toggle" aria-expanded="true" onclick="toggleSidebarGroup('GROUP_II')">
+          <span>NGƯỜI XUẤT KHẨU CHUẨN BỊ</span>
+          <span class="sidebar-chevron" aria-hidden="true">&#9660;</span>
+        </button>
+        <div class="sidebar-group-body">
+          <ul class="sidebar-nav-list">
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="QUOTATION" onclick="switchTab('QUOTATION')">
+                <span>Quotation</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="SALES_CONTRACT" onclick="switchTab('SALES_CONTRACT')">
+                <span>Sales Contract</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="COMMERCIAL_INVOICE" onclick="switchTab('COMMERCIAL_INVOICE')">
+                <span>Commercial Invoice</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="PACKING_LIST" onclick="switchTab('PACKING_LIST')">
+                <span>Packing List</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_REQUEST" onclick="switchTab('BOOKING_REQUEST')">
+                <span>Booking Request</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="VGM" onclick="switchTab('VGM')">
+                <span>VGM</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="SHIPPING_INSTRUCTION" onclick="switchTab('SHIPPING_INSTRUCTION')">
+                <span>Shipping Instruction</span>
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <!-- Cơ quan chuyên ngành khác cấp -->
-      <div class="sidebar-group">
-        <div class="sidebar-group-title">Cơ quan chuyên ngành khác cấp</div>
-        <ul class="sidebar-nav-list">
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="VETERINARY_CERTIFICATE" onclick="switchTab('VETERINARY_CERTIFICATE')">
-              <span>Veterinary Certificate</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="PHYTOSANITARY_CERTIFICATE" onclick="switchTab('PHYTOSANITARY_CERTIFICATE')">
-              <span>Phytosanitary Certificate</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="QUALITY_CERTIFICATE" onclick="switchTab('QUALITY_CERTIFICATE')">
-              <span>Quality Certificate</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="FUMIGATION_CERTIFICATE" onclick="switchTab('FUMIGATION_CERTIFICATE')">
-              <span>Fumigation Certificate</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="CERTIFICATE_OF_ORIGIN" onclick="switchTab('CERTIFICATE_OF_ORIGIN')">
-              <span>Certificate of Origin</span>
-            </button>
-          </li>
-        </ul>
+      <div class="sidebar-group sidebar-group-collapsible" data-group-id="GROUP_III">
+        <button type="button" class="sidebar-group-toggle" aria-expanded="true" onclick="toggleSidebarGroup('GROUP_III')">
+          <span>CƠ QUAN CHUYÊN NGÀNH KHÁC CẤP</span>
+          <span class="sidebar-chevron" aria-hidden="true">&#9660;</span>
+        </button>
+        <div class="sidebar-group-body">
+          <ul class="sidebar-nav-list">
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="VETERINARY_CERTIFICATE" onclick="switchTab('VETERINARY_CERTIFICATE')">
+                <span>Veterinary Certificate</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="PHYTOSANITARY_CERTIFICATE" onclick="switchTab('PHYTOSANITARY_CERTIFICATE')">
+                <span>Phytosanitary Certificate</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="QUALITY_CERTIFICATE" onclick="switchTab('QUALITY_CERTIFICATE')">
+                <span>Quality Certificate</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="FUMIGATION_CERTIFICATE" onclick="switchTab('FUMIGATION_CERTIFICATE')">
+                <span>Fumigation Certificate</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="CERTIFICATE_OF_ORIGIN" onclick="switchTab('CERTIFICATE_OF_ORIGIN')">
+                <span>Certificate of Origin</span>
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <!-- Hãng tàu / Forwarder cấp -->
-      <div class="sidebar-group">
-        <div class="sidebar-group-title">Hãng tàu / Forwarder cấp</div>
-        <ul class="sidebar-nav-list">
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_NOTE" onclick="switchTab('BOOKING_NOTE')">
-              <span>Booking Note</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_CONFIRMATION" onclick="switchTab('BOOKING_CONFIRMATION')">
-              <span>Booking Confirmation</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="RELEASE_ORDER" onclick="switchTab('RELEASE_ORDER')">
-              <span>Release Order</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="BILL_OF_LADING" onclick="switchTab('BILL_OF_LADING')">
-              <span>Bill of Lading</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="DELIVERY_ORDER" onclick="switchTab('DELIVERY_ORDER')">
-              <span>Delivery Order</span>
-            </button>
-          </li>
-        </ul>
+      <div class="sidebar-group sidebar-group-collapsible" data-group-id="GROUP_IV">
+        <button type="button" class="sidebar-group-toggle" aria-expanded="true" onclick="toggleSidebarGroup('GROUP_IV')">
+          <span>HÃNG TÀU / FORWARDER CẤP</span>
+          <span class="sidebar-chevron" aria-hidden="true">&#9660;</span>
+        </button>
+        <div class="sidebar-group-body">
+          <ul class="sidebar-nav-list">
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_NOTE" onclick="switchTab('BOOKING_NOTE')">
+                <span>Booking Note</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="BOOKING_CONFIRMATION" onclick="switchTab('BOOKING_CONFIRMATION')">
+                <span>Booking Confirmation</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="RELEASE_ORDER" onclick="switchTab('RELEASE_ORDER')">
+                <span>Release Order</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="BILL_OF_LADING" onclick="switchTab('BILL_OF_LADING')">
+                <span>Bill of Lading</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="DELIVERY_ORDER" onclick="switchTab('DELIVERY_ORDER')">
+                <span>Delivery Order</span>
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <!-- Hải quan & Thanh toán quốc tế -->
-      <div class="sidebar-group">
-        <div class="sidebar-group-title">Hải quan &amp; Thanh toán quốc tế</div>
-        <ul class="sidebar-nav-list">
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="To_khai_XK" onclick="switchTab('To_khai_XK')">
-              <span>Export Customs Declaration</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="To_khai_NK" onclick="switchTab('To_khai_NK')">
-              <span>Import Customs Declaration</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="LETTER_OF_CREDIT" onclick="switchTab('LETTER_OF_CREDIT')">
-              <span>Letter of Credit</span>
-            </button>
-          </li>
-        </ul>
+      <div class="sidebar-group sidebar-group-collapsible" data-group-id="GROUP_V">
+        <button type="button" class="sidebar-group-toggle" aria-expanded="true" onclick="toggleSidebarGroup('GROUP_V')">
+          <span>HẢI QUAN &amp; THANH TOÁN QUỐC TẾ</span>
+          <span class="sidebar-chevron" aria-hidden="true">&#9660;</span>
+        </button>
+        <div class="sidebar-group-body">
+          <ul class="sidebar-nav-list">
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="To_khai_XK" onclick="switchTab('To_khai_XK')">
+                <span>Export Customs Declaration</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="To_khai_NK" onclick="switchTab('To_khai_NK')">
+                <span>Import Customs Declaration</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="sidebar-nav-btn" data-nav="LETTER_OF_CREDIT" onclick="switchTab('LETTER_OF_CREDIT')">
+                <span>Letter of Credit</span>
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
     </aside>

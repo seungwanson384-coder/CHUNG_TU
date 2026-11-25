@@ -4,11 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#144535">
-  <title>Hệ thống Chứng từ XNK</title>
-  <link rel="icon" type="image/png" href="https://drive.google.com/thumbnail?id=1EOJF-nYJdWkcUGOEUVlfW1Wc5SlOHWdk&sz=w300">
+  <title>Hệ thống xuất chứng từ XNK tự động</title>
+  <link id="appFavicon" rel="icon" type="image/png" href="https://drive.google.com/thumbnail?id=1Hjf2eCislKARBB8twtPHunvKviVJS6vq&sz=w300">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- SheetJS for Excel/CSV account import -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   <?!= include('CSS_Style'); ?>
 </head>
 <body class="app-layout">
@@ -32,7 +34,15 @@
   <!-- Core State, Sync Engine, Cascading Dropdowns, Auto-Calculations & Validations -->
   <?!= include('JS_App_State'); ?>
 
-  <!-- Schema-Driven Form Renderer for All 21 Views -->
+  <!-- Schema-Driven Form Renderer for All Views -->
   <?!= include('JS_Render_Forms'); ?>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof loadBrandLogoOnStart === 'function') {
+        loadBrandLogoOnStart();
+      }
+    });
+  </script>
 </body>
 </html>
