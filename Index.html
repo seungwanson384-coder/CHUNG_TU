@@ -80,10 +80,9 @@
             <thead>
               <tr>
                 <th style="width:46px;">STT</th>
-                <th style="min-width:190px;">Hãng tàu / Đơn vị</th>
-                <th style="min-width:210px;">Mã chủ sở hữu Cont (Col K)</th>
-                <th style="min-width:170px;">Mã tiền tố Seal (Col L)</th>
-                <th style="width:110px;">Thao tác</th>
+                <th style="min-width:210px;">Hãng tàu / Đơn vị</th>
+                <th style="min-width:220px;">Mã chủ sở hữu Cont (Col K)</th>
+                <th style="min-width:190px;">Mã tiền tố Seal (Col L)</th>
               </tr>
             </thead>
             <tbody id="contSealLookupTableBody"></tbody>
@@ -92,6 +91,26 @@
       </div>
       <div class="modal-footer-bar">
         <button type="button" class="btn btn-secondary" onclick="closeContSealLookupModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Redesigned Review Document Modal (Desk-Style Multi-Page A4 Viewer) -->
+  <div id="previewModal" class="preview-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle" onclick="if (event.target === this) closeDocPreviewModal()">
+    <div class="preview-modal-container">
+      <div class="preview-modal-header-strip">
+        <h3 id="previewModalTitle" class="preview-modal-title">REVIEW: DOCUMENT</h3>
+        <button type="button" id="btnPreviewModalClose" class="preview-modal-close-btn" onclick="closeDocPreviewModal()" aria-label="Đóng">&#10005;</button>
+      </div>
+      <div id="previewModalViewport" class="preview-modal-viewport">
+        <div id="previewModalLoading" class="preview-loading-card hidden">
+          <div class="spinner"></div>
+          <div class="loading-text">Loading...</div>
+        </div>
+        <div id="previewModalError" class="preview-error-card hidden">
+          <div id="previewModalErrorText" class="preview-error-text"></div>
+        </div>
+        <div id="previewModalCanvasWrap" class="preview-sheets-container hidden"></div>
       </div>
     </div>
   </div>

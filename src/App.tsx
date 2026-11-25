@@ -8,26 +8,23 @@ import {
   FileCode2,
   FileText,
   Play,
+  Printer,
   Sparkles,
   UserCheck,
   X,
 } from 'lucide-react';
 import { GAS_FILES, GasSourceFile, buildLivePreviewHtml } from './gasPreviewHelper';
-import codeGs from '../Code.gs?raw';
 import indexHtml from '../Index.html?raw';
-import viewLoginSidebarHtml from '../View_Login_Sidebar.html?raw';
+import cssStyleHtml from '../CSS_Style.html?raw';
 import jsRenderFormsHtml from '../JS_Render_Forms.html?raw';
 import jsAppStateHtml from '../JS_App_State.html?raw';
-import cssStyleHtml from '../CSS_Style.html?raw';
 import gsDocEngineGs from '../GS_Doc_Engine.gs?raw';
 
 const MODIFIED_FILE_IDS = [
-  'Code.gs',
   'Index.html',
-  'View_Login_Sidebar.html',
+  'CSS_Style.html',
   'JS_Render_Forms.html',
   'JS_App_State.html',
-  'CSS_Style.html',
   'GS_Doc_Engine.gs',
 ] as const;
 
@@ -35,36 +32,28 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
   const byId = new Map<string, GasSourceFile>();
   GAS_FILES.forEach((f) => byId.set(f.id, f));
 
-  byId.set('Code.gs', {
-    id: 'Code.gs',
-    filename: 'Code.gs',
-    gasType: 'gs',
-    category: 'Backend (.gs)',
-    description: '20-currency Col F reader, Col K/L Container/Seal prefix lookup & system branding',
-    content: codeGs,
-  });
   byId.set('Index.html', {
     id: 'Index.html',
     filename: 'Index.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Container/Seal prefix lookup modal with Red-Channel filter & updated Seal guide (6–12 chars)',
+    description: 'Updated #previewModal header with uppercase REVIEW: <DOC NAME> title & red close button',
     content: indexHtml,
   });
-  byId.set('View_Login_Sidebar.html', {
-    id: 'View_Login_Sidebar.html',
-    filename: 'View_Login_Sidebar.html',
+  byId.set('CSS_Style.html', {
+    id: 'CSS_Style.html',
+    filename: 'CSS_Style.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Progressive 21-step locked sidebar navigation & Admin "Mở khóa tất cả" toggle',
-    content: viewLoginSidebarHtml,
+    description: 'Strict background scroll lock, uniform 20px 3-side gray desk margins, full-width A4 white container & nowrap tax cells',
+    content: cssStyleHtml,
   });
   byId.set('JS_Render_Forms.html', {
     id: 'JS_Render_Forms.html',
     filename: 'JS_Render_Forms.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Strict CURR vs UNIT separation, milestone field/table locks, Inspection Code & Cont/Seal lookup button',
+    description: 'Dot-separated HS placeholders, SELLER_REP/BUYER_REP, 6 Fumigation inputs, Phyto treatment & 13 Quality lab inputs, C/O & L/C Totals',
     content: jsRenderFormsHtml,
   });
   byId.set('JS_App_State.html', {
@@ -72,23 +61,15 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'JS_App_State.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: '21-step locking engine, destination-smart CURR, 6–12 Seal & milestone rules, EN/VI words (no SAY:)',
+    description: 'Scroll lock & preview modal, live XXXX.XX.XX HS formatter, ETD/SHIPMENT_DEADLINE sync, SAY: prefix cleanup, 2-decimal CBM/VGM/totals & full sample data',
     content: jsAppStateHtml,
-  });
-  byId.set('CSS_Style.html', {
-    id: 'CSS_Style.html',
-    filename: 'CSS_Style.html',
-    gasType: 'html',
-    category: 'Frontend (.html)',
-    description: 'Locked step/field/table badges, lookup modal styling & fixed Preview modal header/loading box',
-    content: cssStyleHtml,
   });
   byId.set('GS_Doc_Engine.gs', {
     id: 'GS_Doc_Engine.gs',
     filename: 'GS_Doc_Engine.gs',
     gasType: 'gs',
     category: 'Backend (.gs)',
-    description: 'Per-doc language-accurate TOT_AMT_WORDS (VI for Báo giá, EN+ONLY for SC/CI, no SAY:)',
+    description: 'Strict NTF empty state, SAY: deduplication, HS dots, 2-decimal totals, BC colon findText fix, Sales Contract/Quotation/PL/Vet/Phyto/Qual/CO/DO/BL & Customs XK/NK fixes',
     content: gsDocEngineGs,
   });
 
@@ -111,6 +92,8 @@ export default function App() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lastGenerated, setLastGenerated] = useState<GeneratedPreviewPayload | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [selectedDocKeys, setSelectedDocKeys] = useState<string[]>([]);
+  const [inspectorNotice, setInspectorNotice] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const previewHtml = useMemo(() => buildLivePreviewHtml(), []);
@@ -121,7 +104,10 @@ export default function App() {
     const onMessage = (ev: MessageEvent) => {
       if (!ev.data || typeof ev.data !== 'object') return;
       if (ev.data.type === 'GAS_PREVIEW_GENERATED') {
-        setLastGenerated(ev.data.payload);
+        const payload = ev.data.payload as GeneratedPreviewPayload;
+        setLastGenerated(payload);
+        setSelectedDocKeys((payload?.results || []).map((r) => r.docKey));
+        setInspectorNotice(null);
       } else if (ev.data.type === 'GAS_PREVIEW_OPEN_DOC') {
         setInspectorOpen(true);
       }
@@ -159,6 +145,211 @@ export default function App() {
 
   const triggerIframeCommand = (type: string) => {
     iframeRef.current?.contentWindow?.postMessage({ type }, '*');
+  };
+
+  const escapeHtml = (value: unknown): string =>
+    String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const buildBulkDocumentsHtml = (
+    docs: GeneratedPreviewPayload['results'],
+    payload: GeneratedPreviewPayload
+  ): string => {
+    const sharedEntries = Object.entries(payload.shared || {}).filter(
+      ([, v]) => String(v ?? '').trim() !== ''
+    );
+    const items = payload.items || [];
+    const containers = payload.containers || [];
+
+    const docSections = docs
+      .map((doc) => {
+        const sharedRows = sharedEntries
+          .map(
+            ([k, v]) =>
+              `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v).replace(/\n/g, '<br/>')}</td></tr>`
+          )
+          .join('');
+
+        const itemsRows = items
+          .map(
+            (item, idx) =>
+              `<tr>
+                <td>${idx + 1}</td>
+                <td>${escapeHtml(item.PCODE || '')}</td>
+                <td>${escapeHtml(item.PROD || '')}</td>
+                <td>${escapeHtml(item.HS || '')}</td>
+                <td>${escapeHtml(item.QTY || '')} ${escapeHtml(item.UNIT || '')}</td>
+                <td>${escapeHtml(item.PRICE || '')}</td>
+                <td>${escapeHtml(item.AMT || '')}</td>
+              </tr>`
+          )
+          .join('');
+
+        const containerRows = containers
+          .map(
+            (c, idx) =>
+              `<tr>
+                <td>${idx + 1}</td>
+                <td>${escapeHtml(c.CONT || '')}</td>
+                <td>${escapeHtml(c.SEAL || '')}</td>
+                <td>${escapeHtml(c.CTYPE || '')}</td>
+                <td>${escapeHtml(c.PACK || '')} ${escapeHtml(c.UNIT_PACK || '')}</td>
+                <td>${escapeHtml(c.GW || '')}</td>
+                <td>${escapeHtml(c.CBM || '')}</td>
+              </tr>`
+          )
+          .join('');
+
+        return `
+          <section class="doc-page">
+            <header class="doc-header">
+              <div>
+                <div class="doc-key">${escapeHtml(doc.docKey)}</div>
+                <h1>${escapeHtml(doc.docName)}</h1>
+              </div>
+              <div class="doc-meta">
+                <div><strong>Shipper:</strong> ${escapeHtml(payload.shared?.SHIP_NAME || '—')}</div>
+                <div><strong>Consignee:</strong> ${escapeHtml(payload.shared?.CNE_NAME || '—')}</div>
+              </div>
+            </header>
+            <h2>Thông tin chung lô hàng</h2>
+            <table>
+              <tbody>${sharedRows || '<tr><td colspan="2">Không có dữ liệu</td></tr>'}</tbody>
+            </table>
+            ${
+              items.length > 0
+                ? `<h2>Chi tiết hàng hóa (${items.length})</h2>
+                   <table>
+                     <thead><tr><th>#</th><th>Mã</th><th>Tên hàng</th><th>HS Code</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
+                     <tbody>${itemsRows}</tbody>
+                   </table>`
+                : ''
+            }
+            ${
+              containers.length > 0
+                ? `<h2>Danh sách Container (${containers.length})</h2>
+                   <table>
+                     <thead><tr><th>#</th><th>Số Container</th><th>Số Seal</th><th>Loại</th><th>Đóng gói</th><th>GW</th><th>CBM</th></tr></thead>
+                     <tbody>${containerRows}</tbody>
+                   </table>`
+                : ''
+            }
+          </section>
+        `;
+      })
+      .join('\n');
+
+    return `<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>Chứng từ XNK (${docs.length} tài liệu)</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; color: #0f172a; margin: 0; padding: 24px; font-size: 12px; line-height: 1.45; }
+    .doc-page { border: 1px solid #cbd5e1; border-radius: 8px; padding: 20px; margin-bottom: 24px; background: #fff; }
+    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #144535; padding-bottom: 10px; margin-bottom: 14px; }
+    .doc-key { font-size: 11px; font-weight: 700; color: #144535; text-transform: uppercase; letter-spacing: 0.04em; }
+    h1 { margin: 2px 0 0; font-size: 18px; color: #0b261c; }
+    h2 { margin: 16px 0 8px; font-size: 13px; color: #144535; border-left: 3px solid #144535; padding-left: 8px; }
+    .doc-meta { text-align: right; font-size: 11px; color: #334155; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    th, td { border: 1px solid #cbd5e1; padding: 5px 8px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; font-weight: 700; width: 220px; }
+    thead th { width: auto; }
+    @media print {
+      body { padding: 0; }
+      .doc-page { border: none; border-radius: 0; padding: 0; margin: 0; page-break-after: always; }
+      .doc-page:last-child { page-break-after: auto; }
+    }
+  </style>
+</head>
+<body>${docSections}</body>
+</html>`;
+  };
+
+  const handleToggleSelectAllDocs = () => {
+    if (!lastGenerated) return;
+    const allKeys = lastGenerated.results.map((r) => r.docKey);
+    if (selectedDocKeys.length === allKeys.length) {
+      setSelectedDocKeys([]);
+    } else {
+      setSelectedDocKeys(allKeys);
+    }
+  };
+
+  const handleToggleDocSelection = (docKey: string) => {
+    setSelectedDocKeys((prev) =>
+      prev.includes(docKey) ? prev.filter((k) => k !== docKey) : [...prev, docKey]
+    );
+  };
+
+  const handleBulkDownload = () => {
+    if (!lastGenerated) return;
+    const selectedDocs = lastGenerated.results.filter((r) =>
+      selectedDocKeys.includes(r.docKey)
+    );
+    if (selectedDocs.length === 0) return;
+
+    const html = buildBulkDocumentsHtml(selectedDocs, lastGenerated);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download =
+      selectedDocs.length === 1
+        ? `${selectedDocs[0].docName}.html`
+        : `Bo_Chung_Tu_XNK_${selectedDocs.length}_files.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setInspectorNotice(`Đã tải xuống ${selectedDocs.length} chứng từ đã chọn.`);
+  };
+
+  const handleBulkPrint = () => {
+    if (!lastGenerated) return;
+    const selectedDocs = lastGenerated.results.filter((r) =>
+      selectedDocKeys.includes(r.docKey)
+    );
+    if (selectedDocs.length === 0) return;
+
+    const html = buildBulkDocumentsHtml(selectedDocs, lastGenerated);
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    printFrame.setAttribute('aria-hidden', 'true');
+
+    const cleanup = () => {
+      setTimeout(() => {
+        if (printFrame.parentNode) {
+          printFrame.parentNode.removeChild(printFrame);
+        }
+      }, 1000);
+    };
+
+    printFrame.onload = () => {
+      try {
+        const win = printFrame.contentWindow;
+        if (win) {
+          win.addEventListener('afterprint', cleanup, { once: true });
+          win.focus();
+          win.print();
+        }
+      } finally {
+        setTimeout(cleanup, 60000);
+      }
+    };
+
+    document.body.appendChild(printFrame);
+    printFrame.srcdoc = html;
+    setInspectorNotice(`Đang mở hộp thoại in cho ${selectedDocs.length} chứng từ đã chọn.`);
   };
 
   const gsFiles = DISPLAY_GAS_FILES.filter((f) => f.gasType === 'gs');
@@ -418,17 +609,102 @@ export default function App() {
 
             <div className="p-5 overflow-y-auto space-y-4 text-xs">
               <div>
-                <div className="font-bold text-slate-800 mb-2">Danh sách file sẽ tạo trên Drive:</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {lastGenerated.results.map((r) => (
-                    <div
-                      key={r.docKey}
-                      className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-between"
-                    >
-                      <span className="font-semibold text-emerald-900">{r.docName}</span>
-                      <span className="text-[11px] font-medium text-emerald-700">Sẵn sàng xuất</span>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="font-bold text-slate-800">
+                      Danh sách file sẽ tạo trên Drive ({lastGenerated.results.length}):
                     </div>
-                  ))}
+                    <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 font-semibold cursor-pointer select-none transition">
+                      <input
+                        type="checkbox"
+                        checked={
+                          lastGenerated.results.length > 0 &&
+                          selectedDocKeys.length === lastGenerated.results.length
+                        }
+                        ref={(el) => {
+                          if (el) {
+                            el.indeterminate =
+                              selectedDocKeys.length > 0 &&
+                              selectedDocKeys.length < lastGenerated.results.length;
+                          }
+                        }}
+                        onChange={handleToggleSelectAllDocs}
+                        className="w-3.5 h-3.5 rounded accent-[#144535] cursor-pointer"
+                      />
+                      <span>
+                        Chọn tất cả ({selectedDocKeys.length}/{lastGenerated.results.length})
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleBulkDownload}
+                      disabled={selectedDocKeys.length === 0}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#144535] hover:bg-[#0E3327] disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-semibold transition cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Tải hàng loạt ({selectedDocKeys.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBulkPrint}
+                      disabled={selectedDocKeys.length === 0}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white hover:bg-emerald-50 border border-[#144535] disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-[#144535] font-semibold transition cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      In hàng loạt ({selectedDocKeys.length})
+                    </button>
+                  </div>
+                </div>
+
+                {inspectorNotice && (
+                  <div className="mb-2.5 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 font-medium flex items-center justify-between gap-2">
+                    <span>{inspectorNotice}</span>
+                    <button
+                      type="button"
+                      onClick={() => setInspectorNotice(null)}
+                      className="text-emerald-700 hover:text-emerald-900 font-bold cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {lastGenerated.results.map((r) => {
+                    const checked = selectedDocKeys.includes(r.docKey);
+                    return (
+                      <label
+                        key={r.docKey}
+                        className={`px-3 py-2 rounded-lg border flex items-center justify-between gap-2 cursor-pointer transition select-none ${
+                          checked
+                            ? 'bg-emerald-50 border-emerald-400 ring-1 ring-emerald-300'
+                            : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => handleToggleDocSelection(r.docKey)}
+                            className="w-3.5 h-3.5 rounded accent-[#144535] shrink-0 cursor-pointer"
+                          />
+                          <span className="font-semibold text-emerald-950 truncate">
+                            {r.docName}
+                          </span>
+                        </span>
+                        <span
+                          className={`text-[11px] font-medium shrink-0 ${
+                            checked ? 'text-emerald-700' : 'text-slate-500'
+                          }`}
+                        >
+                          {checked ? 'Đã chọn' : 'Chưa chọn'}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 

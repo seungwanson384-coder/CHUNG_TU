@@ -96,20 +96,35 @@
   <div class="app-body">
     <aside id="appSidebar" class="sidebar" aria-label="Danh mục chứng từ">
       <!-- QUẢN TRỊ HỆ THỐNG (Admin Only) - PLACED AT THE VERY TOP -->
-      <div id="adminSidebarGroup" class="sidebar-group hidden">
-        <div class="sidebar-group-title" style="color:#DC2626 !important;">Quản trị hệ thống</div>
-        <ul class="sidebar-nav-list">
-          <li>
-            <button type="button" class="sidebar-nav-btn" data-nav="ADMIN_ACCOUNTS" onclick="switchTab('ADMIN_ACCOUNTS')">
-              <span>Quản lý Tài khoản</span>
-            </button>
-          </li>
-          <li>
-            <button id="btnAdminUnlockAllSteps" type="button" class="btn btn-secondary btn-sm btn-admin-unlock" onclick="toggleAdminUnlockAllSteps()">
-              &#128275; Mở khóa tất cả (Admin)
-            </button>
-          </li>
-        </ul>
+      <div id="adminSidebarGroup" class="sidebar-group hidden" style="display:none;">
+        <button
+          id="btnAdminSystem"
+          type="button"
+          class="btn-admin-system"
+          data-nav="ADMIN_PANEL"
+          onclick="switchTab('ADMIN_PANEL')"
+        >
+          <span>QUẢN TRỊ HỆ THỐNG</span>
+          <span aria-hidden="true">&#9881;</span>
+        </button>
+        <div class="admin-sidebar-controls">
+          <button
+            id="btnAdminUnlockAllSteps"
+            type="button"
+            class="btn btn-sm btn-admin-unlock"
+            onclick="toggleAdminUnlockAllSteps()"
+          >
+            &#128274; Đang khóa
+          </button>
+          <button
+            id="btnAdminFillSample"
+            type="button"
+            class="btn btn-sm btn-admin-sample"
+            onclick="handleAdminFillSampleData()"
+          >
+            &#9889; Điền dữ liệu mẫu
+          </button>
+        </div>
       </div>
 
       <!-- Thông tin chung -->

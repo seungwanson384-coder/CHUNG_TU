@@ -228,11 +228,13 @@ const APP_STATE = {
   previewDocKey: null,
   logoDataUrl: '',
   lastTaxTab: 'To_khai_XK',
+  scheduleOptions: {},
   manualFlags: {
     IM_VAL: false,
     SCT_VAL: false,
     VAT_VAL: false,
-    TOTAL_CONTAINERS_TEXT: false
+    TOTAL_CONTAINERS_TEXT: false,
+    SHIPMENT_DEADLINE: false
   }
 };
 
@@ -340,8 +342,19 @@ function closeGuideModal() {
   if (modal) modal.classList.add('hidden');
 }
 
+function isAdminUser_(userObj) {
+  const u = userObj || (typeof APP_STATE !== 'undefined' ? APP_STATE.user : null);
+  if (!u) return false;
+  const roleVal = String(u.vaiTro || u.role || '').trim().toUpperCase();
+  return roleVal === 'ADMIN';
+}
+
+function isAdminTab_(tabKey) {
+  return tabKey === 'ADMIN_PANEL' || tabKey === 'ADMIN_ACCOUNTS';
+}
+
 function isStepLocked_(tabKey) {
-  if (!tabKey || tabKey === 'MASTER_PARTIES' || tabKey === 'ADMIN_ACCOUNTS') {
+  if (!tabKey || tabKey === 'MASTER_PARTIES' || isAdminTab_(tabKey)) {
     return false;
   }
   if (APP_STATE.adminUnlockAllSteps) {
@@ -562,17 +575,28 @@ function updateSidebarLockState_() {
     }
   });
 
+  const isAdmin = isAdminUser_();
+  const adminGroup = document.getElementById('adminSidebarGroup');
+  if (adminGroup) {
+    adminGroup.classList.toggle('hidden', !isAdmin);
+    adminGroup.style.display = isAdmin ? 'block' : 'none';
+  }
+
   const adminUnlockBtn = document.getElementById('btnAdminUnlockAllSteps');
   if (adminUnlockBtn) {
-    const isAdmin = APP_STATE.user && APP_STATE.user.role === 'ADMIN';
     adminUnlockBtn.classList.toggle('hidden', !isAdmin);
     if (APP_STATE.adminUnlockAllSteps) {
-      adminUnlockBtn.textContent = '\uD83D\uDD12 Khóa theo tiến độ (Admin)';
+      adminUnlockBtn.textContent = '\uD83D\uDD13 Đã mở';
       adminUnlockBtn.classList.add('unlocked-active');
     } else {
-      adminUnlockBtn.textContent = '\uD83D\uDD13 Mở khóa tất cả (Admin)';
+      adminUnlockBtn.textContent = '\uD83D\uDD12 Đang khóa';
       adminUnlockBtn.classList.remove('unlocked-active');
     }
+  }
+
+  const adminSampleBtn = document.getElementById('btnAdminFillSample');
+  if (adminSampleBtn) {
+    adminSampleBtn.classList.toggle('hidden', !isAdmin);
   }
 
   if (prevBlUnlocked !== nowBlUnlocked) {
@@ -582,7 +606,7 @@ function updateSidebarLockState_() {
 }
 
 function toggleAdminUnlockAllSteps() {
-  if (!APP_STATE.user || APP_STATE.user.role !== 'ADMIN') return;
+  if (!isAdminUser_()) return;
   APP_STATE.adminUnlockAllSteps = !APP_STATE.adminUnlockAllSteps;
   updateSidebarLockState_();
   updateFieldAndTableLocksInDOM_();
@@ -592,6 +616,419 @@ function toggleAdminUnlockAllSteps() {
       : 'Đã bật lại chế độ khóa tuần tự theo tiến độ.',
     'info'
   );
+}
+
+function buildFullSampleDataset_() {
+  const yymmdd = getTodayYYMMDD_();
+  return {
+    shared: {
+      SHIP_NAME: 'VIETNAM MEKONG AGRI EXPORT JSC',
+      SELLER_TITLE: 'General Director',
+      SELLER_REP: 'Mr. Nguyen Van An',
+      SHIP_ADDR: '125 Nguyen Hue Street, District 1, Ho Chi Minh City, Vietnam',
+      SHIP_TAX: '0101234567',
+      SHIP_TEL: '02838123456',
+      SHIP_EMAIL: 'export@mekongagri.vn',
+      BANK_NAME: 'VIETCOMBANK - HO CHI MINH BRANCH',
+      BANK_ACC: '0071000998877',
+      SWIFT_CODE: 'BFTVVNVX007',
+      DOCS_NAME: 'Le Thi Hoa',
+      DOCS_TEL: '0909123456',
+      DOCS_EMAIL: 'docs@mekongagri.vn',
+      SALE_NAME: 'Tran Quoc Bao',
+      CNE_NAME: 'PACIFIC RIM FOODS IMPORTS LLC',
+      BUYER_TITLE: 'Purchasing Vice President',
+      BUYER_REP: 'Ms. Sarah Jenkins',
+      CNE_ADDR: '2450 Harbor Blvd, Suite 400, Los Angeles, CA 90012, USA',
+      CNE_TAX: '954821904',
+      CNE_TEL: '+1 310 555 0192',
+      CNE_FAX: '+1 310 555 0199',
+      CNE_EMAIL: 'imports@pacificrimfoods.com',
+      BUYER_NAME: 'Ms. Sarah Jenkins',
+      BUYER_TEL: '+1 310 555 0192',
+      NTF_NAME: 'PACIFIC RIM LOGISTICS BROKERAGE INC.',
+      NTF_TEL: '+1 310 555 0188',
+      NTF_EMAIL: 'notify@pacificrimlogistics.com',
+      NTF_ADDR: '2450 Harbor Blvd, Suite 405, Los Angeles, CA 90012, USA',
+      QUOT_NO: 'QT-' + yymmdd + '-01',
+      QUOT_DT: '2026-11-25',
+      PROJECT_NAME: 'US West Coast Q4 Grain & Coffee Supply',
+      VALID_DAYS: '15',
+      INCOTERM: 'CIF',
+      INCOTERM_PLACE: 'LOS ANGELES PORT, USA',
+      CURR: 'USD',
+      CTR_NO: 'SC-' + yymmdd + '-01',
+      CTR_DT: '2026-11-25',
+      CTR_EXP: '2026-12-31',
+      COMMODITY_GRADE: 'Grade 1 Export Standard',
+      CROP_YEAR: '2025/2026',
+      QUALITY_STANDARD: 'TCVN 4193:2014 / ISO Standard',
+      SPEC_MOISTURE: 'Max 12.5%',
+      SPEC_BROKEN: 'Max 5.0%',
+      SPEC_FOREIGN_MATTER: 'Max 0.5%',
+      QUANT_TOLERANCE: '+/- 5% at Seller option',
+      PACK_SPEC: 'Export Standard 50kg PP/Jute Bags & Vacuum Cartons',
+      CONT_LOAD: '2 x 40HC Containers FCL/FCL',
+      SHIPMENT_DEADLINE: '2026-12-02',
+      INS_TERM: 'ICC (A)',
+      LC_OPENING_TIME: 'Within 5 banking days after signing SC',
+      CO_FORM_NAME: 'FORM B',
+      TRADE_AGREEMENT: 'MFN',
+      ORG: 'VIETNAM',
+      DEST_CTRY: 'UNITED STATES',
+      EXP_CTRY: 'VIETNAM',
+      POL: 'CAT LAI, HCMC (VNSGN)',
+      POD: 'LOS ANGELES, US (USLAX)',
+      FINAL_DESTINATION: 'LOS ANGELES, CA, USA',
+      VESSEL: 'MAERSK SENTOSA',
+      VOYAGE: '428E',
+      VES_VOY: 'MAERSK SENTOSA / 428E',
+      BK_NO: 'BK-' + yymmdd + '-01',
+      BK_DT: '2026-11-26',
+      PAY_TERM: 'L/C AT SIGHT',
+      FREIGHT: 'PREPAID',
+      INV_NO: 'INV-' + yymmdd + '-01',
+      INV_DT: '2026-11-28',
+      VAT_GST: '0',
+      PL_DT: '2026-11-28',
+      SERVICE_TYPE: 'FCL/FCL',
+      ETD_DT: '2026-12-02',
+      ETD_TIME: '22:00',
+      ETA_DT: '2026-12-22',
+      ETA_TIME: '08:00',
+      BKR_NO: 'BKR-' + yymmdd + '-01',
+      BKR_DT: '2026-11-25',
+      CAR_NAME: 'MAERSK LINE',
+      CAR_ADDR: '280 Nguyen Van Troi, Phu Nhuan Dist., Ho Chi Minh City',
+      CAR_TEL: '02839978888',
+      CAR_EMAIL: 'vn.booking@maersk.com',
+      CAR_ATTN: 'Export Booking Desk',
+      FREIGHT_PREPAID: '\u2611',
+      FREIGHT_COLLECT: '\u2610',
+      DG_YES: '\u2610',
+      DG_NO: '\u2611',
+      DG_CLASS_UN: 'NON-DG',
+      TEMP: 'Ambient',
+      VENT: 'Closed',
+      HUMIDITY: 'Ambient',
+      OUT_OF_GAUGE: '\u2610',
+      NON_STACKABLE: '\u2610',
+      FUMIGATION_NEEDED: '\u2611',
+      SPECIAL_HANDLING: 'Keep dry, stow away from heat and moisture.',
+      VGM_DT: '2026-11-30',
+      WEI_STATION: 'Cat Lai Port Weighbridge Station No. 02',
+      SI_NO: 'SI-' + yymmdd + '-01',
+      SI_DT: '2026-11-29',
+      DESCRIPTION_OF_GOODS: 'VIETNAMESE LONG GRAIN WHITE RICE 5% BROKEN & ROBUSTA GREEN COFFEE BEANS G1',
+      VET_CERT_NO: 'VET-' + yymmdd + '-01',
+      VET_CERT_DT: '2026-11-29',
+      ANIMAL_ORIGIN: 'N/A (Plant-based agricultural commodity)',
+      SLAUGHTER_HOUSE: 'N/A',
+      VET_INSPECTOR: 'Dr. Nguyen Minh Tuan - Dept. of Animal Health',
+      PHYTO_CERT_NO: 'PHYTO-' + yymmdd + '-01',
+      PHYTO_CERT_DT: '2026-11-30',
+      BL_NO: 'BL-' + yymmdd + '-01',
+      BL_DT: '2026-12-02',
+      DOCUMENT_NO: 'DOC-' + yymmdd + '-01',
+      PLANT_ORIGIN: 'Mekong Delta & Central Highlands, Vietnam',
+      DISINFESTATION_METHOD: 'Fumigation under tarpaulin',
+      CHEMICAL_NAME: 'Methyl Bromide (CH3Br)',
+      TREAT_CHEMICAL: 'Methyl Bromide (CH3Br)',
+      TREAT_DURATION_TEMP: '24 hours at 28°C',
+      ADDITIVE_RATIO: '48 g/m3 (100% pure)',
+      QUAL_CERT_NO: 'QUAL-' + yymmdd + '-01',
+      QUAL_CERT_DT: '2026-11-29',
+      PROD_DT: '2026-11-20',
+      INSPECTING_BODY: 'VINACONTROL HO CHI MINH CITY',
+      TEST_RESULT: 'Conforms to export contract specification (Passed)',
+      FINENESS_45UM: 'Max 2.5%',
+      SPECIFIC_SURFACE: '3,450 cm2/g',
+      INITIAL_SETTING: '145 minutes',
+      FINAL_SETTING: '210 minutes',
+      SOUNDNESS: '1.0 mm (Passed)',
+      COMPRESSIVE_STRENGTH_3D: '26.5 MPa',
+      COMPRESSIVE_STRENGTH_7D: '38.2 MPa',
+      COMPRESSIVE_STRENGTH_28D: '51.4 MPa',
+      SO3_CONTENT: '2.15%',
+      LOSS_ON_IGNITION: '1.40%',
+      FREE_CAO: '0.65%',
+      INSPECTION_CONCLUSION: 'Conforms to export contract specification (Passed)',
+      MINISTRY_AUTHORITY: 'MINISTRY OF AGRICULTURE AND ENVIRONMENT',
+      FUMIGATION_COMPANY: 'VIETNAM FUMIGATION JOINT STOCK COMPANY (VFC)',
+      FUMIGATION_BRANCH: 'HO CHI MINH BRANCH',
+      FUM_CERT_NO: 'FUM-' + yymmdd + '-01',
+      FUM_CERT_DT: '2026-11-30',
+      ISSUE_PLACE: 'Ho Chi Minh City',
+      FUM_DT: '2026-11-30',
+      FUMIGATION_PLACE: 'Cat Lai Port Warehouse, HCMC',
+      FUM_CHEMICAL: 'Methyl Bromide (CH3Br)',
+      FUM_DOSAGE: '48 g/m3',
+      FUM_EXPOSURE_TIME: '24',
+      FUM_TEMP: '28°C',
+      CO_REF_NO: 'CO-' + yymmdd + '-01',
+      CO_ISSUE_DT: '2026-12-03',
+      CO_PLACE: 'Ho Chi Minh City',
+      SI_CUTOFF_DATE: '2026-11-29',
+      SI_CUTOFF_TIME: '17:00',
+      VGM_CUTOFF_DATE: '2026-11-30',
+      VGM_CUTOFF_TIME: '12:00',
+      PORT_CLOSING_DATE: '2026-12-01',
+      PORT_CLOSING_TIME: '06:00',
+      PORT_CLOSING_NOTE: 'Gate-in Cat Lai Terminal B before 06:00',
+      EMPTY_PICKUP_DEPOT: 'ICD PHUOC LONG 3, THU DUC, HCMC',
+      FULL_DROPOFF_DEPOT: 'CAT LAI TERMINAL - TAN CANG SAIGON',
+      STUFFING_PLACE: 'Mekong Agri Warehouse, Binh Duong',
+      RO_NO: 'RO-' + yymmdd + '-01',
+      RO_DT: '2026-11-26',
+      RO_EXPIRY_DT: '2026-11-30',
+      DEPOT_WORKING_HOURS: '07:30 - 17:00 (Mon - Sat)',
+      DO_NO: 'DO-' + yymmdd + '-01',
+      DO_DT: '2026-12-20',
+      CUS_DEPT: 'Cục Hải quan TP. Hồ Chí Minh',
+      CUS_REG: 'Chi cục Hải quan Cửa khẩu Cảng Sài Gòn KV I (Cát Lái)',
+      CUS_PORT: 'Cảng Cát Lái (VNSGN)',
+      REF_NO: 'REF-' + yymmdd + '-01',
+      SUB_DTM: '25/11/2026 09:30',
+      DEC_NO: '306812345670',
+      REG_DTM: '25/11/2026 10:15',
+      DEC_TYPE: 'B11 - Xuất kinh doanh',
+      INSPECTION_CODE: '1 - Luồng Xanh',
+      LIC_NO: 'LIC-' + yymmdd + '-01',
+      LIC_DT: '2026-11-01',
+      LIC_EXP: '2026-12-31',
+      AUTH_PARTY: 'VIETNAM MEKONG AGRI EXPORT JSC',
+      CUS_AGENT: 'SAIGON LOGISTICS CUSTOMS BROKER CO., LTD',
+      TRANS_MODE: '2 - Đường biển (Container)',
+      EX_RATE: '25,450.00',
+      IM_RATE: '5',
+      SCT_RATE: '0',
+      EPT_VAL: '0',
+      EPT_RATE: '0',
+      VAT_RATE: '8',
+      LC_NO: 'LC-' + yymmdd + '-01',
+      LC_DT: '2026-11-25',
+      FREIGHT_AMT: '3,200.00',
+      INS_AMT: '450.00'
+    },
+    items: [
+      Object.assign(createEmptyItem(), {
+        PCODE: 'RICE-5B',
+        PROD: 'VIETNAMESE WHITE RICE 5% BROKEN',
+        DES: 'Crop 2025/2026, moisture max 14%, packed in 50kg PP bags',
+        HS: '1006.30.99',
+        ORG: 'VIETNAM',
+        PREF: 'WO',
+        MARKS: 'MEKONG AGRI - USLAX',
+        LOT_NO: 'LOT-RICE-01',
+        UNIT: 'MTS',
+        QTY: '25',
+        PRICE: '620.00',
+        AMT: '15,500.00',
+        PACK: '500',
+        UNIT_PACK: 'BAG',
+        CTYPE: '40HC',
+        NW: '25,000.00',
+        GW: '25,250.00',
+        CBM: '28.50',
+        SPEC_MOISTURE: '13.5%',
+        SPEC_BROKEN: '4.5%',
+        INVOICE_REF: 'INV-' + yymmdd + '-01',
+        EX_VAL: '394,475,000.00',
+        EX_TAX_RATE: '0',
+        EX_AMT: '0',
+        FEE_VAL: '394,475,000.00',
+        FEE_RATE: '0.5',
+        FEE_AMT: '1,972,375.00'
+      }),
+      Object.assign(createEmptyItem(), {
+        PCODE: 'CAF-G1',
+        PROD: 'ROBUSTA GREEN COFFEE BEANS G1',
+        DES: 'Screen 18, moisture max 12.5%, export standard',
+        HS: '0901.11.10',
+        ORG: 'VIETNAM',
+        PREF: 'WO',
+        MARKS: 'PACIFIC RIM - G1',
+        LOT_NO: 'LOT-COF-02',
+        UNIT: 'MTS',
+        QTY: '18',
+        PRICE: '4,250.00',
+        AMT: '76,500.00',
+        PACK: '300',
+        UNIT_PACK: 'BAG',
+        CTYPE: '40HC',
+        NW: '18,000.00',
+        GW: '18,240.00',
+        CBM: '24.80',
+        SPEC_MOISTURE: '12.1%',
+        SPEC_BROKEN: '1.2%',
+        INVOICE_REF: 'INV-' + yymmdd + '-01',
+        EX_VAL: '1,946,925,000.00',
+        EX_TAX_RATE: '0',
+        EX_AMT: '0',
+        FEE_VAL: '1,946,925,000.00',
+        FEE_RATE: '0.5',
+        FEE_AMT: '9,734,625.00'
+      })
+    ],
+    containers: [
+      Object.assign(createEmptyContainer(), {
+        CONT: 'MSKU1234565',
+        SEAL: 'MLVN123456',
+        CTYPE: '40HC',
+        CSIZE: '40HC',
+        PACK: '500',
+        UNIT_PACK: 'BAG',
+        MAX_GW: '30,480.00',
+        GW: '25,250.00',
+        VGM_WEI: '29,150.00',
+        CBM: '28.50'
+      }),
+      Object.assign(createEmptyContainer(), {
+        CONT: 'MSCU6543212',
+        SEAL: 'MSCVN654321',
+        CTYPE: '40HC',
+        CSIZE: '40HC',
+        PACK: '300',
+        UNIT_PACK: 'BAG',
+        MAX_GW: '30,480.00',
+        GW: '18,240.00',
+        VGM_WEI: '22,140.00',
+        CBM: '24.80'
+      })
+    ]
+  };
+}
+
+function handleAdminFillSampleData() {
+  if (!isAdminUser_()) return;
+  const sample = buildFullSampleDataset_();
+
+  if (APP_STATE.adminUnlockAllSteps) {
+    APP_STATE.shared = Object.assign({}, APP_STATE.shared, sample.shared);
+    APP_STATE.items = sample.items.map(function (row) { return Object.assign(createEmptyItem(), row); });
+    APP_STATE.containers = sample.containers.map(function (row) { return Object.assign(createEmptyContainer(), row); });
+    APP_STATE.unlockedStepIndex = DOC_STEP_ORDER.length - 1;
+    APP_STATE.manualFlags = {
+      IM_VAL: false,
+      SCT_VAL: false,
+      VAT_VAL: false,
+      TOTAL_CONTAINERS_TEXT: false,
+      SHIPMENT_DEADLINE: false
+    };
+
+    normalizeCheckboxFieldsInState();
+    normalizeNumericFieldsInState_();
+    recalculateAllTotals(false, true, { sourceKey: 'EX_RATE', targetDocKey: APP_STATE.activeTab });
+    renderAllFormViews();
+    refreshScheduleDropdownSuggestions_();
+    refreshCurrencyDropdownSuggestions_();
+    updateSidebarLockState_();
+    updateFieldAndTableLocksInDOM_();
+    validateContainerInputsInDOM();
+    updateCurrencyBadgesInDOM_();
+    updateAllContextBanners();
+
+    showToast('Đã điền đầy đủ dữ liệu mẫu cho toàn bộ 21 mục! Sẵn sàng Review & Xuất hàng loạt.', 'success');
+    return;
+  }
+
+  let targetTab = APP_STATE.activeTab || 'MASTER_PARTIES';
+  if (isAdminTab_(targetTab)) {
+    targetTab = 'MASTER_PARTIES';
+    APP_STATE.activeTab = targetTab;
+  }
+
+  const cfg = (typeof DOC_FORM_CONFIGS !== 'undefined' && DOC_FORM_CONFIGS[targetTab]) ? DOC_FORM_CONFIGS[targetTab] : null;
+  if (cfg && Array.isArray(cfg.sections)) {
+    cfg.sections.forEach(function (sec) {
+      (sec.fields || []).forEach(function (field) {
+        const lockInfo = typeof getFieldLockInfo_ === 'function' ? getFieldLockInfo_(targetTab, field.key) : { locked: false };
+        if (lockInfo && lockInfo.locked) return;
+        if (field.readonly) return;
+        if (Object.prototype.hasOwnProperty.call(sample.shared, field.key)) {
+          APP_STATE.shared[field.key] = sample.shared[field.key];
+        }
+      });
+    });
+  }
+
+  if (targetTab === 'To_khai_NK') {
+    APP_STATE.shared.DEC_TYPE = 'A11 - Nhập kinh doanh tiêu dùng';
+    APP_STATE.lastTaxTab = 'To_khai_NK';
+  } else if (targetTab === 'To_khai_XK') {
+    APP_STATE.shared.DEC_TYPE = 'B11 - Xuất kinh doanh';
+    APP_STATE.lastTaxTab = 'To_khai_XK';
+  }
+
+  const tables = cfg && Array.isArray(cfg.tables) ? cfg.tables : [];
+  const needsItems = tables.some(function (t) { return t.type === 'items' || t.type === 'tax'; });
+  const needsContainers = tables.some(function (t) { return t.type === 'containers'; }) && !DOCS_CONT_TABLE_LOCKED[targetTab];
+
+  if (needsItems) {
+    const firstIt = APP_STATE.items && APP_STATE.items[0];
+    const hasCoreItem = firstIt && hasFilledVal_(firstIt.PROD) && (hasFilledVal_(firstIt.QTY) || hasFilledVal_(firstIt.GW) || hasFilledVal_(firstIt.CBM));
+    if (!APP_STATE.items || APP_STATE.items.length === 0 || !hasCoreItem) {
+      APP_STATE.items = sample.items.map(function (row) { return Object.assign(createEmptyItem(), row); });
+    } else {
+      APP_STATE.items.forEach(function (row, idx) {
+        const srcRow = sample.items[idx % sample.items.length];
+        Object.keys(srcRow).forEach(function (colKey) {
+          if (!hasFilledVal_(row[colKey]) && hasFilledVal_(srcRow[colKey])) {
+            row[colKey] = srcRow[colKey];
+          }
+        });
+      });
+    }
+  }
+
+  if (needsContainers) {
+    const sealLocked = Boolean(DOCS_CONT_REQUIRED_SEAL_LOCKED[targetTab]);
+    const firstCont = APP_STATE.containers && APP_STATE.containers[0];
+    const contMissing = !firstCont || !hasFilledVal_(firstCont.CONT);
+    const sealMissing = !sealLocked && (!firstCont || !hasFilledVal_(firstCont.SEAL));
+    const vgmMissing = targetTab === 'VGM' && (!firstCont || !hasFilledVal_(firstCont.VGM_WEI));
+    if (!APP_STATE.containers || APP_STATE.containers.length === 0 || contMissing || sealMissing || vgmMissing) {
+      APP_STATE.containers = sample.containers.map(function (row) {
+        const copy = Object.assign(createEmptyContainer(), row);
+        if (sealLocked && !(firstCont && hasFilledVal_(firstCont.SEAL))) {
+          copy.SEAL = '';
+        }
+        return copy;
+      });
+    }
+  }
+
+  if (APP_STATE.manualFlags) {
+    APP_STATE.manualFlags.TOTAL_CONTAINERS_TEXT = false;
+    if (targetTab === 'To_khai_NK') {
+      APP_STATE.manualFlags.IM_VAL = false;
+    }
+  }
+
+  normalizeCheckboxFieldsInState();
+  normalizeNumericFieldsInState_();
+  recalculateAllTotals(false, true, {
+    sourceKey: targetTab === 'To_khai_NK' ? 'EX_RATE' : 'TAB_SWITCH',
+    targetDocKey: targetTab
+  });
+  APP_STATE.activeTab = targetTab;
+  renderAllFormViews();
+  refreshScheduleDropdownSuggestions_();
+  refreshCurrencyDropdownSuggestions_();
+
+  const curIdx = DOC_STEP_ORDER.indexOf(targetTab);
+  recomputeUnlockedStepIndex_();
+  if (curIdx >= 0 && curIdx < DOC_STEP_ORDER.length - 1) {
+    APP_STATE.unlockedStepIndex = Math.max(APP_STATE.unlockedStepIndex || 0, curIdx + 1);
+  }
+  updateSidebarLockState_();
+  updateFieldAndTableLocksInDOM_();
+  validateContainerInputsInDOM();
+  updateCurrencyBadgesInDOM_();
+  updateAllContextBanners();
+
+  const titleLabel = cfg && cfg.title ? cfg.title : targetTab;
+  showToast('Đã điền dữ liệu mẫu cho "' + titleLabel + '" và mở khóa bước tiếp theo!', 'success');
 }
 
 function updateFieldAndTableLocksInDOM_() {
@@ -630,8 +1067,9 @@ function switchTab(tabKey) {
     APP_STATE.lastTaxTab = tabKey;
   }
 
-  document.querySelectorAll('.sidebar-nav-btn[data-nav]').forEach(function (btn) {
-    const isActive = btn.getAttribute('data-nav') === tabKey;
+  document.querySelectorAll('.sidebar-nav-btn[data-nav], #btnAdminSystem[data-nav]').forEach(function (btn) {
+    const navKey = btn.getAttribute('data-nav');
+    const isActive = navKey === tabKey || (isAdminTab_(tabKey) && isAdminTab_(navKey));
     btn.classList.toggle('active', isActive);
     if (isActive) {
       const parentGroup = btn.closest('.sidebar-group[data-group-id]');
@@ -642,7 +1080,9 @@ function switchTab(tabKey) {
   });
 
   document.querySelectorAll('.doc-panel[data-tab-panel]').forEach(function (panel) {
-    panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === tabKey);
+    const panelKey = panel.getAttribute('data-tab-panel');
+    const isActive = panelKey === tabKey || (isAdminTab_(tabKey) && isAdminTab_(panelKey));
+    panel.classList.toggle('active', isActive);
   });
 
   const sidebar = document.getElementById('appSidebar');
@@ -655,7 +1095,7 @@ function switchTab(tabKey) {
   updateFieldAndTableLocksInDOM_();
   validateContainerInputsInDOM();
 
-  if (tabKey === 'ADMIN_ACCOUNTS' && APP_STATE.user && APP_STATE.user.role === 'ADMIN') {
+  if (isAdminTab_(tabKey) && isAdminUser_()) {
     loadAdminAccountsTables();
   }
 }
@@ -691,15 +1131,21 @@ function handleLoginSubmit(event) {
         return;
       }
 
-      APP_STATE.user = res.user;
+      const normalizedRole = String(res.user.vaiTro || res.user.role || 'SV').trim().toUpperCase();
+      APP_STATE.user = Object.assign({}, res.user, {
+        vaiTro: normalizedRole,
+        role: normalizedRole
+      });
+      APP_STATE.adminUnlockAllSteps = false;
       APP_STATE.exportResults = {};
       restoreDraftState(res.draftJson != null ? res.draftJson : res.draft);
 
+      const isAdmin = isAdminUser_(APP_STATE.user);
       const badgeText = document.getElementById('userBadgeText');
       if (badgeText) {
         const displayName = String(res.user.tenSV || '').trim();
         const displayId = String(res.user.maSV || '').trim();
-        const roleLabel = res.user.role === 'ADMIN' ? ' [ADMIN]' : '';
+        const roleLabel = isAdmin ? ' [ADMIN]' : '';
         badgeText.textContent = (displayName && displayId
           ? displayName + ' (' + displayId + ')'
           : (displayName || displayId || 'Sinh viên')) + roleLabel;
@@ -707,11 +1153,8 @@ function handleLoginSubmit(event) {
 
       const adminGroup = document.getElementById('adminSidebarGroup');
       if (adminGroup) {
-        if (res.user.role === 'ADMIN') {
-          adminGroup.classList.remove('hidden');
-        } else {
-          adminGroup.classList.add('hidden');
-        }
+        adminGroup.classList.toggle('hidden', !isAdmin);
+        adminGroup.style.display = isAdmin ? 'block' : 'none';
       }
 
       loadInitialDropdowns();
@@ -725,7 +1168,7 @@ function handleLoginSubmit(event) {
 }
 
 function loadAdminAccountsTables() {
-  if (!APP_STATE.user || APP_STATE.user.role !== 'ADMIN') return;
+  if (!isAdminUser_()) return;
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -812,7 +1255,7 @@ function loadAdminAccountsTable() {
 
 function handleAddAccountSubmit(event) {
   event.preventDefault();
-  if (!APP_STATE.user || APP_STATE.user.role !== 'ADMIN') return;
+  if (!isAdminUser_()) return;
 
   const maSV = document.getElementById('adminNewMaSV').value.trim();
   const tenSV = document.getElementById('adminNewTenSV').value.trim();
@@ -1053,7 +1496,13 @@ function restoreDraftState(draftJson) {
         }
         if (Array.isArray(parsed.items)) {
           APP_STATE.items = parsed.items.length > 0
-            ? parsed.items.map(function (row) { return Object.assign(createEmptyItem(), row); })
+            ? parsed.items.map(function (row) {
+                const merged = Object.assign(createEmptyItem(), row);
+                if (merged.HS != null && String(merged.HS).trim() !== '') {
+                  merged.HS = formatHsCode_(merged.HS);
+                }
+                return merged;
+              })
             : [];
         }
         if (Array.isArray(parsed.containers)) {
@@ -1101,7 +1550,7 @@ function loadInitialDropdowns() {
 
       const clearBtn = document.querySelector('button[onclick="openClearConfirmModal()"]');
       if (clearBtn) {
-        if (APP_STATE.user && APP_STATE.user.role === 'ADMIN') {
+        if (isAdminUser_()) {
           clearBtn.textContent = 'Xóa dữ liệu SV';
           clearBtn.title = 'Xóa toàn bộ Draft_JSON của Sinh viên';
         } else {
@@ -1173,7 +1622,7 @@ function handleSaveDraft() {
 }
 
 function openClearConfirmModal() {
-  if (APP_STATE.user && APP_STATE.user.role === 'ADMIN') {
+  if (isAdminUser_()) {
     showLoading('Loading...');
     google.script.run
       .withSuccessHandler(function (res) {
@@ -1221,7 +1670,8 @@ function confirmClearData() {
     IM_VAL: false,
     SCT_VAL: false,
     VAT_VAL: false,
-    TOTAL_CONTAINERS_TEXT: false
+    TOTAL_CONTAINERS_TEXT: false,
+    SHIPMENT_DEADLINE: false
   };
   initDefaultDocumentNumbers(true);
   normalizeCheckboxFieldsInState();
@@ -1234,7 +1684,7 @@ function confirmClearData() {
   validateContainerInputsInDOM();
   updateCurrencyBadgesInDOM_();
 
-  if (APP_STATE.user && APP_STATE.user.maSV && APP_STATE.user.role !== 'ADMIN') {
+  if (APP_STATE.user && APP_STATE.user.maSV && !isAdminUser_()) {
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.success) {
@@ -1265,6 +1715,12 @@ function handleLogout() {
   APP_STATE.exportResults = {};
   APP_STATE.unlockedStepIndex = 0;
   APP_STATE.adminUnlockAllSteps = false;
+
+  const adminGroup = document.getElementById('adminSidebarGroup');
+  if (adminGroup) {
+    adminGroup.classList.add('hidden');
+    adminGroup.style.display = 'none';
+  }
 
   document.getElementById('loginMatKhau').value = '';
   document.getElementById('loginError').classList.add('hidden');
@@ -1364,6 +1820,39 @@ function ensurePdfJsLoaded_() {
   return pdfJsLoadPromise_;
 }
 
+let previewWheelGuardAttached_ = false;
+
+function setPreviewBackgroundScrollLock_(locked) {
+  const method = locked ? 'add' : 'remove';
+  if (document.documentElement) {
+    document.documentElement.classList[method]('preview-scroll-lock');
+  }
+  if (document.body) {
+    document.body.classList[method]('preview-scroll-lock');
+  }
+  document.querySelectorAll('.app-shell, .main-content, .workspace-scroll, .main-workspace, .sidebar').forEach(function (el) {
+    if (locked) {
+      el.style.setProperty('overflow', 'hidden', 'important');
+    } else {
+      el.style.removeProperty('overflow');
+    }
+  });
+}
+
+function bindPreviewModalWheelLock_() {
+  if (previewWheelGuardAttached_) return;
+  const previewModal = document.getElementById('previewModal');
+  if (!previewModal) return;
+  previewWheelGuardAttached_ = true;
+
+  previewModal.addEventListener('wheel', function (e) {
+    const viewportEl = document.getElementById('previewModalViewport');
+    if (!viewportEl || !viewportEl.contains(e.target)) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+}
+
 async function renderPdfBase64ToCanvases_(base64Str, containerEl) {
   const pdfjsLib = await ensurePdfJsLoaded_();
   const pdfBytes = base64ToUint8Array_(base64Str);
@@ -1372,34 +1861,30 @@ async function renderPdfBase64ToCanvases_(base64Str, containerEl) {
 
   containerEl.innerHTML = '';
 
-  const parentWidth = containerEl.parentNode && containerEl.parentNode.clientWidth ? containerEl.parentNode.clientWidth : 900;
-  const availableWidth = Math.max(360, parentWidth - 64);
+  const viewportEl = document.getElementById('previewModalViewport') || containerEl.parentNode;
+  const viewportWidth = viewportEl && viewportEl.clientWidth ? viewportEl.clientWidth : 980;
+  const availableWidth = Math.max(320, viewportWidth - 120);
   const outputScale = Math.min(window.devicePixelRatio || 1, 2);
   const fragment = document.createDocumentFragment();
 
   for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
     const page = await pdfDoc.getPage(pageNum);
     const baseViewport = page.getViewport({ scale: 1 });
-    const cssScale = Math.min(1.65, Math.max(0.85, availableWidth / baseViewport.width));
+    const cssScale = Math.min(2.0, Math.max(0.75, availableWidth / baseViewport.width));
     const viewport = page.getViewport({ scale: cssScale });
 
-    const card = document.createElement('div');
-    card.className = 'preview-page-card';
-
-    const label = document.createElement('div');
-    label.className = 'preview-page-label';
-    label.textContent = 'Trang ' + pageNum + ' / ' + pdfDoc.numPages;
+    const sheet = document.createElement('div');
+    sheet.className = 'preview-a4-sheet preview-page-card';
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     canvas.width = Math.floor(viewport.width * outputScale);
     canvas.height = Math.floor(viewport.height * outputScale);
-    canvas.style.width = Math.floor(viewport.width) + 'px';
-    canvas.style.height = Math.floor(viewport.height) + 'px';
+    canvas.style.width = '100%';
+    canvas.style.height = 'auto';
 
-    card.appendChild(label);
-    card.appendChild(canvas);
-    fragment.appendChild(card);
+    sheet.appendChild(canvas);
+    fragment.appendChild(sheet);
 
     const renderContext = {
       canvasContext: ctx,
@@ -1412,27 +1897,6 @@ async function renderPdfBase64ToCanvases_(base64Str, containerEl) {
   containerEl.appendChild(fragment);
   containerEl.classList.remove('hidden');
   return pdfDoc.numPages;
-}
-
-function ensurePreviewModalHeaderLayout_(modal, exportBtn) {
-  if (!modal) return;
-  const headerBar = modal.querySelector('div > div:first-child');
-  if (headerBar) {
-    headerBar.classList.add('preview-modal-header-flex');
-    const closeBtn = headerBar.querySelector('button[onclick*="closeDocPreviewModal"], .modal-close-x');
-    if (exportBtn && closeBtn && exportBtn.parentNode === headerBar && closeBtn.parentNode === headerBar) {
-      let actionsWrap = headerBar.querySelector('.preview-header-actions');
-      if (!actionsWrap) {
-        actionsWrap = document.createElement('div');
-        actionsWrap.className = 'preview-header-actions';
-        headerBar.appendChild(actionsWrap);
-      }
-      actionsWrap.appendChild(exportBtn);
-      actionsWrap.appendChild(closeBtn);
-    } else if (exportBtn && exportBtn.parentNode && exportBtn.parentNode !== headerBar) {
-      exportBtn.parentNode.classList.add('preview-header-actions');
-    }
-  }
 }
 
 function handlePreviewDocument(docKey) {
@@ -1450,50 +1914,57 @@ function handlePreviewDocument(docKey) {
 
   APP_STATE.previewDocKey = docKey;
 
-  const modal = document.getElementById('docPreviewModal');
-  const titleEl = document.getElementById('docPreviewModalTitle');
-  const subtitleEl = document.getElementById('docPreviewModalSubtitle');
-  const loadingEl = document.getElementById('docPreviewLoading');
-  const errorWrap = document.getElementById('docPreviewError');
-  const errorText = document.getElementById('docPreviewErrorText');
-  const canvasWrap = document.getElementById('docPreviewCanvasWrap');
-  const frame = document.getElementById('docPreviewFrame');
-  const exportBtn = document.getElementById('btnPreviewExportOfficial');
-  const downloadBtn = document.getElementById('btnPreviewDownloadPdf');
+  const previewModal = document.getElementById('previewModal');
+  const legacyModal = document.getElementById('docPreviewModal');
+  const useRedesignedModal = Boolean(previewModal);
+  const modal = previewModal || legacyModal;
 
-  ensurePreviewModalHeaderLayout_(modal, exportBtn);
+  const docTitle = (typeof DOC_FORM_CONFIGS !== 'undefined' && DOC_FORM_CONFIGS[docKey] && DOC_FORM_CONFIGS[docKey].title)
+    ? DOC_FORM_CONFIGS[docKey].title
+    : docKey;
+  const previewTitleEl = document.getElementById('previewModalTitle');
+  if (previewTitleEl) {
+    previewTitleEl.textContent = 'REVIEW: ' + String(docTitle).toUpperCase();
+  }
 
-  const cfg = (typeof DOC_FORM_CONFIGS !== 'undefined' && DOC_FORM_CONFIGS[docKey]) ? DOC_FORM_CONFIGS[docKey] : null;
-  if (titleEl) {
-    titleEl.textContent = 'Review Document: ' + (cfg ? cfg.title : docKey);
-  }
-  if (subtitleEl) {
-    subtitleEl.textContent = '';
-  }
+  const viewportEl = document.getElementById('previewModalViewport');
+  const loadingEl = useRedesignedModal
+    ? document.getElementById('previewModalLoading')
+    : document.getElementById('docPreviewLoading');
+  const errorWrap = useRedesignedModal
+    ? document.getElementById('previewModalError')
+    : document.getElementById('docPreviewError');
+  const errorText = useRedesignedModal
+    ? document.getElementById('previewModalErrorText')
+    : document.getElementById('docPreviewErrorText');
+  const canvasWrap = useRedesignedModal
+    ? document.getElementById('previewModalCanvasWrap')
+    : document.getElementById('docPreviewCanvasWrap');
+  const legacyFrame = document.getElementById('docPreviewFrame');
 
   revokePreviewBlobUrl_();
   if (canvasWrap) {
     canvasWrap.innerHTML = '';
     canvasWrap.classList.add('hidden');
   }
-  if (frame) {
-    frame.removeAttribute('srcdoc');
-    frame.src = 'about:blank';
-    frame.classList.add('hidden');
-  }
-  if (downloadBtn) {
-    downloadBtn.classList.add('hidden');
-    downloadBtn.href = '#';
+  if (legacyFrame) {
+    legacyFrame.removeAttribute('srcdoc');
+    legacyFrame.src = 'about:blank';
+    legacyFrame.classList.add('hidden');
   }
   if (errorWrap) errorWrap.classList.add('hidden');
   if (errorText) errorText.textContent = '';
   if (loadingEl) {
-    loadingEl.classList.add('preview-loading-box');
     const loadingTextEl = loadingEl.querySelector('.loading-text');
     if (loadingTextEl) loadingTextEl.textContent = 'Loading...';
     loadingEl.classList.remove('hidden');
   }
-  if (exportBtn) exportBtn.disabled = true;
+  if (viewportEl) {
+    viewportEl.scrollTop = 0;
+  }
+
+  setPreviewBackgroundScrollLock_(true);
+  bindPreviewModalWheelLock_();
   if (modal) modal.classList.remove('hidden');
 
   google.script.run
@@ -1505,24 +1976,13 @@ function handlePreviewDocument(docKey) {
         return;
       }
 
-      if (exportBtn) exportBtn.disabled = false;
-
       if (res.pdfBase64) {
         currentPreviewBlobUrl = base64ToBlobUrl_(res.pdfBase64, res.mimeType || 'application/pdf');
-        if (downloadBtn) {
-          downloadBtn.href = currentPreviewBlobUrl;
-          downloadBtn.download = docKey + '_PREVIEW.pdf';
-          downloadBtn.classList.remove('hidden');
-        }
 
         if (canvasWrap) {
           renderPdfBase64ToCanvases_(res.pdfBase64, canvasWrap)
-            .then(function (numPages) {
+            .then(function () {
               if (loadingEl) loadingEl.classList.add('hidden');
-              if (subtitleEl && numPages) {
-                subtitleEl.textContent =
-                  'Bản xem trước trực tiếp giữ nguyên định dạng từ Google Docs mẫu • ' + numPages + ' trang';
-              }
             })
             .catch(function (renderErr) {
               if (loadingEl) loadingEl.classList.add('hidden');
@@ -1531,7 +1991,7 @@ function handlePreviewDocument(docKey) {
                 errorText.textContent =
                   'Không thể hiển thị trực tiếp PDF trên trình duyệt (' +
                   (renderErr && renderErr.message ? renderErr.message : renderErr) +
-                  '). Bạn vẫn có thể bấm "Tải PDF xem trước" ở góc dưới bên trái.';
+                  ').';
               }
               if (errorWrap) errorWrap.classList.remove('hidden');
             });
@@ -1557,20 +2017,26 @@ function handlePreviewDocument(docKey) {
 }
 
 function closeDocPreviewModal() {
-  const modal = document.getElementById('docPreviewModal');
+  const previewModal = document.getElementById('previewModal');
+  const legacyModal = document.getElementById('docPreviewModal');
+  if (previewModal) previewModal.classList.add('hidden');
+  if (legacyModal) legacyModal.classList.add('hidden');
+  setPreviewBackgroundScrollLock_(false);
+
+  ['previewModalCanvasWrap', 'docPreviewCanvasWrap'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.innerHTML = '';
+      el.classList.add('hidden');
+    }
+  });
   const frame = document.getElementById('docPreviewFrame');
-  const canvasWrap = document.getElementById('docPreviewCanvasWrap');
-  const downloadBtn = document.getElementById('btnPreviewDownloadPdf');
-  if (modal) modal.classList.add('hidden');
-  if (canvasWrap) {
-    canvasWrap.innerHTML = '';
-    canvasWrap.classList.add('hidden');
-  }
   if (frame) {
     frame.removeAttribute('srcdoc');
     frame.src = 'about:blank';
     frame.classList.add('hidden');
   }
+  const downloadBtn = document.getElementById('btnPreviewDownloadPdf');
   if (downloadBtn) {
     downloadBtn.classList.add('hidden');
     downloadBtn.href = '#';
@@ -1659,6 +2125,9 @@ function buildExportPayload(targetDocKey) {
 
   const itemsClone = (APP_STATE.items || []).map(function (row) {
     const copy = Object.assign({}, row);
+    if (copy.HS != null && String(copy.HS).trim() !== '') {
+      copy.HS = formatHsCode_(copy.HS);
+    }
     ['PREF', 'UNIT', 'UNIT_PACK', 'CTYPE'].forEach(function (col) {
       if (copy[col] != null && String(copy[col]).trim() !== '') {
         copy[col] = extractShortCodeForExport_(copy[col], col);
@@ -1829,6 +2298,8 @@ function handleExportBatch() {
 const CALC_TRIGGER_FIELDS = {
   CURR: true,
   VAT_GST: true,
+  FREIGHT_AMT: true,
+  INS_AMT: true,
   EX_RATE: true,
   IM_VAL: true,
   IM_RATE: true,
@@ -1905,13 +2376,23 @@ function handleWorkspaceFieldChange(target) {
   if (!key) return;
 
   let value = target.type === 'checkbox' ? (target.checked ? '\u2611' : '\u2610') : target.value;
-  if (target.type !== 'checkbox' && (target.getAttribute('data-num') === 'true' || NUMERIC_SHARED_FIELD_MAP[key])) {
-    value = formatLiveNumericInput_(value, target);
+  if (target.type !== 'checkbox') {
+    if (key === 'HS') {
+      value = formatLiveHsCodeInput_(value, target);
+    } else if (target.getAttribute('data-num') === 'true' || NUMERIC_SHARED_FIELD_MAP[key]) {
+      value = formatLiveNumericInput_(value, target);
+    }
   }
   APP_STATE.shared[key] = value;
 
   if (!APP_STATE.manualFlags) {
-    APP_STATE.manualFlags = { IM_VAL: false, SCT_VAL: false, VAT_VAL: false, TOTAL_CONTAINERS_TEXT: false };
+    APP_STATE.manualFlags = {
+      IM_VAL: false,
+      SCT_VAL: false,
+      VAT_VAL: false,
+      TOTAL_CONTAINERS_TEXT: false,
+      SHIPMENT_DEADLINE: false
+    };
   }
 
   if (key === 'IM_VAL') {
@@ -1922,6 +2403,8 @@ function handleWorkspaceFieldChange(target) {
     APP_STATE.manualFlags.VAT_VAL = String(value).trim() !== '';
   } else if (key === 'TOTAL_CONTAINERS_TEXT') {
     APP_STATE.manualFlags.TOTAL_CONTAINERS_TEXT = String(value).trim() !== '';
+  } else if (key === 'SHIPMENT_DEADLINE') {
+    APP_STATE.manualFlags.SHIPMENT_DEADLINE = String(value).trim() !== '';
   } else if (key === 'EX_RATE') {
     APP_STATE.manualFlags.IM_VAL = false;
   }
@@ -1944,6 +2427,10 @@ function handleWorkspaceFieldChange(target) {
     handleCarNameChanged(value);
   } else if (key === 'VESSEL' || key === 'VOYAGE') {
     updateVesVoyDerived();
+  } else if (key === 'ETD_DT') {
+    if (!APP_STATE.manualFlags.SHIPMENT_DEADLINE) {
+      setSharedFieldAndSync('SHIPMENT_DEADLINE', value);
+    }
   } else if (key === 'SHIP_NAME' || key === 'CNE_NAME') {
     updateAllContextBanners();
   } else if (key === 'CURR') {
@@ -2016,29 +2503,30 @@ function collectUniqueValues_(rows, getter) {
   return list;
 }
 
-function ensureDatalistForField_(fieldKey, values) {
-  let datalistId = 'dl_' + fieldKey;
-  const inputs = document.querySelectorAll('input[data-sync="' + fieldKey + '"]');
-  inputs.forEach(function (inp) {
-    const existingList = inp.getAttribute('list');
-    if (existingList) {
-      datalistId = existingList;
-    } else {
-      inp.setAttribute('list', datalistId);
-    }
-  });
-
-  let dl = document.getElementById(datalistId);
-  if (!dl && inputs.length > 0) {
-    dl = document.createElement('datalist');
-    dl.id = datalistId;
-    document.body.appendChild(dl);
+function getScheduleOptionsForSource_(fieldKey) {
+  if (APP_STATE.scheduleOptions && Array.isArray(APP_STATE.scheduleOptions[fieldKey])) {
+    return APP_STATE.scheduleOptions[fieldKey];
   }
-  if (dl) {
-    dl.innerHTML = (values || [])
-      .map(function (v) { return '<option value="' + escapeHtml(v) + '"></option>'; })
-      .join('');
+  const serviceRows = getFilteredCuocTauByServiceType_();
+  const currentPol = String(APP_STATE.shared.POL || '').trim();
+  const currentPod = String(APP_STATE.shared.POD || '').trim();
+  if (fieldKey === 'POL') return collectUniqueValues_(serviceRows, function (r) { return r.POL; });
+  if (fieldKey === 'POD') {
+    const podRows = currentPol ? serviceRows.filter(function (r) { return r.POL === currentPol; }) : serviceRows;
+    return collectUniqueValues_(podRows.length > 0 ? podRows : serviceRows, function (r) { return r.POD; });
   }
+  let carrierRows = serviceRows;
+  if (currentPol || currentPod) {
+    const routeRows = serviceRows.filter(function (r) {
+      return (!currentPol || r.POL === currentPol) && (!currentPod || r.POD === currentPod);
+    });
+    if (routeRows.length > 0) carrierRows = routeRows;
+  }
+  if (fieldKey === 'CAR_NAME') return collectUniqueValues_(carrierRows, function (r) { return r.Ten_hang_tau; });
+  if (fieldKey === 'POT') return collectUniqueValues_(carrierRows, function (r) { return getRowPot_(r); });
+  if (fieldKey === 'VESSEL') return collectUniqueValues_(carrierRows, function (r) { return r.Ten_tau; });
+  if (fieldKey === 'VOYAGE') return collectUniqueValues_(carrierRows, function (r) { return r.So_chuyen; });
+  return [];
 }
 
 function refreshScheduleDropdownSuggestions_() {
@@ -2047,13 +2535,11 @@ function refreshScheduleDropdownSuggestions_() {
   const currentPod = String(APP_STATE.shared.POD || '').trim();
 
   const polValues = collectUniqueValues_(serviceRows, function (r) { return r.POL; });
-  ensureDatalistForField_('POL', polValues);
 
   const podRows = currentPol
     ? serviceRows.filter(function (r) { return r.POL === currentPol; })
     : serviceRows;
   const podValues = collectUniqueValues_(podRows.length > 0 ? podRows : serviceRows, function (r) { return r.POD; });
-  ensureDatalistForField_('POD', podValues);
 
   let carrierRows = serviceRows;
   if (currentPol || currentPod) {
@@ -2065,16 +2551,18 @@ function refreshScheduleDropdownSuggestions_() {
     }
   }
   const carrierValues = collectUniqueValues_(carrierRows, function (r) { return r.Ten_hang_tau; });
-  ensureDatalistForField_('CAR_NAME', carrierValues);
-
   const potValues = collectUniqueValues_(carrierRows, function (r) { return getRowPot_(r); });
-  ensureDatalistForField_('POT', potValues);
-
   const vesselValues = collectUniqueValues_(carrierRows, function (r) { return r.Ten_tau; });
-  ensureDatalistForField_('VESSEL', vesselValues);
-
   const voyageValues = collectUniqueValues_(carrierRows, function (r) { return r.So_chuyen; });
-  ensureDatalistForField_('VOYAGE', voyageValues);
+
+  APP_STATE.scheduleOptions = {
+    POL: polValues,
+    POD: podValues,
+    CAR_NAME: carrierValues,
+    POT: potValues,
+    VESSEL: vesselValues,
+    VOYAGE: voyageValues
+  };
 }
 
 function getAvailableCurrencies20_() {
@@ -2086,7 +2574,7 @@ function getAvailableCurrencies20_() {
     const upper = String(c || '').trim().toUpperCase();
     if (upper && !seen[upper]) {
       seen[upper] = true;
-      merged.push(c);
+      merged.push(upper);
     }
   });
   return merged;
@@ -2177,19 +2665,243 @@ function getSmartCurrencyOptions_() {
 }
 
 function refreshCurrencyDropdownSuggestions_() {
-  const opts = getSmartCurrencyOptions_();
-  let dl = document.getElementById('dl_combo_CURR');
-  if (!dl) {
-    dl = document.createElement('datalist');
-    dl.id = 'dl_combo_CURR';
-    document.body.appendChild(dl);
-  }
-  dl.innerHTML = opts.map(function (v) {
-    return '<option value="' + escapeHtml(v) + '"></option>';
-  }).join('');
-
   document.querySelectorAll('input[data-sync="CURR"]').forEach(function (inp) {
-    inp.setAttribute('list', 'dl_combo_CURR');
+    inp.removeAttribute('list');
+    inp.setAttribute('autocomplete', 'off');
+  });
+  if (typeof activeComboInput !== 'undefined' && activeComboInput && activeComboInput.getAttribute('data-combo') === 'CURR') {
+    renderCustomComboMenu_(activeComboInput, '');
+  }
+}
+
+function ensureCustomComboMenuEl_() {
+  let menu = document.getElementById('customComboMenu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'customComboMenu';
+    menu.className = 'combo-dropdown-menu hidden';
+    menu.setAttribute('role', 'listbox');
+    document.body.appendChild(menu);
+  }
+  return menu;
+}
+
+function positionCustomComboMenu_(inputEl, menu) {
+  if (!inputEl || !menu) return;
+  const rect = inputEl.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 800;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1200;
+  const minWidth = Math.max(rect.width, 180);
+  const maxWidth = Math.min(420, viewportWidth - 16);
+  const width = Math.min(maxWidth, minWidth);
+
+  let left = rect.left;
+  if (left + width > viewportWidth - 8) {
+    left = Math.max(8, viewportWidth - width - 8);
+  }
+
+  const spaceBelow = viewportHeight - rect.bottom - 8;
+  const spaceAbove = rect.top - 8;
+  const menuHeight = Math.min(260, menu.scrollHeight || 220);
+
+  let top = rect.bottom + 4;
+  if (spaceBelow < 160 && spaceAbove > spaceBelow) {
+    top = Math.max(8, rect.top - Math.min(260, menuHeight) - 4);
+  }
+
+  menu.style.width = Math.round(width) + 'px';
+  menu.style.left = Math.round(left) + 'px';
+  menu.style.top = Math.round(top) + 'px';
+}
+
+function closeCustomComboDropdown_() {
+  const menu = document.getElementById('customComboMenu');
+  if (menu) {
+    menu.classList.add('hidden');
+    menu.innerHTML = '';
+  }
+  if (typeof activeComboInput !== 'undefined') {
+    activeComboInput = null;
+  }
+  if (typeof comboActiveIndex !== 'undefined') {
+    comboActiveIndex = -1;
+  }
+}
+
+function selectCustomComboOption_(value) {
+  if (typeof activeComboInput === 'undefined' || !activeComboInput) return;
+  const inp = activeComboInput;
+  inp.value = value;
+  closeCustomComboDropdown_();
+
+  if (inp.hasAttribute('data-sync')) {
+    handleWorkspaceFieldChange(inp);
+  } else if (inp.hasAttribute('data-table-type')) {
+    handleTableCellChange(inp);
+  }
+}
+
+function updateCustomComboActiveItem_(menu, newIdx) {
+  const items = menu ? menu.querySelectorAll('.combo-dropdown-item') : [];
+  if (!items || items.length === 0) {
+    comboActiveIndex = -1;
+    return;
+  }
+  const bounded = ((newIdx % items.length) + items.length) % items.length;
+  comboActiveIndex = bounded;
+  items.forEach(function (el, idx) {
+    el.classList.toggle('active', idx === bounded);
+  });
+  if (items[bounded] && typeof items[bounded].scrollIntoView === 'function') {
+    items[bounded].scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function renderCustomComboMenu_(inputEl, filterQuery) {
+  if (!inputEl) return;
+  const source = inputEl.getAttribute('data-combo') || '';
+  if (!source) return;
+
+  const allOptions = typeof getComboboxOptionsForSource === 'function'
+    ? getComboboxOptionsForSource(source)
+    : [];
+
+  const q = String(filterQuery == null ? '' : filterQuery).trim().toLowerCase();
+  const isCurrField = source === 'CURR';
+  const filtered = q
+    ? allOptions.filter(function (opt) { return String(opt || '').toLowerCase().indexOf(q) !== -1; })
+    : allOptions;
+
+  // For CURR, never collapse to empty/single if query was empty or matched current value
+  const finalOptions = (isCurrField && !q) ? allOptions : filtered;
+
+  const menu = ensureCustomComboMenuEl_();
+  const currentVal = String(inputEl.value || '').trim();
+  comboActiveIndex = -1;
+
+  if (!finalOptions || finalOptions.length === 0) {
+    menu.innerHTML = '<div class="combo-dropdown-empty">Không có gợi ý khớp — bạn vẫn có thể nhập tự do.</div>';
+  } else {
+    menu.innerHTML = finalOptions.map(function (opt, idx) {
+      const optStr = String(opt == null ? '' : opt);
+      const isSelected = currentVal && optStr.toUpperCase() === currentVal.toUpperCase();
+      if (isSelected && comboActiveIndex === -1) {
+        comboActiveIndex = idx;
+      }
+      return (
+        '<button type="button" class="combo-dropdown-item' + (isSelected ? ' active' : '') + '" role="option" data-combo-val="' + escapeHtml(optStr) + '">' +
+          '<span>' + escapeHtml(optStr) + '</span>' +
+          (isSelected ? '<span style="font-size:11px; opacity:0.9;">&#10003;</span>' : '') +
+        '</button>'
+      );
+    }).join('');
+  }
+
+  menu.classList.remove('hidden');
+  positionCustomComboMenu_(inputEl, menu);
+}
+
+function openCustomComboDropdown_(inputEl, opts) {
+  if (!inputEl || inputEl.disabled || inputEl.readOnly) return;
+  const options = opts || {};
+  activeComboInput = inputEl;
+  const query = options.filterByValue ? String(inputEl.value || '') : '';
+  renderCustomComboMenu_(inputEl, query);
+}
+
+function bindCustomComboGlobalListeners_() {
+  if (typeof comboListenersAttached !== 'undefined' && comboListenersAttached) return;
+  if (typeof comboListenersAttached !== 'undefined') {
+    comboListenersAttached = true;
+  }
+
+  document.addEventListener('focusin', function (e) {
+    const inp = e.target && e.target.closest ? e.target.closest('input[data-combo]') : null;
+    if (inp) {
+      openCustomComboDropdown_(inp, { filterByValue: false });
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    const inp = e.target && e.target.closest ? e.target.closest('input[data-combo]') : null;
+    if (inp) {
+      openCustomComboDropdown_(inp, { filterByValue: false });
+    }
+  });
+
+  document.addEventListener('input', function (e) {
+    const inp = e.target && e.target.closest ? e.target.closest('input[data-combo]') : null;
+    if (inp) {
+      openCustomComboDropdown_(inp, { filterByValue: true });
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      const pModal = document.getElementById('previewModal');
+      if (pModal && !pModal.classList.contains('hidden')) {
+        closeDocPreviewModal();
+        return;
+      }
+      closeCustomComboDropdown_();
+      return;
+    }
+
+    if (typeof activeComboInput === 'undefined' || !activeComboInput) return;
+    const menu = document.getElementById('customComboMenu');
+    if (!menu || menu.classList.contains('hidden')) return;
+
+    const items = menu.querySelectorAll('.combo-dropdown-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      updateCustomComboActiveItem_(menu, comboActiveIndex + 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      updateCustomComboActiveItem_(menu, comboActiveIndex - 1);
+    } else if (e.key === 'Enter') {
+      if (comboActiveIndex >= 0 && items[comboActiveIndex]) {
+        e.preventDefault();
+        const chosen = items[comboActiveIndex].getAttribute('data-combo-val') || '';
+        selectCustomComboOption_(chosen);
+      }
+    } else if (e.key === 'Tab') {
+      closeCustomComboDropdown_();
+    }
+  });
+
+  document.addEventListener('mousedown', function (e) {
+    const menu = document.getElementById('customComboMenu');
+    const itemBtn = e.target && e.target.closest ? e.target.closest('#customComboMenu .combo-dropdown-item') : null;
+    if (itemBtn) {
+      e.preventDefault();
+      const chosen = itemBtn.getAttribute('data-combo-val') || '';
+      selectCustomComboOption_(chosen);
+      return;
+    }
+
+    if (menu && !menu.classList.contains('hidden')) {
+      const clickedCombo = e.target && e.target.closest ? e.target.closest('input[data-combo]') : null;
+      if (!menu.contains(e.target) && clickedCombo !== activeComboInput) {
+        closeCustomComboDropdown_();
+      }
+    }
+  });
+
+  window.addEventListener('scroll', function (e) {
+    const menu = document.getElementById('customComboMenu');
+    if (!menu || menu.classList.contains('hidden')) return;
+    if (e.target === menu || (e.target && menu.contains && menu.contains(e.target))) return;
+    if (typeof activeComboInput !== 'undefined' && activeComboInput) {
+      positionCustomComboMenu_(activeComboInput, menu);
+    }
+  }, true);
+
+  window.addEventListener('resize', function () {
+    const menu = document.getElementById('customComboMenu');
+    if (!menu || menu.classList.contains('hidden')) return;
+    if (typeof activeComboInput !== 'undefined' && activeComboInput) {
+      positionCustomComboMenu_(activeComboInput, menu);
+    }
   });
 }
 
@@ -2353,6 +3065,8 @@ function handleTableCellChange(target) {
   if (colKey === 'CONT' || colKey === 'SEAL') {
     rawVal = rawVal.toUpperCase();
     if (target.value !== rawVal) target.value = rawVal;
+  } else if (colKey === 'HS') {
+    rawVal = formatLiveHsCodeInput_(rawVal, target);
   } else if (target.getAttribute('data-num') === 'true' || NUMERIC_TABLE_COL_MAP[colKey]) {
     rawVal = formatLiveNumericInput_(rawVal, target);
   }
@@ -2364,14 +3078,14 @@ function handleTableCellChange(target) {
     if (colKey === 'QTY' || colKey === 'PRICE') {
       const qty = parseNum(item.QTY);
       const price = parseNum(item.PRICE);
-      item.AMT = (item.QTY !== '' || item.PRICE !== '') ? formatNum(qty * price, 2) : '';
+      item.AMT = (item.QTY !== '' || item.PRICE !== '') ? formatNumMin2Decimals_(qty * price, 2) : '';
       syncTableCellToDOM('items', rowIdx, 'AMT', item.AMT, null);
       if (APP_STATE.manualFlags) {
         APP_STATE.manualFlags.IM_VAL = false;
       }
       const exRate = parseNum(APP_STATE.shared.EX_RATE);
       if (exRate > 0) {
-        item.EX_VAL = item.AMT !== '' ? formatNum(parseNum(item.AMT) * exRate, 2) : '';
+        item.EX_VAL = item.AMT !== '' ? formatNumMin2Decimals_(parseNum(item.AMT) * exRate, 2) : '';
         syncTableCellToDOM('items', rowIdx, 'EX_VAL', item.EX_VAL, null);
       }
     } else if (colKey === 'EX_VAL' || colKey === 'EX_TAX_RATE' || colKey === 'FEE_VAL' || colKey === 'FEE_RATE') {
@@ -2601,7 +3315,7 @@ function renderContSealLookupRows_() {
   });
 
   if (entries.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-table-note">Không tìm thấy mã phù hợp. Hãy thử từ khóa khác hoặc bật tùy chọn Luồng đỏ để xem mã Seal Hải quan.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-table-note">Không tìm thấy mã phù hợp. Hãy thử từ khóa khác hoặc bật tùy chọn Luồng đỏ để xem mã Seal Hải quan.</td></tr>';
     return;
   }
 
@@ -2618,8 +3332,6 @@ function renderContSealLookupRows_() {
         }).join('') + '</div>'
       : '<span style="color:#64748B; font-size:12px;">' + escapeHtml(item.rawSeal || '—') + '</span>';
 
-    const firstOwner = item.ownerPrefixes[0] || '';
-    const firstSeal = sealLockedForDoc ? '' : (item.sealPrefixes[0] || '');
     const badgeHtml = item.isCustoms ? '<span class="lookup-red-badge">Luồng đỏ / Hải quan</span>' : '';
 
     return (
@@ -2628,7 +3340,6 @@ function renderContSealLookupRows_() {
         '<td><strong>' + escapeHtml(item.label) + '</strong>' + badgeHtml + '</td>' +
         '<td>' + ownerHtml + '</td>' +
         '<td>' + sealHtml + '</td>' +
-        '<td style="text-align:center;"><button type="button" class="btn btn-primary btn-sm" onclick="applyContSealPrefixSelection_(\'' + escapeHtml(firstOwner) + '\', \'' + escapeHtml(firstSeal) + '\')">Áp dụng</button></td>' +
       '</tr>'
     );
   }).join('');
@@ -2642,6 +3353,7 @@ function applyContSealPrefixSelection_(ownerPrefix, sealPrefix) {
   const targetRow = APP_STATE.containers[rowIdx];
   const sealLocked = APP_STATE.lookupTargetDocKey === 'RELEASE_ORDER' || APP_STATE.lookupTargetDocKey === 'SALES_CONTRACT';
   const appliedParts = [];
+  let focusColKey = '';
 
   if (ownerPrefix) {
     const cleanPrefix = String(ownerPrefix).trim().toUpperCase();
@@ -2650,6 +3362,7 @@ function applyContSealPrefixSelection_(ownerPrefix, sealPrefix) {
     targetRow.CONT = suffixDigits ? (cleanPrefix.slice(0, 4) + suffixDigits) : cleanPrefix;
     syncTableCellToDOM('containers', rowIdx, 'CONT', targetRow.CONT, null);
     appliedParts.push('Cont: ' + targetRow.CONT);
+    focusColKey = 'CONT';
   }
 
   if (sealPrefix && !sealLocked) {
@@ -2657,6 +3370,7 @@ function applyContSealPrefixSelection_(ownerPrefix, sealPrefix) {
     targetRow.SEAL = cleanSeal;
     syncTableCellToDOM('containers', rowIdx, 'SEAL', targetRow.SEAL, null);
     appliedParts.push('Seal: ' + targetRow.SEAL);
+    if (!focusColKey) focusColKey = 'SEAL';
   }
 
   if (APP_STATE.manualFlags) {
@@ -2670,6 +3384,16 @@ function applyContSealPrefixSelection_(ownerPrefix, sealPrefix) {
     showToast('Đã điền tiền tố (' + appliedParts.join(', ') + ') vào dòng ' + (rowIdx + 1) + '. Hãy nhập đủ số Container / Seal.', 'success');
   }
   closeContSealLookupModal();
+
+  if (focusColKey) {
+    const activeDoc = APP_STATE.activeTab || APP_STATE.lookupTargetDocKey || '';
+    const targetInput = document.querySelector(
+      '[data-tab-panel="' + activeDoc + '"] [data-table-type="containers"][data-row-idx="' + rowIdx + '"][data-col-key="' + focusColKey + '"]'
+    );
+    if (targetInput && !targetInput.disabled) {
+      targetInput.focus();
+    }
+  }
 }
 
 function computeIso6346CheckDigit_(prefix10) {
@@ -2821,7 +3545,7 @@ function validateContainerInputsInDOM() {
 
   document.querySelectorAll('[data-tab-panel]').forEach(function (panel) {
     const panelDocKey = panel.getAttribute('data-tab-panel');
-    if (!panelDocKey || panelDocKey === 'MASTER_PARTIES' || panelDocKey === 'ADMIN_ACCOUNTS') return;
+    if (!panelDocKey || panelDocKey === 'MASTER_PARTIES' || isAdminTab_(panelDocKey)) return;
     if (!perDocCache[panelDocKey]) {
       perDocCache[panelDocKey] = validateContainerAndSealRows(panelDocKey);
     }
@@ -2901,6 +3625,56 @@ function formatLiveNumericInput_(rawVal, inputEl) {
   return formatted;
 }
 
+function formatHsCode_(rawVal) {
+  const str = String(rawVal == null ? '' : rawVal).trim();
+  if (!str) return '';
+  const digits = str.replace(/\D/g, '').slice(0, 10);
+  if (!digits) return str;
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return digits.slice(0, 4) + '.' + digits.slice(4);
+  return digits.slice(0, 4) + '.' + digits.slice(4, 6) + '.' + digits.slice(6);
+}
+
+function formatLiveHsCodeInput_(rawVal, inputEl) {
+  const original = String(rawVal == null ? '' : rawVal);
+  if (!original.trim()) {
+    if (inputEl && inputEl.value !== '') inputEl.value = '';
+    return '';
+  }
+
+  const selStart = inputEl && typeof inputEl.selectionStart === 'number' ? inputEl.selectionStart : original.length;
+  let digitsBeforeCursor = 0;
+  for (let i = 0; i < selStart && i < original.length; i++) {
+    const ch = original.charAt(i);
+    if (ch >= '0' && ch <= '9') {
+      digitsBeforeCursor++;
+    }
+  }
+
+  const digits = original.replace(/\D/g, '').slice(0, 10);
+  const formatted = digits ? formatHsCode_(digits) : '';
+
+  if (inputEl && inputEl.value !== formatted) {
+    inputEl.value = formatted;
+    if (typeof inputEl.setSelectionRange === 'function') {
+      let newPos = 0;
+      let count = 0;
+      while (newPos < formatted.length && count < digitsBeforeCursor) {
+        const ch = formatted.charAt(newPos);
+        if (ch >= '0' && ch <= '9') {
+          count++;
+        }
+        newPos++;
+      }
+      try {
+        inputEl.setSelectionRange(newPos, newPos);
+      } catch (e) {}
+    }
+  }
+
+  return formatted;
+}
+
 function normalizeFormattedNumberString_(rawVal) {
   const str = String(rawVal == null ? '' : rawVal).trim();
   if (!str) return '';
@@ -2918,6 +3692,9 @@ function normalizeNumericFieldsInState_() {
     }
   });
   (APP_STATE.items || []).forEach(function (row) {
+    if (row.HS != null && String(row.HS).trim() !== '') {
+      row.HS = formatHsCode_(row.HS);
+    }
     Object.keys(NUMERIC_TABLE_COL_MAP).forEach(function (col) {
       if (row[col] != null && String(row[col]).trim() !== '') {
         row[col] = normalizeFormattedNumberString_(row[col]);
@@ -2965,6 +3742,17 @@ function formatNum(num, maxDecimals) {
     return intFormatted + '.' + parts[1];
   }
   return intFormatted;
+}
+
+function formatNumMin2Decimals_(num, maxDecimals) {
+  if (num == null || isNaN(num)) return '';
+  const factor = Math.pow(10, maxDecimals || 3);
+  const rounded = Math.round((num + Number.EPSILON) * factor) / factor;
+  const parts = String(rounded).split('.');
+  const intFormatted = parts[0].replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+  const dec = parts.length > 1 ? parts[1] : '';
+  const paddedDec = dec.length >= 2 ? dec : (dec + '00').slice(0, 2);
+  return intFormatted + '.' + paddedDec;
 }
 
 /* ==========================================================================
@@ -3220,9 +4008,9 @@ function generateTotalContainersText(containers) {
     const padded = count < 10 ? ('0' + count) : String(count);
     const contNoun = count === 1 ? 'CONTAINER' : 'CONTAINERS';
     if (typeKey === '__GENERIC__') {
-      return 'SAY: ' + word + ' (' + padded + ') ' + contNoun + ' ONLY';
+      return word + ' (' + padded + ') ' + contNoun + ' ONLY';
     }
-    return 'SAY: ' + word + ' (' + padded + ') X ' + typeKey + ' ' + contNoun + ' ONLY';
+    return word + ' (' + padded + ') X ' + typeKey + ' ' + contNoun + ' ONLY';
   }
 
   const segments = orderedTypes.map(function (typeKey) {
@@ -3234,7 +4022,7 @@ function generateTotalContainersText(containers) {
       : (word + ' (' + padded + ') X ' + typeKey);
   });
 
-  return 'SAY: ' + segments.join(' AND ') + ' CONTAINERS ONLY';
+  return segments.join(' AND ') + ' CONTAINERS ONLY';
 }
 
 function recalculateAllTotals(syncDom, updateContainerCount, options) {
@@ -3264,7 +4052,7 @@ function recalculateAllTotals(syncDom, updateContainerCount, options) {
     const qty = parseNum(it.QTY);
     const price = parseNum(it.PRICE);
     if ((it.QTY !== '' || it.PRICE !== '') && it.AMT === '') {
-      it.AMT = formatNum(qty * price, 2);
+      it.AMT = formatNumMin2Decimals_(qty * price, 2);
     }
     const amt = parseNum(it.AMT);
 
@@ -3278,7 +4066,7 @@ function recalculateAllTotals(syncDom, updateContainerCount, options) {
     // Export Customs Declaration row calculations
     if (sourceKey === 'EX_RATE' || sourceKey === 'ITEM_MUTATION' || (it.EX_VAL === '' && exRate > 0 && amt > 0)) {
       if (exRate > 0 && (amt > 0 || it.AMT !== '')) {
-        it.EX_VAL = formatNum(amt * exRate, 2);
+        it.EX_VAL = formatNumMin2Decimals_(amt * exRate, 2);
       } else if (sourceKey === 'EX_RATE' && exRate === 0) {
         it.EX_VAL = '';
       }
@@ -3291,13 +4079,13 @@ function recalculateAllTotals(syncDom, updateContainerCount, options) {
     const exTaxRate = parseNum(it.EX_TAX_RATE);
     const exAmt = exVal * (exTaxRate / 100);
     const hasExInput = it.EX_VAL !== '' || it.EX_TAX_RATE !== '';
-    it.EX_AMT = hasExInput ? formatNum(exAmt, 2) : '';
+    it.EX_AMT = hasExInput ? formatNumMin2Decimals_(exAmt, 2) : '';
 
     const feeVal = parseNum(it.FEE_VAL);
     const feeRate = parseNum(it.FEE_RATE);
     const feeAmt = feeVal * (feeRate / 100);
     const hasFeeInput = it.FEE_VAL !== '' || it.FEE_RATE !== '';
-    it.FEE_AMT = hasFeeInput ? formatNum(feeAmt, 2) : '';
+    it.FEE_AMT = hasFeeInput ? formatNumMin2Decimals_(feeAmt, 2) : '';
 
     if (syncDom) {
       syncTableCellToDOM('items', idx, 'EX_AMT', it.EX_AMT, null);
@@ -3326,10 +4114,14 @@ function recalculateAllTotals(syncDom, updateContainerCount, options) {
   const totGw = totItemGw > 0 ? totItemGw : totContGw;
   const totCbm = totItemCbm > 0 ? totItemCbm : totContCbm;
 
-  // Commercial Invoice VAT & Grand Total
+  // Commercial Invoice VAT & Grand Total + Letter of Credit Grand Total
   const vatGstRate = parseNum(APP_STATE.shared.VAT_GST);
   const vatTotalNum = totAmt * (vatGstRate / 100);
-  const grandTotalNum = totAmt + vatTotalNum;
+  const ciGrandTotalNum = totAmt + vatTotalNum;
+  const freightAmtNum = parseNum(APP_STATE.shared.FREIGHT_AMT);
+  const insAmtNum = parseNum(APP_STATE.shared.INS_AMT);
+  const lcGrandTotalNum = totAmt + freightAmtNum + insAmtNum;
+  const grandTotalNum = targetDocKey === 'LETTER_OF_CREDIT' ? lcGrandTotalNum : ciGrandTotalNum;
 
   // Export Customs Declaration totals
   const xkTotTax = totExTax + totFee;
@@ -3395,38 +4187,38 @@ function recalculateAllTotals(syncDom, updateContainerCount, options) {
 
   const updates = {
     TOT_QTY: totQty > 0 ? formatNum(totQty, 3) : (items.length ? '0' : ''),
-    TOT_AMT: totAmt > 0 ? formatNum(totAmt, 2) : (items.length ? '0' : ''),
+    TOT_AMT: totAmt > 0 ? formatNumMin2Decimals_(totAmt, 2) : (items.length ? '0.00' : ''),
     VAT_TOTAL: (APP_STATE.shared.VAT_GST !== undefined && String(APP_STATE.shared.VAT_GST).trim() !== '')
-      ? formatNum(vatTotalNum, 2)
-      : (totAmt > 0 ? '0' : ''),
-    GRAND_TOTAL: grandTotalNum > 0 ? formatNum(grandTotalNum, 2) : (items.length ? '0' : ''),
+      ? formatNumMin2Decimals_(vatTotalNum, 2)
+      : (totAmt > 0 ? '0.00' : ''),
+    GRAND_TOTAL: grandTotalNum > 0 ? formatNumMin2Decimals_(grandTotalNum, 2) : (items.length ? '0.00' : ''),
     TOT_AMT_WORDS: activeAmtWords,
     TOT_AMT_WORDS_VI: wordsVi,
     TOT_AMT_WORDS_SC: wordsSc,
     TOT_AMT_WORDS_CI: wordsCi,
     TOT_PACK: totPack > 0 ? formatNum(totPack, 2) : '',
-    TOT_NW: totNw > 0 ? formatNum(totNw, 3) : '',
-    TOT_GW: totGw > 0 ? formatNum(totGw, 3) : '',
-    TOT_CBM: totCbm > 0 ? formatNum(totCbm, 3) : '',
-    TOT_VGM: totVgm > 0 ? formatNum(totVgm, 3) : '',
-    TOT_EX_TAX: formatNum(totExTax, 2),
-    TOT_FEE: formatNum(totFee, 2),
-    IM_AMT: (imValNum > 0 || imRateNum > 0) ? formatNum(imAmtNum, 2) : '',
-    SCT_AMT: (sctValNum > 0 || sctRateNum > 0) ? formatNum(sctAmtNum, 2) : '',
-    EPT_AMT: (eptValNum > 0 || eptRateNum > 0) ? formatNum(eptAmtNum, 2) : '',
-    VAT_AMT: (vatValNkNum > 0 || vatRateNkNum > 0) ? formatNum(vatAmtNkNum, 2) : '',
-    TOT_TAX: hasAnyTaxActivity ? formatNum(activeTotTax, 2) : '',
+    TOT_NW: totNw > 0 ? formatNumMin2Decimals_(totNw, 3) : '',
+    TOT_GW: totGw > 0 ? formatNumMin2Decimals_(totGw, 3) : '',
+    TOT_CBM: totCbm > 0 ? formatNumMin2Decimals_(totCbm, 3) : '',
+    TOT_VGM: totVgm > 0 ? formatNumMin2Decimals_(totVgm, 3) : '',
+    TOT_EX_TAX: formatNumMin2Decimals_(totExTax, 2),
+    TOT_FEE: formatNumMin2Decimals_(totFee, 2),
+    IM_AMT: (imValNum > 0 || imRateNum > 0) ? formatNumMin2Decimals_(imAmtNum, 2) : '',
+    SCT_AMT: (sctValNum > 0 || sctRateNum > 0) ? formatNumMin2Decimals_(sctAmtNum, 2) : '',
+    EPT_AMT: (eptValNum > 0 || eptRateNum > 0) ? formatNumMin2Decimals_(eptAmtNum, 2) : '',
+    VAT_AMT: (vatValNkNum > 0 || vatRateNkNum > 0) ? formatNumMin2Decimals_(vatAmtNkNum, 2) : '',
+    TOT_TAX: hasAnyTaxActivity ? formatNumMin2Decimals_(activeTotTax, 2) : '',
     TOT_TAX_WORDS: activeTotTax > 0 ? numberToVietnameseWords(activeTotTax, 'đồng') : ''
   };
 
   if (shouldAutoImVal) {
-    updates.IM_VAL = imValNum > 0 ? formatNum(imValNum, 2) : '';
+    updates.IM_VAL = imValNum > 0 ? formatNumMin2Decimals_(imValNum, 2) : '';
   }
   if (!manualFlags.SCT_VAL) {
-    updates.SCT_VAL = sctRateNum > 0 ? formatNum(sctValNum, 2) : '';
+    updates.SCT_VAL = sctRateNum > 0 ? formatNumMin2Decimals_(sctValNum, 2) : '';
   }
   if (!manualFlags.VAT_VAL) {
-    updates.VAT_VAL = vatRateNkNum > 0 ? formatNum(vatValNkNum, 2) : '';
+    updates.VAT_VAL = vatRateNkNum > 0 ? formatNumMin2Decimals_(vatValNkNum, 2) : '';
   }
 
   if (updateContainerCount || !manualFlags.TOTAL_CONTAINERS_TEXT || !APP_STATE.shared.TOTAL_CONTAINERS_TEXT) {

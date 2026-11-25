@@ -6,8 +6,8 @@
 
 const ITEM_COLUMNS = {
   PCODE: { label: 'Mã hàng', width: '100px' },
-  PROD: { label: 'Tên hàng hóa', width: '185px' },
-  DES: { label: 'Mô tả chi tiết', width: '185px' },
+  PROD: { label: 'Tên hàng', width: '185px' },
+  DES: { label: 'Mô tả hàng hóa', width: '205px' },
   HS: { label: 'Mã HS', width: '105px' },
   ORG: { label: 'Xuất xứ', width: '130px', dropdown: 'QUOC_GIA' },
   PREF: { label: 'Mã ưu đãi thuế', width: '125px', dropdown: 'CO_CRITERIA' },
@@ -93,7 +93,7 @@ const DOC_FORM_CONFIGS = {
       {
         type: 'items',
         title: '3. Danh sách Hàng hóa lô hàng',
-        cols: ['PCODE', 'PROD', 'DES', 'HS', 'ORG', 'PREF', 'MARKS', 'LOT_NO', 'UNIT', 'QTY', 'PRICE', 'AMT', 'PACK', 'CTYPE', 'NW', 'GW', 'CBM']
+        cols: ['PCODE', 'PROD', 'DES', 'QTY', 'PRICE', 'AMT']
       }
     ]
   },
@@ -140,6 +140,8 @@ const DOC_FORM_CONFIGS = {
         fields: [
           { key: 'CTR_NO', label: 'Số hợp đồng' },
           { key: 'CTR_DT', label: 'Ngày hợp đồng', type: 'date' },
+          { key: 'SELLER_REP', label: 'Người đại diện bên bán' },
+          { key: 'BUYER_REP', label: 'Người đại diện bên mua' },
           { key: 'COMMODITY_GRADE', label: 'Phẩm cấp hàng' },
           { key: 'CROP_YEAR', label: 'Mùa vụ' },
           { key: 'QUALITY_STANDARD', label: 'Tiêu chuẩn chất lượng' },
@@ -355,7 +357,10 @@ const DOC_FORM_CONFIGS = {
           { key: 'BL_NO', label: 'Số vận đơn' },
           { key: 'PLANT_ORIGIN', label: 'Vùng trồng / Xuất xứ thực vật' },
           { key: 'DISINFESTATION_METHOD', label: 'Phương pháp khử trùng / xử lý' },
-          { key: 'CHEMICAL_NAME', label: 'Tên hóa chất xử lý' }
+          { key: 'CHEMICAL_NAME', label: 'Tên hóa chất xử lý' },
+          { key: 'TREAT_CHEMICAL', label: 'Hóa chất xử lý (Treat Chemical)' },
+          { key: 'TREAT_DURATION_TEMP', label: 'Thời gian & nhiệt độ xử lý' },
+          { key: 'ADDITIVE_RATIO', label: 'Tỷ lệ phụ gia (Additive Ratio)' }
         ]
       }
     ],
@@ -372,8 +377,21 @@ const DOC_FORM_CONFIGS = {
         fields: [
           { key: 'QUAL_CERT_NO', label: 'Số giấy chứng nhận chất lượng' },
           { key: 'QUAL_CERT_DT', label: 'Ngày cấp', type: 'date' },
+          { key: 'PROD_DT', label: 'Ngày sản xuất', type: 'date' },
           { key: 'INSPECTING_BODY', label: 'Tổ chức giám định chất lượng' },
-          { key: 'TEST_RESULT', label: 'Kết quả kiểm tra chất lượng' }
+          { key: 'TEST_RESULT', label: 'Kết quả kiểm tra chất lượng' },
+          { key: 'FINENESS_45UM', label: 'Độ mịn (45µm)' },
+          { key: 'SPECIFIC_SURFACE', label: 'Bề mặt riêng (Specific Surface)' },
+          { key: 'INITIAL_SETTING', label: 'Thời gian ninh kết đầu (Initial Setting)' },
+          { key: 'FINAL_SETTING', label: 'Thời gian ninh kết cuối (Final Setting)' },
+          { key: 'SOUNDNESS', label: 'Độ ổn định thể tích (Soundness)' },
+          { key: 'COMPRESSIVE_STRENGTH_3D', label: 'Cường độ nén 3 ngày' },
+          { key: 'COMPRESSIVE_STRENGTH_7D', label: 'Cường độ nén 7 ngày' },
+          { key: 'COMPRESSIVE_STRENGTH_28D', label: 'Cường độ nén 28 ngày' },
+          { key: 'SO3_CONTENT', label: 'Hàm lượng SO3' },
+          { key: 'LOSS_ON_IGNITION', label: 'Mất khi nung (LOI)' },
+          { key: 'FREE_CAO', label: 'Hàm lượng CaO tự do' },
+          { key: 'INSPECTION_CONCLUSION', label: 'Kết luận giám định (Inspection Conclusion)', span: 2 }
         ]
       }
     ],
@@ -388,18 +406,25 @@ const DOC_FORM_CONFIGS = {
       {
         title: 'Thông tin Giấy chứng nhận Hun trùng',
         fields: [
+          { key: 'MINISTRY_AUTHORITY', label: 'Bộ / Cơ quan chủ quản', span: 2 },
           { key: 'FUM_CERT_NO', label: 'Số giấy chứng nhận hun trùng' },
+          { key: 'FUMIGATION_COMPANY', label: 'Công ty hun trùng', span: 2 },
+          { key: 'FUMIGATION_BRANCH', label: 'Chi nhánh thực hiện' },
           { key: 'FUM_CERT_DT', label: 'Ngày cấp', type: 'date' },
+          { key: 'ISSUE_PLACE', label: 'Nơi cấp' },
+          { key: 'FUM_DT', label: 'Ngày hun trùng', type: 'date' },
+          { key: 'FUMIGATION_PLACE', label: 'Địa điểm hun trùng', span: 2 },
           { key: 'BL_NO', label: 'Số vận đơn' },
           { key: 'FUM_CHEMICAL', label: 'Hóa chất hun trùng (Methyl Bromide...)' },
           { key: 'FUM_DOSAGE', label: 'Liều lượng sử dụng' },
           { key: 'FUM_EXPOSURE_TIME', label: 'Thời gian ủ thuốc (giờ)' },
-          { key: 'FUM_TEMP', label: 'Nhiệt độ hun trùng' }
+          { key: 'FUM_TEMP', label: 'Nhiệt độ hun trùng' },
+          { key: 'DESCRIPTION_OF_GOODS', label: 'Mô tả hàng hóa', type: 'textarea', span: 3 }
         ]
       }
     ],
     tables: [
-      { type: 'containers', title: 'Danh sách Container hun trùng', cols: ['CONT', 'SEAL', 'PACK'] }
+      { type: 'containers', title: 'Danh sách Container hun trùng', cols: ['CONT', 'SEAL', 'CTYPE', 'PACK', 'UNIT_PACK'] }
     ]
   },
 
@@ -411,6 +436,7 @@ const DOC_FORM_CONFIGS = {
         fields: [
           { key: 'CO_REF_NO', label: 'Số tham chiếu C/O' },
           { key: 'CO_ISSUE_DT', label: 'Ngày cấp C/O', type: 'date' },
+          { key: 'CO_PLACE', label: 'Nơi cấp C/O (Box 15)' },
           { key: 'CO_FORM_NAME', label: 'Mẫu C/O', type: 'combobox', source: 'CO_FORM' },
           { key: 'TRADE_AGREEMENT', label: 'Hiệp định thương mại', type: 'combobox', source: 'TRADE_AGREEMENT' },
           { key: 'ORG', label: 'Nước xuất xứ', type: 'combobox', source: 'QUOC_GIA' },
@@ -720,6 +746,10 @@ const DOC_FORM_CONFIGS = {
     ],
     tables: [
       { type: 'items', title: 'Mô tả hàng hóa', cols: ['PROD', 'DES', 'ORG', 'PRICE', 'QTY', 'AMT'] }
+    ],
+    totals: [
+      { key: 'TOT_AMT', label: 'Tổng tiền hàng (Total)', readonly: true, num: true, currUnit: 'DYNAMIC_CURR' },
+      { key: 'GRAND_TOTAL', label: 'Tổng cộng L/C (Grand Total)', readonly: true, num: true, currUnit: 'DYNAMIC_CURR' }
     ]
   }
 };
@@ -735,6 +765,13 @@ function getComboboxOptionsForSource(source) {
 
   const dm = APP_STATE.dropdowns.danhMucChung || {};
   const cuocTau = Array.isArray(APP_STATE.dropdowns.cuocTau) ? APP_STATE.dropdowns.cuocTau : [];
+
+  if (key === 'POL' || key === 'POD' || key === 'CAR_NAME' || key === 'POT' || key === 'VESSEL' || key === 'VOYAGE') {
+    if (typeof getScheduleOptionsForSource_ === 'function') {
+      return getScheduleOptionsForSource_(key);
+    }
+    return [];
+  }
 
   if (key === 'QUOC_GIA') {
     const base = Array.isArray(dm.QUOC_GIA) ? dm.QUOC_GIA : [];
@@ -758,10 +795,16 @@ function getComboboxOptionsForSource(source) {
   }
 
   if (key === 'CURR') {
+    // Strict binding ONLY to dropdowns.CURR (Col F)
     if (typeof getSmartCurrencyOptions_ === 'function') {
       return getSmartCurrencyOptions_();
     }
-    return Array.isArray(dm.CURR) ? dm.CURR : [];
+    return Array.isArray(dm.CURR) ? dm.CURR.slice() : [];
+  }
+
+  if (key === 'UNIT') {
+    // Strict binding ONLY to dropdowns.UNIT (Col E)
+    return Array.isArray(dm.UNIT) ? dm.UNIT.slice() : [];
   }
 
   if (key === 'INSPECTION_CODE') {
@@ -781,30 +824,14 @@ function getComboboxOptionsForSource(source) {
 }
 
 function initCustomComboboxSystem() {
-  const scheduleSources = { POL: true, POD: true, CAR_NAME: true, VESSEL: true, VOYAGE: true };
   document.querySelectorAll('input[data-combo]').forEach(function (inp) {
-    const source = inp.getAttribute('data-combo');
-    if (!source) return;
-
-    const dlId = scheduleSources[source] ? ('dl_' + source) : ('dl_combo_' + source);
-    inp.setAttribute('list', dlId);
-
-    if (scheduleSources[source] && document.getElementById(dlId)) {
-      return;
-    }
-
-    let dl = document.getElementById(dlId);
-    if (!dl) {
-      dl = document.createElement('datalist');
-      dl.id = dlId;
-      document.body.appendChild(dl);
-    }
-
-    const opts = getComboboxOptionsForSource(source);
-    dl.innerHTML = opts.map(function (v) {
-      return '<option value="' + escapeHtml(v) + '"></option>';
-    }).join('');
+    inp.removeAttribute('list');
+    inp.setAttribute('autocomplete', 'off');
   });
+
+  if (typeof bindCustomComboGlobalListeners_ === 'function') {
+    bindCustomComboGlobalListeners_();
+  }
 }
 
 function renderAllFormViews() {
@@ -828,7 +855,7 @@ function renderAllFormViews() {
   validateContainerInputsInDOM();
   renderBatchExportChecklist();
 
-  if (APP_STATE.user && APP_STATE.user.role === 'ADMIN') {
+  if (typeof isAdminUser_ === 'function' ? isAdminUser_() : (APP_STATE.user && (APP_STATE.user.vaiTro === 'ADMIN' || APP_STATE.user.role === 'ADMIN'))) {
     loadAdminAccountsTables();
   }
 
@@ -855,7 +882,8 @@ function onWorkspaceInputOrChange(event) {
 }
 
 function buildPanelHtml(docKey, cfg) {
-  const isActive = APP_STATE.activeTab === docKey ? ' active' : '';
+  const isAdminPanelActive = (APP_STATE.activeTab === 'ADMIN_PANEL' || APP_STATE.activeTab === 'ADMIN_ACCOUNTS') && (docKey === 'ADMIN_PANEL' || docKey === 'ADMIN_ACCOUNTS');
+  const isActive = (APP_STATE.activeTab === docKey || isAdminPanelActive) ? ' active' : '';
   let html = '<section class="doc-panel' + isActive + '" data-tab-panel="' + docKey + '">';
 
   if (cfg.isAdminScreen) {
@@ -1025,6 +1053,45 @@ function getFieldLockInfo_(docKey, fieldKey) {
   return { locked: false, badge: '' };
 }
 
+function getFieldPlaceholder_(key, meta) {
+  const k = String(key || '').trim();
+  const m = meta || {};
+  if (k === 'EX_RATE') return 'VD: 25,450.00';
+  if (k === 'SERVICE_TYPE') return 'VD: FCL/FCL';
+  if (k === 'CONT') return 'VD: MSKU1234565';
+  if (k === 'SEAL') return 'VD: MLVN123456';
+  if (k === 'INCOTERM') return 'VD: FOB / CIF';
+  if (k === 'HS') return 'VD: 0901.21.10';
+  if (k === 'SHIP_TAX' || k === 'CNE_TAX') return 'VD: 0101234567';
+  if (k === 'MINISTRY_AUTHORITY') return 'VD: MINISTRY OF AGRICULTURE AND ENVIRONMENT';
+  if (k === 'FUMIGATION_COMPANY') return 'VD: VIETNAM FUMIGATION JOINT STOCK COMPANY (VFC)';
+  if (k === 'FUMIGATION_BRANCH') return 'VD: HO CHI MINH BRANCH';
+  if (k === 'FUMIGATION_PLACE') return 'VD: Cat Lai Port Warehouse, HCMC';
+  if (k === 'ISSUE_PLACE' || k === 'CO_PLACE') return 'VD: Ho Chi Minh City';
+  if (k === 'FUM_CHEMICAL') return 'VD: Methyl Bromide (CH3Br)';
+  if (k === 'FUM_DOSAGE') return 'VD: 48 g/m3';
+  if (k === 'FUM_EXPOSURE_TIME') return 'VD: 24 hours';
+  if (k === 'FUM_TEMP') return 'VD: 28°C';
+  if (k === 'TREAT_CHEMICAL') return 'VD: Methyl Bromide (CH3Br)';
+  if (k === 'TREAT_DURATION_TEMP') return 'VD: 24 hours at 28°C';
+  if (k === 'ADDITIVE_RATIO') return 'VD: N/A';
+  if (k === 'INSPECTION_CONCLUSION') return 'VD: Conforms to contract standard';
+  if (k === 'DESCRIPTION_OF_GOODS') return 'VD: VIETNAMESE LONG GRAIN WHITE RICE 5% BROKEN...';
+  if (m.type === 'date' || /(_DT|_DATE|_DTM)$/.test(k)) return 'VD: 25/11/2026';
+
+  const isNumeric = Boolean(
+    m.num ||
+    (typeof NUMERIC_SHARED_FIELD_MAP !== 'undefined' && NUMERIC_SHARED_FIELD_MAP[k]) ||
+    (typeof NUMERIC_TABLE_COL_MAP !== 'undefined' && NUMERIC_TABLE_COL_MAP[k])
+  );
+  if (isNumeric) return 'VD: 1,000.00';
+
+  if (m.type === 'combobox' || m.type === 'select' || m.dropdown) {
+    return 'Chọn hoặc nhập...';
+  }
+  return '';
+}
+
 function buildFieldHtml(docKey, field) {
   const spanClass = field.span === 'full'
     ? ' span-full'
@@ -1052,14 +1119,17 @@ function buildFieldHtml(docKey, field) {
   html += '<label class="form-label" for="' + id + '">' + escapeHtml(field.label) + '</label>';
 
   const numAttr = field.num ? ' data-num="true" inputmode="decimal"' : '';
+  const hint = getFieldPlaceholder_(field.key, field);
+  const placeholderAttr = hint ? (' placeholder="' + escapeHtml(hint) + '"') : '';
 
   if (field.type === 'combobox' || field.type === 'select') {
-    html += '<input id="' + id + '" type="text" class="form-control form-combobox' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '" data-combo="' + escapeHtml(field.source || '') + '" placeholder="Chọn hoặc nhập..." autocomplete="off"' + roAttr + disabledAttr + numAttr + ' />';
+    html += '<input id="' + id + '" type="text" class="form-control form-combobox' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '" data-combo="' + escapeHtml(field.source || '') + '"' + placeholderAttr + ' autocomplete="off"' + roAttr + disabledAttr + numAttr + ' />';
   } else if (field.type === 'textarea') {
-    html += '<textarea id="' + id + '" class="form-control' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '"' + roAttr + disabledAttr + '></textarea>';
+    html += '<textarea id="' + id + '" class="form-control' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '"' + placeholderAttr + roAttr + disabledAttr + '></textarea>';
   } else {
     const inputType = field.type === 'date' ? 'date' : 'text';
-    const inputElHtml = '<input id="' + id + '" type="' + inputType + '" class="form-control' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '"' + roAttr + disabledAttr + numAttr + ' />';
+    const titleAttr = field.type === 'date' && hint ? (' title="' + escapeHtml(hint) + '"') : '';
+    const inputElHtml = '<input id="' + id + '" type="' + inputType + '" class="form-control' + lockedCls + '" data-sync="' + escapeHtml(field.key) + '" data-doc-key="' + docKey + '"' + placeholderAttr + titleAttr + roAttr + disabledAttr + numAttr + ' />';
     if (field.currUnit) {
       const badgeLabel = field.currUnit === 'VND' ? 'VND' : (typeof getActiveCurrencyCode_ === 'function' ? getActiveCurrencyCode_() : 'USD');
       const badgeAttr = field.currUnit === 'VND' ? 'VND' : 'DYNAMIC';
@@ -1131,11 +1201,14 @@ function buildTableHtml(tableMode, cols, docKey) {
       }
       const invalidClass = errMsg ? ' input-invalid' : '';
 
+      const colHint = getFieldPlaceholder_(colKey, meta);
+      const colPlaceholderAttr = colHint ? (' placeholder="' + escapeHtml(colHint) + '"') : '';
+
       html += '<td>';
       if (meta.dropdown) {
-        html += '<input type="text" class="table-input' + invalidClass + lockedCls + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-doc-key="' + escapeHtml(docKey || '') + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '" data-combo="' + escapeHtml(meta.dropdown) + '" placeholder="Chọn hoặc nhập..." autocomplete="off"' + roAttr + disabledAttr + numAttr + ' />';
+        html += '<input type="text" class="table-input' + invalidClass + lockedCls + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-doc-key="' + escapeHtml(docKey || '') + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '" data-combo="' + escapeHtml(meta.dropdown) + '"' + colPlaceholderAttr + ' autocomplete="off"' + roAttr + disabledAttr + numAttr + ' />';
       } else {
-        html += '<input type="text" class="table-input' + numClass + invalidClass + lockedCls + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-doc-key="' + escapeHtml(docKey || '') + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '"' + roAttr + disabledAttr + numAttr + ' />';
+        html += '<input type="text" class="table-input' + numClass + invalidClass + lockedCls + '" value="' + escapeHtml(val) + '" data-table-type="' + logicalType + '" data-doc-key="' + escapeHtml(docKey || '') + '" data-row-idx="' + idx + '" data-col-key="' + colKey + '"' + colPlaceholderAttr + roAttr + disabledAttr + numAttr + ' />';
       }
       if (isSealLockedInReleaseOrder && colKey === 'SEAL') {
         html += '<div class="lock-stage-badge">&#128274; Mở khóa tại Packing List</div>';

@@ -565,6 +565,22 @@ function getInitialDropdownData() {
       'MA_SEAL'
     ]);
 
+    const STANDARD_CURRENCIES_20 = [
+      'USD', 'VND', 'EUR', 'JPY', 'CNY', 'GBP', 'SGD', 'KRW', 'AED', 'AUD',
+      'BDT', 'BRL', 'CAD', 'IDR', 'INR', 'MYR', 'PHP', 'SAR', 'THB', 'TWD'
+    ];
+    const rawCurrList = Array.isArray(danhMucChung.CURR) ? danhMucChung.CURR : [];
+    const mergedCurrencies = [];
+    const seenCurr = {};
+    rawCurrList.concat(STANDARD_CURRENCIES_20).forEach(function (code) {
+      const clean = String(code || '').trim().toUpperCase();
+      if (clean && !seenCurr[clean]) {
+        seenCurr[clean] = true;
+        mergedCurrencies.push(clean);
+      }
+    });
+    danhMucChung.CURR = mergedCurrencies;
+
     const contSealList = readContSealPairs_(ss, 'Danh_Muc_chung');
 
     return {
