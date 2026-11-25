@@ -20,21 +20,21 @@ const DOC_STEP_ORDER = [
   'QUOTATION',
   'SALES_CONTRACT',
   'COMMERCIAL_INVOICE',
-  'PACKING_LIST',
   'BOOKING_REQUEST',
-  'VGM',
-  'SHIPPING_INSTRUCTION',
-  'VETERINARY_CERTIFICATE',
-  'PHYTOSANITARY_CERTIFICATE',
-  'QUALITY_CERTIFICATE',
-  'FUMIGATION_CERTIFICATE',
-  'CERTIFICATE_OF_ORIGIN',
   'BOOKING_NOTE',
   'BOOKING_CONFIRMATION',
   'RELEASE_ORDER',
+  'PACKING_LIST',
+  'VGM',
+  'SHIPPING_INSTRUCTION',
   'BILL_OF_LADING',
-  'DELIVERY_ORDER',
+  'PHYTOSANITARY_CERTIFICATE',
+  'VETERINARY_CERTIFICATE',
+  'QUALITY_CERTIFICATE',
+  'FUMIGATION_CERTIFICATE',
+  'CERTIFICATE_OF_ORIGIN',
   'To_khai_XK',
+  'DELIVERY_ORDER',
   'To_khai_NK',
   'LETTER_OF_CREDIT'
 ];
@@ -51,7 +51,6 @@ const DOCS_BOTH_CONT_SEAL_REQUIRED = {
   PACKING_LIST: true,
   SHIPPING_INSTRUCTION: true,
   FUMIGATION_CERTIFICATE: true,
-  BOOKING_CONFIRMATION: true,
   BILL_OF_LADING: true,
   DELIVERY_ORDER: true,
   To_khai_XK: true,
@@ -110,8 +109,8 @@ const DOC_GROUPS = [
     id: 'GROUP_III',
     title: 'Cơ quan chuyên ngành khác cấp',
     docs: [
-      { key: 'VETERINARY_CERTIFICATE', label: 'Veterinary Certificate' },
       { key: 'PHYTOSANITARY_CERTIFICATE', label: 'Phytosanitary Certificate' },
+      { key: 'VETERINARY_CERTIFICATE', label: 'Veterinary Certificate' },
       { key: 'QUALITY_CERTIFICATE', label: 'Quality Certificate' },
       { key: 'FUMIGATION_CERTIFICATE', label: 'Fumigation Certificate' },
       { key: 'CERTIFICATE_OF_ORIGIN', label: 'Certificate of Origin' }
@@ -198,15 +197,15 @@ function createEmptyContainer() {
 }
 
 const INSPECTION_CERT_KEYS = [
-  'VETERINARY_CERTIFICATE',
   'PHYTOSANITARY_CERTIFICATE',
+  'VETERINARY_CERTIFICATE',
   'QUALITY_CERTIFICATE'
 ];
 
 function createDefaultInspectionEnabled_() {
   return {
-    VETERINARY_CERTIFICATE: false,
     PHYTOSANITARY_CERTIFICATE: false,
+    VETERINARY_CERTIFICATE: false,
     QUALITY_CERTIFICATE: false
   };
 }
@@ -246,6 +245,9 @@ const APP_STATE = {
   items: [createEmptyItem()],
   containers: [createEmptyContainer()],
   exportResults: {},
+  exportedLockedDocs: {},
+  hasDataChanged: false,
+  lastExportLockSnapshot: '',
   previewDocKey: null,
   logoDataUrl: '',
   lastTaxTab: 'To_khai_XK',
@@ -393,6 +395,7 @@ function toggleInspectionDocEnabled(docKey, checked, ev) {
   }
   const nextVal = Boolean(checked);
   APP_STATE.inspectionEnabled[docKey] = nextVal;
+  markFormDataChanged_();
 
   updateSidebarLockState_();
   updateFieldAndTableLocksInDOM_();
@@ -441,6 +444,10 @@ function isStepComplete_(docKey) {
   if (typeof validateContainerAndSealRows === 'function') {
     const check = validateContainerAndSealRows(docKey);
     if (check && check.hasErrors) return false;
+  }
+  if (typeof validateHsCodeFields_ === 'function') {
+    const hsCheck = validateHsCodeFields_();
+    if (hsCheck && hsCheck.hasErrors) return false;
   }
 
   switch (docKey) {
@@ -547,9 +554,7 @@ function isStepComplete_(docKey) {
         hasFilledVal_(s.BK_DT) &&
         hasFilledVal_(s.CAR_NAME) &&
         hasFilledVal_(s.STUFFING_PLACE) &&
-        hasFilledVal_(s.FREIGHT) &&
-        hasFilledVal_(firstCont.CONT) &&
-        hasFilledVal_(firstCont.SEAL);
+        hasFilledVal_(s.FREIGHT);
     case 'RELEASE_ORDER':
       return hasFilledVal_(s.RO_NO) &&
         hasFilledVal_(s.RO_DT) &&
@@ -1046,8 +1051,10 @@ function handleAdminFillSampleData() {
     updateSidebarLockState_();
     updateFieldAndTableLocksInDOM_();
     validateContainerInputsInDOM();
+    validateHsCodeInputsInDOM();
     updateCurrencyBadgesInDOM_();
     updateAllContextBanners();
+    markFormDataChanged_();
 
     showToast('Đã điền đầy đủ dữ liệu mẫu cho toàn bộ 21 mục! Sẵn sàng Review & Xuất hàng loạt.', 'success');
     return;
@@ -1152,8 +1159,10 @@ function handleAdminFillSampleData() {
   updateSidebarLockState_();
   updateFieldAndTableLocksInDOM_();
   validateContainerInputsInDOM();
+  validateHsCodeInputsInDOM();
   updateCurrencyBadgesInDOM_();
   updateAllContextBanners();
+  markFormDataChanged_();
 
   const titleLabel = cfg && cfg.title ? cfg.title : targetTab;
   showToast('Đã điền dữ liệu mẫu cho "' + titleLabel + '" và mở khóa bước tiếp theo!', 'success');
@@ -1268,6 +1277,7 @@ function switchTab(tabKey) {
   updateSidebarLockState_();
   updateFieldAndTableLocksInDOM_();
   validateContainerInputsInDOM();
+  validateHsCodeInputsInDOM();
 
   if (isAdminTab_(tabKey) && isAdminUser_()) {
     loadAdminAccountsTables();
@@ -1758,12 +1768,14 @@ function loadInitialDropdowns() {
       initDefaultDocumentNumbers(false);
       normalizeNumericFieldsInState_();
       recalculateAllTotals(false);
+      restorePersistedExportLockForCurrentUser_();
       renderAllFormViews();
       refreshScheduleDropdownSuggestions_();
       refreshCurrencyDropdownSuggestions_();
       updateSidebarLockState_();
       switchTab('MASTER_PARTIES');
       validateContainerInputsInDOM();
+      validateHsCodeInputsInDOM();
       updateCurrencyBadgesInDOM_();
       showToast('Đăng nhập thành công! Chào mừng ' + (APP_STATE.user.tenSV || APP_STATE.user.maSV), 'success');
       openGuideModal();
@@ -1882,7 +1894,9 @@ function confirmClearData() {
   updateSidebarLockState_();
   switchTab('MASTER_PARTIES');
   validateContainerInputsInDOM();
+  validateHsCodeInputsInDOM();
   updateCurrencyBadgesInDOM_();
+  markFormDataChanged_();
 
   if (APP_STATE.user && APP_STATE.user.maSV && !isAdminUser_()) {
     google.script.run
@@ -1903,6 +1917,7 @@ function confirmClearData() {
 }
 
 function handleLogout() {
+  finalizeExportLockOnExit_();
   closeGuideModal();
   closeContSealLookupModal();
   closeDecTypeLookupModal();
@@ -1914,6 +1929,9 @@ function handleLogout() {
   APP_STATE.items = [createEmptyItem()];
   APP_STATE.containers = [createEmptyContainer()];
   APP_STATE.exportResults = {};
+  APP_STATE.exportedLockedDocs = {};
+  APP_STATE.hasDataChanged = false;
+  APP_STATE.lastExportLockSnapshot = '';
   APP_STATE.unlockedStepIndex = 0;
   APP_STATE.adminUnlockAllSteps = false;
   APP_STATE.sequentialLock = true;
@@ -2157,6 +2175,13 @@ function handlePreviewDocument(docKey) {
   if (contCheck.hasErrors) {
     validateContainerInputsInDOM();
     showToast('Vui lòng sửa lỗi Số Container / Số Seal trước khi Review Document.', 'error');
+    return;
+  }
+
+  const hsCheck = validateHsCodeFields_();
+  if (hsCheck.hasErrors) {
+    validateHsCodeInputsInDOM();
+    showToast('Sai HS Code: Vui lòng nhập HS Code đủ 8 chữ số (VD: 0901.21.10) trước khi Review Document.', 'error');
     return;
   }
 
@@ -2455,6 +2480,13 @@ function handleExportSingle(docKey) {
     return;
   }
 
+  const hsCheck = validateHsCodeFields_();
+  if (hsCheck.hasErrors) {
+    validateHsCodeInputsInDOM();
+    showToast('Sai HS Code: Vui lòng nhập HS Code đủ 8 chữ số (VD: 0901.21.10) trước khi xuất chứng từ.', 'error');
+    return;
+  }
+
   showLoading('Loading...');
 
   google.script.run
@@ -2490,10 +2522,186 @@ function validateBatchContainers_(selectedKeys) {
 }
 
 const MAX_BATCH_EXPORT_DOCS = 5;
+const EXPORT_LOCK_STORAGE_PREFIX_ = 'xnk_batch_export_lock_v1_';
+const PERSISTED_EXPORT_LOCKS_MEM_ = {};
+let exportLockUnloadBound_ = false;
+
+function getExportLockUserKey_() {
+  const maSV = APP_STATE.user && APP_STATE.user.maSV ? String(APP_STATE.user.maSV).trim().toUpperCase() : '';
+  return maSV || '';
+}
+
+function computeFormDataSnapshot_() {
+  try {
+    return JSON.stringify({
+      shared: APP_STATE.shared || {},
+      items: APP_STATE.items || [],
+      containers: APP_STATE.containers || [],
+      inspectionEnabled: APP_STATE.inspectionEnabled || {}
+    });
+  } catch (e) {
+    return '';
+  }
+}
+
+function savePersistedExportLock_(userKey, lockedDocs, snapshot) {
+  if (!userKey) return;
+  const payload = {
+    exportedLockedDocs: Object.assign({}, lockedDocs || {}),
+    lastExportLockSnapshot: String(snapshot || '')
+  };
+  PERSISTED_EXPORT_LOCKS_MEM_[userKey] = payload;
+  try {
+    if (window.localStorage) {
+      window.localStorage.setItem(EXPORT_LOCK_STORAGE_PREFIX_ + userKey, JSON.stringify(payload));
+    }
+  } catch (e) {}
+}
+
+function loadPersistedExportLock_(userKey) {
+  if (!userKey) return null;
+  try {
+    if (window.localStorage) {
+      const raw = window.localStorage.getItem(EXPORT_LOCK_STORAGE_PREFIX_ + userKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          PERSISTED_EXPORT_LOCKS_MEM_[userKey] = parsed;
+          return parsed;
+        }
+      }
+    }
+  } catch (e) {}
+  return PERSISTED_EXPORT_LOCKS_MEM_[userKey] || null;
+}
+
+function clearPersistedExportLock_(userKey) {
+  if (!userKey) return;
+  delete PERSISTED_EXPORT_LOCKS_MEM_[userKey];
+  try {
+    if (window.localStorage) {
+      window.localStorage.removeItem(EXPORT_LOCK_STORAGE_PREFIX_ + userKey);
+    }
+  } catch (e) {}
+}
+
+function bindExportLockBeforeUnload_() {
+  if (exportLockUnloadBound_) return;
+  exportLockUnloadBound_ = true;
+  window.addEventListener('beforeunload', function () {
+    finalizeExportLockOnExit_();
+  });
+}
+
+function restorePersistedExportLockForCurrentUser_() {
+  bindExportLockBeforeUnload_();
+  const userKey = getExportLockUserKey_();
+  const stored = loadPersistedExportLock_(userKey);
+  const currentSnap = computeFormDataSnapshot_();
+
+  if (stored && stored.exportedLockedDocs && Object.keys(stored.exportedLockedDocs).length > 0) {
+    APP_STATE.exportedLockedDocs = Object.assign({}, stored.exportedLockedDocs);
+    APP_STATE.lastExportLockSnapshot = currentSnap;
+    APP_STATE.hasDataChanged = false;
+    savePersistedExportLock_(userKey, APP_STATE.exportedLockedDocs, APP_STATE.lastExportLockSnapshot);
+  } else {
+    APP_STATE.exportedLockedDocs = {};
+    APP_STATE.lastExportLockSnapshot = currentSnap;
+    APP_STATE.hasDataChanged = false;
+  }
+}
+
+function isDocExportLocked_(docKey) {
+  if (!docKey) return false;
+  return Boolean(APP_STATE.exportedLockedDocs && APP_STATE.exportedLockedDocs[docKey]);
+}
+
+function markFormDataChanged_() {
+  if (!APP_STATE.user || !APP_STATE.user.maSV) return;
+  const currentSnap = computeFormDataSnapshot_();
+  if (!APP_STATE.lastExportLockSnapshot) {
+    APP_STATE.hasDataChanged = true;
+    return;
+  }
+  if (currentSnap !== APP_STATE.lastExportLockSnapshot) {
+    APP_STATE.hasDataChanged = true;
+  }
+}
+
+function finalizeExportLockOnExit_() {
+  const userKey = getExportLockUserKey_();
+  if (!userKey) return;
+  const lockedDocs = APP_STATE.exportedLockedDocs || {};
+  const hasAnyLocked = Object.keys(lockedDocs).length > 0;
+  if (!hasAnyLocked) {
+    clearPersistedExportLock_(userKey);
+    return;
+  }
+
+  const currentSnap = computeFormDataSnapshot_();
+  const changed = Boolean(
+    APP_STATE.hasDataChanged === true ||
+    (APP_STATE.lastExportLockSnapshot && currentSnap !== APP_STATE.lastExportLockSnapshot)
+  );
+  APP_STATE.hasDataChanged = changed;
+
+  if (changed) {
+    APP_STATE.exportedLockedDocs = {};
+    APP_STATE.hasDataChanged = false;
+    APP_STATE.lastExportLockSnapshot = '';
+    clearPersistedExportLock_(userKey);
+  } else {
+    savePersistedExportLock_(userKey, lockedDocs, APP_STATE.lastExportLockSnapshot || currentSnap);
+  }
+}
+
+function lockExportedDocs_(docKeys) {
+  if (!APP_STATE.exportedLockedDocs) {
+    APP_STATE.exportedLockedDocs = {};
+  }
+  (docKeys || []).forEach(function (k) {
+    if (k) {
+      APP_STATE.exportedLockedDocs[k] = true;
+    }
+  });
+  APP_STATE.lastExportLockSnapshot = computeFormDataSnapshot_();
+  APP_STATE.hasDataChanged = false;
+  savePersistedExportLock_(getExportLockUserKey_(), APP_STATE.exportedLockedDocs, APP_STATE.lastExportLockSnapshot);
+  syncBatchExportLockUi_();
+}
+
+function syncBatchExportLockUi_() {
+  const checkboxes = document.querySelectorAll('#batchExportChecklist input[type="checkbox"]');
+  checkboxes.forEach(function (cb) {
+    const docKey = cb.value;
+    const locked = isDocExportLocked_(docKey);
+    const label = cb.closest('.batch-check-item');
+    cb.disabled = locked;
+    if (locked) {
+      cb.checked = false;
+      cb.setAttribute('data-export-locked', 'true');
+    } else {
+      cb.removeAttribute('data-export-locked');
+    }
+    if (label) {
+      label.classList.toggle('is-exported-locked', locked);
+      let badge = label.querySelector('.batch-exported-badge');
+      if (locked && !badge) {
+        badge = document.createElement('span');
+        badge.className = 'batch-exported-badge';
+        badge.textContent = 'Đã xuất';
+        label.appendChild(badge);
+      } else if (!locked && badge) {
+        badge.parentNode.removeChild(badge);
+      }
+    }
+  });
+  updateBatchSelectionCounter_();
+}
 
 function initBatchExportModalUi_() {
   normalizeBatchExportModalUi_();
-  updateBatchSelectionCounter_();
+  syncBatchExportLockUi_();
 }
 
 function normalizeBatchExportModalUi_() {
@@ -2566,13 +2774,13 @@ function normalizeBatchExportModalUi_() {
     closeBtn.setAttribute('onclick', 'closeBatchExportModal()');
     headerEl.appendChild(closeBtn);
 
-    // Toolbar ("Chọn 5 chứng từ đầu" + "Bỏ chọn tất cả" + live counter)
+    // Toolbar ("Chọn 5 chứng từ" + "Bỏ chọn tất cả" + live counter)
     const selectFirstBtn = card.querySelector('button[onclick*="toggleAllBatchCheckboxes(true)"]');
     const deselectAllBtn = card.querySelector('button[onclick*="toggleAllBatchCheckboxes(false)"]');
     let toolbarEl = null;
     if (selectFirstBtn) {
-      selectFirstBtn.textContent = 'Chọn 5 chứng từ đầu';
-      selectFirstBtn.title = 'Tối đa 5 / lần';
+      selectFirstBtn.textContent = 'Chọn 5 chứng từ';
+      selectFirstBtn.title = 'Chọn tối đa 5 chứng từ chưa xuất tiếp theo';
       selectFirstBtn.classList.add('btn', 'btn-sm', 'batch-toolbar-btn');
       toolbarEl = selectFirstBtn.parentElement;
     }
@@ -2649,6 +2857,12 @@ function normalizeBatchExportModalUi_() {
         child.parentNode.removeChild(child);
       }
     });
+  } else {
+    const selectFirstBtn = card.querySelector('button[onclick*="toggleAllBatchCheckboxes(true)"]');
+    if (selectFirstBtn) {
+      selectFirstBtn.textContent = 'Chọn 5 chứng từ';
+      selectFirstBtn.title = 'Chọn tối đa 5 chứng từ chưa xuất tiếp theo';
+    }
   }
 }
 
@@ -2657,6 +2871,11 @@ function updateBatchSelectionCounter_() {
   let checkedCount = 0;
   checkboxes.forEach(function (cb) {
     const label = cb.closest('.batch-check-item');
+    if (cb.disabled || isDocExportLocked_(cb.value)) {
+      cb.checked = false;
+      if (label) label.classList.remove('is-checked');
+      return;
+    }
     if (cb.checked) {
       checkedCount++;
       if (label) label.classList.add('is-checked');
@@ -2674,7 +2893,13 @@ function updateBatchSelectionCounter_() {
 
 function handleBatchDocCheckboxChange(cb) {
   if (!cb) return;
-  const checkedBoxes = document.querySelectorAll('#batchExportChecklist input[type="checkbox"]:checked');
+  if (cb.disabled || isDocExportLocked_(cb.value)) {
+    cb.checked = false;
+    showToast('Chứng từ này đã xuất và đang bị khóa cho đến khi bạn thay đổi dữ liệu và đăng xuất.', 'warning');
+    updateBatchSelectionCounter_();
+    return;
+  }
+  const checkedBoxes = document.querySelectorAll('#batchExportChecklist input[type="checkbox"]:checked:not(:disabled)');
   if (cb.checked && checkedBoxes.length > MAX_BATCH_EXPORT_DOCS) {
     cb.checked = false;
     showToast(
@@ -2690,6 +2915,13 @@ function openBatchExportModal() {
   if (contCheck.hasErrors) {
     validateContainerInputsInDOM();
     showToast('Vui lòng sửa lỗi Số Container / Số Seal trước khi Xuất hàng loạt.', 'error');
+    return;
+  }
+
+  const hsCheck = validateHsCodeFields_();
+  if (hsCheck.hasErrors) {
+    validateHsCodeInputsInDOM();
+    showToast('Sai HS Code: Vui lòng nhập HS Code đủ 8 chữ số (VD: 0901.21.10) trước khi Xuất hàng loạt.', 'error');
     return;
   }
 
@@ -2716,7 +2948,14 @@ function toggleAllBatchCheckboxes(checked) {
   }
 
   let selectedCount = 0;
+  let availableCount = 0;
   boxes.forEach(function (cb) {
+    const locked = cb.disabled || isDocExportLocked_(cb.value);
+    if (locked) {
+      cb.checked = false;
+      return;
+    }
+    availableCount++;
     if (selectedCount < MAX_BATCH_EXPORT_DOCS) {
       cb.checked = true;
       selectedCount++;
@@ -2725,9 +2964,12 @@ function toggleAllBatchCheckboxes(checked) {
     }
   });
   updateBatchSelectionCounter_();
-  if (boxes.length > MAX_BATCH_EXPORT_DOCS) {
+
+  if (availableCount === 0) {
+    showToast('Tất cả chứng từ đã được xuất trong phiên này. Hãy chỉnh sửa dữ liệu rồi đăng xuất nếu muốn mở khóa xuất lại.', 'info');
+  } else if (availableCount > MAX_BATCH_EXPORT_DOCS) {
     showToast(
-      'Đã chọn ' + MAX_BATCH_EXPORT_DOCS + ' chứng từ đầu tiên (tối đa ' + MAX_BATCH_EXPORT_DOCS + ' chứng từ / lần xuất).',
+      'Đã chọn ' + selectedCount + ' chứng từ chưa xuất tiếp theo (tối đa ' + MAX_BATCH_EXPORT_DOCS + ' chứng từ / lần xuất).',
       'info'
     );
   }
@@ -2740,12 +2982,14 @@ function handleExportBatch() {
   }
 
   const selectedKeys = [];
-  document.querySelectorAll('#batchExportChecklist input[type="checkbox"]:checked').forEach(function (cb) {
-    selectedKeys.push(cb.value);
+  document.querySelectorAll('#batchExportChecklist input[type="checkbox"]:checked:not(:disabled)').forEach(function (cb) {
+    if (!isDocExportLocked_(cb.value)) {
+      selectedKeys.push(cb.value);
+    }
   });
 
   if (selectedKeys.length === 0) {
-    showToast('Vui lòng chọn ít nhất một chứng từ để xuất hàng loạt.', 'warning');
+    showToast('Vui lòng chọn ít nhất một chứng từ chưa xuất để xuất hàng loạt.', 'warning');
     return;
   }
 
@@ -2764,6 +3008,13 @@ function handleExportBatch() {
     return;
   }
 
+  const hsCheck = validateHsCodeFields_();
+  if (hsCheck.hasErrors) {
+    validateHsCodeInputsInDOM();
+    showToast('Sai HS Code: Vui lòng nhập HS Code đủ 8 chữ số (VD: 0901.21.10) trước khi Xuất hàng loạt.', 'error');
+    return;
+  }
+
   showLoading('Loading...');
 
   google.script.run
@@ -2778,8 +3029,10 @@ function handleExportBatch() {
       const boxEl = document.getElementById('batchExportResults');
       listEl.innerHTML = '';
 
+      const exportedKeys = [];
       res.results.forEach(function (item) {
         APP_STATE.exportResults[item.docKey] = item;
+        exportedKeys.push(item.docKey);
         renderSingleExportResultBox(item.docKey);
 
         const row = document.createElement('div');
@@ -2793,8 +3046,9 @@ function handleExportBatch() {
         listEl.appendChild(row);
       });
 
+      lockExportedDocs_(exportedKeys);
       boxEl.classList.remove('hidden');
-      showToast('Đã xuất thành công ' + res.results.length + ' chứng từ vào Drive cá nhân!', 'success');
+      showToast('Đã xuất thành công ' + res.results.length + ' chứng từ vào Drive cá nhân và khóa các chứng từ đã xuất!', 'success');
     })
     .withFailureHandler(function (err) {
       hideLoading();
@@ -3051,6 +3305,11 @@ function handleWorkspaceFieldChange(target, ev) {
     recalculateAllTotals(true, false, { sourceKey: key });
   }
 
+  if (key === 'HS') {
+    validateHsCodeInputsInDOM();
+  }
+
+  markFormDataChanged_();
   updateSidebarLockState_();
 }
 
@@ -3785,7 +4044,10 @@ function handleTableCellChange(target, ev) {
 
   if (tableType === 'containers') {
     validateContainerInputsInDOM();
+  } else if (tableType === 'items' && colKey === 'HS') {
+    validateHsCodeInputsInDOM();
   }
+  markFormDataChanged_();
   updateSidebarLockState_();
 }
 
@@ -3804,6 +4066,8 @@ function addItemRow() {
   }
   recalculateAllTotals(true, false, { sourceKey: 'ITEM_MUTATION' });
   rerenderAllSyncedTables('items');
+  validateHsCodeInputsInDOM();
+  markFormDataChanged_();
   updateSidebarLockState_();
 }
 
@@ -3814,6 +4078,8 @@ function deleteItemRow(rowIdx) {
   }
   recalculateAllTotals(true, false, { sourceKey: 'ITEM_MUTATION' });
   rerenderAllSyncedTables('items');
+  validateHsCodeInputsInDOM();
+  markFormDataChanged_();
   updateSidebarLockState_();
 }
 
@@ -3825,6 +4091,7 @@ function addContainerRow() {
   recalculateAllTotals(true, true, { sourceKey: 'CONTAINER_MUTATION' });
   rerenderAllSyncedTables('containers');
   validateContainerInputsInDOM();
+  markFormDataChanged_();
   updateSidebarLockState_();
 }
 
@@ -3836,6 +4103,7 @@ function deleteContainerRow(rowIdx) {
   recalculateAllTotals(true, true, { sourceKey: 'CONTAINER_MUTATION' });
   rerenderAllSyncedTables('containers');
   validateContainerInputsInDOM();
+  markFormDataChanged_();
   updateSidebarLockState_();
 }
 
@@ -4061,6 +4329,7 @@ function applyContSealPrefixSelection_(ownerPrefix, sealPrefix) {
   }
   recalculateAllTotals(true, true, { sourceKey: 'CONTAINER_LOOKUP', rowIdx: rowIdx });
   validateContainerInputsInDOM();
+  markFormDataChanged_();
   updateSidebarLockState_();
 
   if (appliedParts.length > 0) {
@@ -4154,6 +4423,7 @@ function applyDecTypeSelection_(code) {
   if (!cleanCode) return;
 
   setSharedFieldAndSync('DEC_TYPE', cleanCode);
+  markFormDataChanged_();
   updateSidebarLockState_();
   closeDecTypeLookupModal();
   showToast('Đã chọn mã loại hình: ' + cleanCode, 'success');
@@ -4396,19 +4666,32 @@ function formatLiveNumericInput_(rawVal, inputEl) {
   return formatted;
 }
 
+function getHsCodeDigits_(rawVal) {
+  return String(rawVal == null ? '' : rawVal).replace(/\D/g, '');
+}
+
+function isValidHsCodeValue_(rawVal) {
+  const str = String(rawVal == null ? '' : rawVal).trim();
+  if (!str) return true;
+  if (/[^\d.\-\s]/.test(str)) return false;
+  return getHsCodeDigits_(str).length === 8;
+}
+
 function formatHsCode_(rawVal) {
   const str = String(rawVal == null ? '' : rawVal).trim();
   if (!str) return '';
-  const digits = str.replace(/\D/g, '').slice(0, 10);
-  if (!digits) return str;
-  if (digits.length <= 4) return digits;
-  if (digits.length <= 6) return digits.slice(0, 4) + '.' + digits.slice(4);
-  return digits.slice(0, 4) + '.' + digits.slice(4, 6) + '.' + digits.slice(6);
+  if (/[^\d.\-\s]/.test(str)) return str;
+  const digits = getHsCodeDigits_(str);
+  if (digits.length === 8) {
+    return digits.slice(0, 4) + '.' + digits.slice(4, 6) + '.' + digits.slice(6, 8);
+  }
+  return str;
 }
 
 function formatLiveHsCodeInput_(rawVal, inputEl) {
   const original = String(rawVal == null ? '' : rawVal);
-  if (!original.trim()) {
+  const trimmed = original.trim();
+  if (!trimmed) {
     if (inputEl && inputEl.value !== '') inputEl.value = '';
     return '';
   }
@@ -4422,8 +4705,11 @@ function formatLiveHsCodeInput_(rawVal, inputEl) {
     }
   }
 
-  const digits = original.replace(/\D/g, '').slice(0, 10);
-  const formatted = digits ? formatHsCode_(digits) : '';
+  const digits = getHsCodeDigits_(trimmed);
+  const hasInvalidChars = /[^\d.\-\s]/.test(trimmed);
+  const formatted = (!hasInvalidChars && digits.length === 8)
+    ? (digits.slice(0, 4) + '.' + digits.slice(4, 6) + '.' + digits.slice(6, 8))
+    : original;
 
   if (inputEl && inputEl.value !== formatted) {
     inputEl.value = formatted;
@@ -4444,6 +4730,79 @@ function formatLiveHsCodeInput_(rawVal, inputEl) {
   }
 
   return formatted;
+}
+
+function validateHsCodeFields_() {
+  const sharedVal = APP_STATE.shared && APP_STATE.shared.HS != null ? String(APP_STATE.shared.HS) : '';
+  const sharedError = isValidHsCodeValue_(sharedVal) ? '' : 'Sai HS Code';
+  const items = Array.isArray(APP_STATE.items) ? APP_STATE.items : [];
+  const rowErrors = [];
+  let hasErrors = Boolean(sharedError);
+
+  items.forEach(function (row, idx) {
+    const hsVal = row && row.HS != null ? String(row.HS) : '';
+    const err = isValidHsCodeValue_(hsVal) ? '' : 'Sai HS Code';
+    rowErrors[idx] = err;
+    if (err) {
+      hasErrors = true;
+    }
+  });
+
+  return {
+    hasErrors: hasErrors,
+    sharedError: sharedError,
+    rowErrors: rowErrors
+  };
+}
+
+function validateHsCodeInputsInDOM() {
+  const validation = validateHsCodeFields_();
+
+  document.querySelectorAll('[data-table-type="items"][data-col-key="HS"]').forEach(function (inp) {
+    const idx = parseInt(inp.getAttribute('data-row-idx'), 10);
+    const val = (!isNaN(idx) && APP_STATE.items && APP_STATE.items[idx])
+      ? String(APP_STATE.items[idx].HS == null ? '' : APP_STATE.items[idx].HS)
+      : String(inp.value || '');
+    const errMsg = isValidHsCodeValue_(val) ? '' : 'Sai HS Code';
+    inp.classList.toggle('input-invalid', Boolean(errMsg));
+
+    const cell = inp.parentNode;
+    if (cell) {
+      let msgEl = cell.querySelector('.hs-error-msg[data-col-key="HS"]');
+      if (!msgEl) {
+        msgEl = document.createElement('div');
+        msgEl.className = 'cell-error-msg hs-error-msg hidden';
+        msgEl.setAttribute('data-err-type', 'hs');
+        msgEl.setAttribute('data-row-idx', String(idx));
+        msgEl.setAttribute('data-col-key', 'HS');
+        cell.appendChild(msgEl);
+      }
+      msgEl.textContent = errMsg;
+      msgEl.classList.toggle('hidden', !errMsg);
+    }
+  });
+
+  document.querySelectorAll('[data-sync="HS"]').forEach(function (inp) {
+    const val = String(inp.value || '');
+    const errMsg = isValidHsCodeValue_(val) ? '' : 'Sai HS Code';
+    inp.classList.toggle('input-invalid', Boolean(errMsg));
+
+    const wrap = inp.closest('.form-group') || inp.parentNode;
+    if (wrap) {
+      let msgEl = wrap.querySelector('.hs-error-msg[data-sync-err="HS"]');
+      if (!msgEl) {
+        msgEl = document.createElement('div');
+        msgEl.className = 'cell-error-msg hs-error-msg hidden';
+        msgEl.setAttribute('data-err-type', 'hs');
+        msgEl.setAttribute('data-sync-err', 'HS');
+        wrap.appendChild(msgEl);
+      }
+      msgEl.textContent = errMsg;
+      msgEl.classList.toggle('hidden', !errMsg);
+    }
+  });
+
+  return validation;
 }
 
 function normalizeFormattedNumberString_(rawVal) {

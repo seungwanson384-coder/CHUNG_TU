@@ -880,6 +880,9 @@ function renderAllFormViews() {
     updateFieldAndTableLocksInDOM_();
   }
   validateContainerInputsInDOM();
+  if (typeof validateHsCodeInputsInDOM === 'function') {
+    validateHsCodeInputsInDOM();
+  }
   renderBatchExportChecklist();
 
   if (typeof isAdminUser_ === 'function' ? isAdminUser_() : (APP_STATE.user && (APP_STATE.user.vaiTro === 'ADMIN' || APP_STATE.user.role === 'ADMIN'))) {
@@ -1196,6 +1199,9 @@ function buildFieldHtml(docKey, field) {
   if (isLocked && lockInfo.badge) {
     html += '<span class="lock-stage-badge" data-lock-badge="true">&#128274; ' + escapeHtml(lockInfo.badge) + '</span>';
   }
+  if (field.key === 'HS') {
+    html += '<div class="cell-error-msg hs-error-msg hidden" data-err-type="hs" data-sync-err="HS">Sai HS Code</div>';
+  }
 
   html += '</div>';
   return html;
@@ -1267,6 +1273,8 @@ function buildTableHtml(tableMode, cols, docKey) {
       let errMsg = '';
       if (!colLocked && contValidation && contValidation.rowErrors && contValidation.rowErrors[idx]) {
         errMsg = contValidation.rowErrors[idx][colKey] || '';
+      } else if (!colLocked && !isContainer && colKey === 'HS' && typeof isValidHsCodeValue_ === 'function' && !isValidHsCodeValue_(val)) {
+        errMsg = 'Sai HS Code';
       }
       const invalidClass = errMsg ? ' input-invalid' : '';
 
@@ -1284,6 +1292,9 @@ function buildTableHtml(tableMode, cols, docKey) {
       }
       if (isContainer && (colKey === 'CONT' || colKey === 'SEAL')) {
         html += '<div class="cell-error-msg' + (errMsg ? '' : ' hidden') + '" data-err-type="containers" data-row-idx="' + idx + '" data-col-key="' + colKey + '">' + escapeHtml(errMsg) + '</div>';
+      }
+      if (!isContainer && colKey === 'HS') {
+        html += '<div class="cell-error-msg hs-error-msg' + (errMsg ? '' : ' hidden') + '" data-err-type="hs" data-row-idx="' + idx + '" data-col-key="HS">' + escapeHtml(errMsg) + '</div>';
       }
       html += '</td>';
     });
@@ -1312,6 +1323,9 @@ function rerenderAllSyncedTables(logicalType) {
 
   if (typeof initCustomComboboxSystem === 'function') {
     initCustomComboboxSystem();
+  }
+  if (logicalType !== 'containers' && typeof validateHsCodeInputsInDOM === 'function') {
+    validateHsCodeInputsInDOM();
   }
 }
 
@@ -1356,9 +1370,13 @@ function renderBatchExportChecklist() {
     html += '<div class="batch-group-header">' + escapeHtml(group.title) + '</div>';
     html += '<div class="batch-grid">';
     group.docs.forEach(function (doc) {
-      html += '<label class="batch-check-item">';
-      html += '<input type="checkbox" value="' + escapeHtml(doc.key) + '" onchange="handleBatchDocCheckboxChange(this)" />';
-      html += '<span>' + escapeHtml(doc.label) + '</span>';
+      const isExportLocked = typeof isDocExportLocked_ === 'function' && isDocExportLocked_(doc.key);
+      html += '<label class="batch-check-item' + (isExportLocked ? ' is-exported-locked' : '') + '">';
+      html += '<input type="checkbox" value="' + escapeHtml(doc.key) + '" onchange="handleBatchDocCheckboxChange(this)"' + (isExportLocked ? ' disabled data-export-locked="true"' : '') + ' />';
+      html += '<span class="batch-check-label">' + escapeHtml(doc.label) + '</span>';
+      if (isExportLocked) {
+        html += '<span class="batch-exported-badge">Đã xuất</span>';
+      }
       html += '</label>';
     });
     html += '</div></div>';
@@ -1369,7 +1387,9 @@ function renderBatchExportChecklist() {
   if (typeof initBatchExportModalUi_ === 'function') {
     initBatchExportModalUi_();
   }
-  if (typeof updateBatchSelectionCounter_ === 'function') {
+  if (typeof syncBatchExportLockUi_ === 'function') {
+    syncBatchExportLockUi_();
+  } else if (typeof updateBatchSelectionCounter_ === 'function') {
     updateBatchSelectionCounter_();
   }
 }

@@ -14,20 +14,18 @@ import {
   X,
 } from 'lucide-react';
 import { GAS_FILES, GasSourceFile, buildLivePreviewHtml } from './gasPreviewHelper';
-import codeGs from '../Code.gs?raw';
-import gsDocEngineGs from '../GS_Doc_Engine.gs?raw';
 import indexHtml from '../Index.html?raw';
 import cssStyleHtml from '../CSS_Style.html?raw';
 import viewLoginSidebarHtml from '../View_Login_Sidebar.html?raw';
+import viewDocumentFormsHtml from '../View_Document_Forms.html?raw';
 import jsRenderFormsHtml from '../JS_Render_Forms.html?raw';
 import jsAppStateHtml from '../JS_App_State.html?raw';
 
 const MODIFIED_FILE_IDS = [
-  'Code.gs',
-  'GS_Doc_Engine.gs',
   'Index.html',
   'CSS_Style.html',
   'View_Login_Sidebar.html',
+  'View_Document_Forms.html',
   'JS_Render_Forms.html',
   'JS_App_State.html',
 ] as const;
@@ -36,28 +34,12 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
   const byId = new Map<string, GasSourceFile>();
   GAS_FILES.forEach((f) => byId.set(f.id, f));
 
-  byId.set('Code.gs', {
-    id: 'Code.gs',
-    filename: 'Code.gs',
-    gasType: 'gs',
-    category: 'Backend (.gs)',
-    description: 'Deployment guidance for "Execute as: User accessing the web app" to isolate Drive storage per user',
-    content: codeGs,
-  });
-  byId.set('GS_Doc_Engine.gs', {
-    id: 'GS_Doc_Engine.gs',
-    filename: 'GS_Doc_Engine.gs',
-    gasType: 'gs',
-    category: 'Backend (.gs)',
-    description: 'Max 5 docs/batch enforcement, save exports to signed-in user Drive (XNK_Documents) & clean preview temp files',
-    content: gsDocEngineGs,
-  });
   byId.set('Index.html', {
     id: 'Index.html',
     filename: 'Index.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Initialize forest-green batch export modal UI & Web App deployment comment',
+    description: 'Updated Student Guide & Notes modal to 7 numbered items in exact order',
     content: indexHtml,
   });
   byId.set('CSS_Style.html', {
@@ -65,7 +47,7 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'CSS_Style.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Bare red sequential-lock arrow left of label & forest-green batch export modal styling',
+    description: 'Bare red sequential-lock arrow left of label, HS Code error message & exported-locked batch item styling',
     content: cssStyleHtml,
   });
   byId.set('View_Login_Sidebar.html', {
@@ -73,15 +55,23 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'View_Login_Sidebar.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Moved bare red sequential-lock arrow directly to the left of each document label',
+    description: 'XNK workflow chronology step indices & bare red arrow left of each document label',
     content: viewLoginSidebarHtml,
+  });
+  byId.set('View_Document_Forms.html', {
+    id: 'View_Document_Forms.html',
+    filename: 'View_Document_Forms.html',
+    gasType: 'html',
+    category: 'Frontend (.html)',
+    description: 'Renamed batch export helper button to "Chọn 5 chứng từ"',
+    content: viewDocumentFormsHtml,
   });
   byId.set('JS_Render_Forms.html', {
     id: 'JS_Render_Forms.html',
     filename: 'JS_Render_Forms.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Batch export checklist with live max-5 change guard and modal UI hook',
+    description: '8-digit HS Code error rendering ("Sai HS Code") & exported-locked state in batch export checklist',
     content: jsRenderFormsHtml,
   });
   byId.set('JS_App_State.html', {
@@ -89,7 +79,7 @@ const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
     filename: 'JS_App_State.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Max 5 batch export limit, live selection counter, forest-green modal UI normalizer & top-right close button',
+    description: '8-digit HS Code validation, XNK workflow unlock order, "Chọn 5 chứng từ" next-5 selection & post-export lock reset on exit+data change',
     content: jsAppStateHtml,
   });
 

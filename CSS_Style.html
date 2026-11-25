@@ -403,6 +403,7 @@
     font-size: 14px;
     line-height: 1;
     background: transparent !important;
+    background-color: transparent !important;
     border: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
@@ -1128,6 +1129,15 @@
     line-height: 1.25;
   }
 
+  .hs-error-msg {
+    color: #DC2626;
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 3px;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+
   .checkbox-field-wrap {
     display: inline-flex;
     align-items: center;
@@ -1503,6 +1513,44 @@
     border-color: #7EB89A;
     font-weight: 600;
     color: #134E3A;
+  }
+
+  .batch-check-item.is-exported-locked {
+    background: #F1F5F9;
+    border-color: #CBD5E1;
+    color: #64748B;
+    cursor: not-allowed;
+    opacity: 0.78;
+  }
+
+  .batch-check-item.is-exported-locked:hover {
+    background: #F1F5F9;
+  }
+
+  .batch-check-item.is-exported-locked input[type="checkbox"] {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .batch-check-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .batch-exported-badge {
+    margin-left: auto;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #DCFCE7;
+    border: 1px solid #86EFAC;
+    color: #166534;
+    font-size: 10.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .batch-check-item input[type="checkbox"] {
