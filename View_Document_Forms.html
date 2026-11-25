@@ -20,9 +20,10 @@
         <span style="font-size:13px; color:var(--text-secondary);">
           Chọn các chứng từ cần tạo đồng thời trên Google Drive (Google Docs &amp; PDF):
         </span>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllBatchCheckboxes(true)">Chọn 5 chứng từ</button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAllBatchCheckboxes(false)">Bỏ chọn tất cả</button>
+          <span id="batchSelectionCounter" class="batch-selection-counter">Đã chọn: 0 / 5 chứng từ</span>
         </div>
       </div>
 
@@ -42,23 +43,43 @@
 </div>
 
 <!-- ========================================================================
-     CLEAR DATA CONFIRMATION MODAL (No window.confirm)
+     CLEAR DATA CONFIRMATION MODAL (Forest Green Theme, No window.confirm)
      ======================================================================== -->
-<div id="clearConfirmModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="clearModalTitle">
-  <div class="modal-dialog modal-sm">
-    <div class="modal-header">
-      <h2 id="clearModalTitle" class="modal-title">Xác nhận xóa dữ liệu</h2>
-      <button type="button" class="modal-close" onclick="closeClearConfirmModal()" aria-label="Đóng">&times;</button>
+<div id="clearConfirmModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="clearModalTitle" onclick="if (event.target === this) closeClearConfirmModal()">
+  <div class="modal-dialog modal-sm forest-confirm-modal-card">
+    <div class="batch-modal-header forest-confirm-modal-header">
+      <h2 id="clearModalTitle" class="batch-modal-title">Xác nhận xóa dữ liệu</h2>
+      <button type="button" id="btnClearModalCloseX" class="batch-modal-close-btn" onclick="closeClearConfirmModal()" aria-label="Đóng" title="Đóng">&#10005;</button>
     </div>
-    <div class="modal-body">
-      <p style="margin:0; font-size:13px; color:var(--text-secondary);">
-        Bạn có chắc chắn muốn xóa toàn bộ dữ liệu đang nhập trên biểu mẫu hiện tại không?
-        (Bản nháp đã lưu trên Google Sheet sẽ chỉ bị ghi đè khi bạn bấm <strong>Lưu nháp</strong>.)
+    <div class="forest-confirm-modal-body">
+      <p id="clearConfirmModalMessage" class="forest-confirm-modal-text">
+        Bạn có chắc chắn muốn xóa toàn bộ dữ liệu đang nhập, bản nháp đã lưu và đặt lại trạng thái khóa "Đã xuất" trong Xuất hàng loạt không?
       </p>
     </div>
-    <div class="modal-footer">
-      <button type="button" class="btn btn-secondary" onclick="closeClearConfirmModal()">Hủy</button>
-      <button type="button" class="btn btn-danger-outline" onclick="confirmClearData()">Xác nhận xóa</button>
+    <div class="forest-confirm-modal-footer">
+      <button type="button" class="btn btn-secondary forest-confirm-cancel-btn" onclick="closeClearConfirmModal()">Hủy</button>
+      <button type="button" class="btn btn-primary forest-confirm-action-btn" onclick="confirmClearData()">Xác nhận xóa</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================================
+     HISTORY DELETE CONFIRMATION MODAL (Forest Green Theme, No window.confirm)
+     ======================================================================== -->
+<div id="historyDeleteConfirmModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="historyDeleteModalTitle" onclick="if (event.target === this) closeHistoryDeleteConfirmModal()">
+  <div class="modal-dialog modal-sm forest-confirm-modal-card">
+    <div class="batch-modal-header forest-confirm-modal-header">
+      <h2 id="historyDeleteModalTitle" class="batch-modal-title">Xác nhận xóa lịch sử chứng từ</h2>
+      <button type="button" id="btnHistoryDeleteModalCloseX" class="batch-modal-close-btn" onclick="closeHistoryDeleteConfirmModal()" aria-label="Đóng" title="Đóng">&#10005;</button>
+    </div>
+    <div class="forest-confirm-modal-body">
+      <p id="historyDeleteConfirmMessage" class="forest-confirm-modal-text">
+        Bạn có chắc chắn muốn xóa lịch sử xuất chứng từ, chuyển các tệp liên quan trong Google Drive cá nhân vào thùng rác và mở khóa lại danh sách Xuất hàng loạt không?
+      </p>
+    </div>
+    <div class="forest-confirm-modal-footer">
+      <button type="button" class="btn btn-secondary forest-confirm-cancel-btn" onclick="closeHistoryDeleteConfirmModal()">Hủy</button>
+      <button type="button" id="btnConfirmHistoryDelete" class="btn btn-primary forest-confirm-action-btn" onclick="confirmDeleteExportHistory()">Xác nhận xóa</button>
     </div>
   </div>
 </div>

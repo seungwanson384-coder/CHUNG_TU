@@ -14,73 +14,53 @@ import {
   X,
 } from 'lucide-react';
 import { GAS_FILES, GasSourceFile, buildLivePreviewHtml } from './gasPreviewHelper';
-import indexHtml from '../Index.html?raw';
-import cssStyleHtml from '../CSS_Style.html?raw';
-import viewLoginSidebarHtml from '../View_Login_Sidebar.html?raw';
+import codeGs from '../Code.gs?raw';
 import viewDocumentFormsHtml from '../View_Document_Forms.html?raw';
-import jsRenderFormsHtml from '../JS_Render_Forms.html?raw';
 import jsAppStateHtml from '../JS_App_State.html?raw';
+import jsRenderFormsHtml from '../JS_Render_Forms.html?raw';
 
 const MODIFIED_FILE_IDS = [
-  'Index.html',
-  'CSS_Style.html',
-  'View_Login_Sidebar.html',
+  'Code.gs',
   'View_Document_Forms.html',
-  'JS_Render_Forms.html',
   'JS_App_State.html',
+  'JS_Render_Forms.html',
 ] as const;
 
 const DISPLAY_GAS_FILES: GasSourceFile[] = (() => {
   const byId = new Map<string, GasSourceFile>();
   GAS_FILES.forEach((f) => byId.set(f.id, f));
 
-  byId.set('Index.html', {
-    id: 'Index.html',
-    filename: 'Index.html',
-    gasType: 'html',
-    category: 'Frontend (.html)',
-    description: 'Updated Student Guide & Notes modal to 7 numbered items in exact order',
-    content: indexHtml,
-  });
-  byId.set('CSS_Style.html', {
-    id: 'CSS_Style.html',
-    filename: 'CSS_Style.html',
-    gasType: 'html',
-    category: 'Frontend (.html)',
-    description: 'Bare red sequential-lock arrow left of label, HS Code error message & exported-locked batch item styling',
-    content: cssStyleHtml,
-  });
-  byId.set('View_Login_Sidebar.html', {
-    id: 'View_Login_Sidebar.html',
-    filename: 'View_Login_Sidebar.html',
-    gasType: 'html',
-    category: 'Frontend (.html)',
-    description: 'XNK workflow chronology step indices & bare red arrow left of each document label',
-    content: viewLoginSidebarHtml,
+  byId.set('Code.gs', {
+    id: 'Code.gs',
+    filename: 'Code.gs',
+    gasType: 'gs',
+    category: 'Backend (.gs)',
+    description: 'Per-user batch-export "Đã xuất" lock persistence & automatic reset on deleteUserExportHistory and empty saveUserDraft',
+    content: codeGs,
   });
   byId.set('View_Document_Forms.html', {
     id: 'View_Document_Forms.html',
     filename: 'View_Document_Forms.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: 'Renamed batch export helper button to "Chọn 5 chứng từ"',
+    description: 'Batch export selection counter (0 / 5) in toolbar & updated confirmation copy for resetting "Đã xuất" locks on clear/history delete',
     content: viewDocumentFormsHtml,
-  });
-  byId.set('JS_Render_Forms.html', {
-    id: 'JS_Render_Forms.html',
-    filename: 'JS_Render_Forms.html',
-    gasType: 'html',
-    category: 'Frontend (.html)',
-    description: '8-digit HS Code error rendering ("Sai HS Code") & exported-locked state in batch export checklist',
-    content: jsRenderFormsHtml,
   });
   byId.set('JS_App_State.html', {
     id: 'JS_App_State.html',
     filename: 'JS_App_State.html',
     gasType: 'html',
     category: 'Frontend (.html)',
-    description: '8-digit HS Code validation, XNK workflow unlock order, "Chọn 5 chứng từ" next-5 selection & post-export lock reset on exit+data change',
+    description: 'Centralized resetBatchExportLockState_, backend UserProperties sync, and immediate checklist reset on Xóa lịch sử & Xóa dữ liệu',
     content: jsAppStateHtml,
+  });
+  byId.set('JS_Render_Forms.html', {
+    id: 'JS_Render_Forms.html',
+    filename: 'JS_Render_Forms.html',
+    gasType: 'html',
+    category: 'Frontend (.html)',
+    description: 'Immediate batch export checklist & result reset helper (clearAllSingleExportResultBoxes_ & renderBatchExportChecklist)',
+    content: jsRenderFormsHtml,
   });
 
   return MODIFIED_FILE_IDS.map((id) => byId.get(id)).filter(

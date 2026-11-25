@@ -245,6 +245,11 @@ const APP_STATE = {
   items: [createEmptyItem()],
   containers: [createEmptyContainer()],
   exportResults: {},
+  exportHistory: [],
+  exportHistoryLoaded: false,
+  exportHistoryLoading: false,
+  pendingHistoryDeleteIds: null,
+  lastProgressArrowKey: '',
   exportedLockedDocs: {},
   hasDataChanged: false,
   lastExportLockSnapshot: '',
@@ -290,15 +295,29 @@ function loadBrandLogoOnStart() {
   }
 }
 
-function showLoading(message) {
+function showLoading(message, subMessage) {
   const overlay = document.getElementById('loadingOverlay');
   const textEl = document.getElementById('loadingMessage');
+  const subEl = document.getElementById('loadingSubMessage');
   if (textEl) textEl.textContent = message || 'Loading...';
-  if (overlay) overlay.classList.remove('hidden');
+  if (subEl) {
+    const cleanSub = subMessage ? String(subMessage).trim() : '';
+    subEl.textContent = cleanSub;
+    subEl.classList.toggle('hidden', !cleanSub);
+  }
+  if (overlay) {
+    overlay.style.zIndex = '99999';
+    overlay.classList.remove('hidden');
+  }
 }
 
 function hideLoading() {
   const overlay = document.getElementById('loadingOverlay');
+  const subEl = document.getElementById('loadingSubMessage');
+  if (subEl) {
+    subEl.textContent = '';
+    subEl.classList.add('hidden');
+  }
   if (overlay) overlay.classList.add('hidden');
 }
 
@@ -412,7 +431,7 @@ function toggleInspectionDocEnabled(docKey, checked, ev) {
 }
 
 function isStepLocked_(tabKey) {
-  if (!tabKey || tabKey === 'MASTER_PARTIES' || isAdminTab_(tabKey)) {
+  if (!tabKey || tabKey === 'MASTER_PARTIES' || tabKey === 'EXPORT_HISTORY' || isAdminTab_(tabKey)) {
     return false;
   }
   if (APP_STATE.adminUnlockAllSteps) {
@@ -652,6 +671,61 @@ function getCurrentProgressStepKey_() {
   return DOC_STEP_ORDER[maxIdx];
 }
 
+function scrollSidebarToActiveProgressArrow_(targetKey, force) {
+  const seqLockOn = !APP_STATE.adminUnlockAllSteps;
+  if (!seqLockOn || !targetKey) {
+    if (!seqLockOn) {
+      APP_STATE.lastProgressArrowKey = '';
+    }
+    return;
+  }
+
+  const changed = APP_STATE.lastProgressArrowKey !== targetKey;
+  if (!changed && !force) {
+    return;
+  }
+  APP_STATE.lastProgressArrowKey = targetKey;
+
+  const sidebar = document.getElementById('appSidebar');
+  if (!sidebar) return;
+
+  const targetBtn = sidebar.querySelector('.sidebar-nav-btn[data-nav="' + targetKey + '"]');
+  if (!targetBtn) return;
+
+  const parentGroup = targetBtn.closest('.sidebar-group[data-group-id]');
+  if (parentGroup && parentGroup.classList.contains('collapsed')) {
+    const groupId = parentGroup.getAttribute('data-group-id');
+    if (groupId) {
+      setSidebarGroupExpanded(groupId, true);
+    }
+  }
+
+  const performScroll = function () {
+    const freshBtn = sidebar.querySelector('.sidebar-nav-btn[data-nav="' + targetKey + '"]');
+    if (freshBtn && typeof freshBtn.scrollIntoView === 'function') {
+      try {
+        freshBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (e) {
+        freshBtn.scrollIntoView(false);
+      }
+    }
+  };
+
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(performScroll);
+  } else {
+    setTimeout(performScroll, 0);
+  }
+}
+
+function syncSidebarProgressArrowScroll_(force) {
+  if (APP_STATE.adminUnlockAllSteps) return;
+  const targetKey = getCurrentProgressStepKey_();
+  if (targetKey) {
+    scrollSidebarToActiveProgressArrow_(targetKey, Boolean(force));
+  }
+}
+
 function updateSidebarLockState_() {
   recomputeUnlockedStepIndex_();
   const prevBlUnlocked = APP_STATE._lastBlUnlockedState;
@@ -662,8 +736,9 @@ function updateSidebarLockState_() {
 
   document.querySelectorAll('.sidebar-nav-btn[data-nav]').forEach(function (btn) {
     const navKey = btn.getAttribute('data-nav');
-    const locked = isStepLocked_(navKey);
-    const isCurrentStep = Boolean(seqLockOn && currentProgressKey && navKey === currentProgressKey);
+    const isIndependent = btn.getAttribute('data-independent') === 'true' || navKey === 'EXPORT_HISTORY';
+    const locked = isIndependent ? false : isStepLocked_(navKey);
+    const isCurrentStep = Boolean(!isIndependent && seqLockOn && currentProgressKey && navKey === currentProgressKey);
     btn.classList.toggle('locked', locked);
     btn.classList.toggle('progress-current', isCurrentStep);
     btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
@@ -712,12 +787,19 @@ function updateSidebarLockState_() {
     APP_STATE._lastBlUnlockedState = nowBlUnlocked;
     updateFieldAndTableLocksInDOM_();
   }
+
+  if (seqLockOn && currentProgressKey) {
+    scrollSidebarToActiveProgressArrow_(currentProgressKey, false);
+  } else if (!seqLockOn) {
+    APP_STATE.lastProgressArrowKey = '';
+  }
 }
 
 function toggleAdminUnlockAllSteps() {
   if (!isAdminUser_()) return;
   APP_STATE.adminUnlockAllSteps = !APP_STATE.adminUnlockAllSteps;
   APP_STATE.sequentialLock = !APP_STATE.adminUnlockAllSteps;
+  APP_STATE.lastProgressArrowKey = '';
   updateSidebarLockState_();
   updateFieldAndTableLocksInDOM_();
   showToast(
@@ -1282,6 +1364,13 @@ function switchTab(tabKey) {
   if (isAdminTab_(tabKey) && isAdminUser_()) {
     loadAdminAccountsTables();
   }
+
+  if (tabKey === 'EXPORT_HISTORY') {
+    if (typeof renderExportHistoryView === 'function') {
+      renderExportHistoryView();
+    }
+    loadUserExportHistory_(false);
+  }
 }
 
 /* ==========================================================================
@@ -1322,6 +1411,10 @@ function handleLoginSubmit(event) {
       });
       APP_STATE.adminUnlockAllSteps = false;
       APP_STATE.exportResults = {};
+      APP_STATE.exportHistory = [];
+      APP_STATE.exportHistoryLoaded = false;
+      APP_STATE.exportHistoryLoading = false;
+      APP_STATE.lastProgressArrowKey = '';
       restoreDraftState(res.draftJson != null ? res.draftJson : res.draft);
 
       const isAdmin = isAdminUser_(APP_STATE.user);
@@ -1774,6 +1867,7 @@ function loadInitialDropdowns() {
       refreshCurrencyDropdownSuggestions_();
       updateSidebarLockState_();
       switchTab('MASTER_PARTIES');
+      loadUserExportHistory_(false);
       validateContainerInputsInDOM();
       validateHsCodeInputsInDOM();
       updateCurrencyBadgesInDOM_();
@@ -1831,6 +1925,40 @@ function handleSaveDraft() {
     .saveUserDraft(APP_STATE.user.maSV, JSON.stringify(draftPayload));
 }
 
+function initClearConfirmModalUi_() {
+  const modal = document.getElementById('clearConfirmModal');
+  if (!modal) return;
+  const card = modal.firstElementChild;
+  if (!card) return;
+  card.classList.add('forest-confirm-modal-card');
+
+  const headerEl = card.querySelector('.forest-confirm-modal-header, .batch-modal-header, .modal-header');
+  if (headerEl) {
+    headerEl.classList.add('batch-modal-header', 'forest-confirm-modal-header');
+    const titleEl = headerEl.querySelector('h1, h2, h3, .modal-title, .batch-modal-title');
+    if (titleEl) {
+      titleEl.classList.add('batch-modal-title');
+    }
+    // Remove any stray small close button outside or duplicate inside header
+    Array.prototype.slice.call(card.querySelectorAll('button.modal-close')).forEach(function (stray) {
+      if (stray.id !== 'btnClearModalCloseX' && stray.parentNode) {
+        stray.parentNode.removeChild(stray);
+      }
+    });
+    if (!headerEl.querySelector('#btnClearModalCloseX')) {
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.id = 'btnClearModalCloseX';
+      closeBtn.className = 'batch-modal-close-btn';
+      closeBtn.setAttribute('aria-label', 'Đóng');
+      closeBtn.title = 'Đóng';
+      closeBtn.innerHTML = '&#10005;';
+      closeBtn.setAttribute('onclick', 'closeClearConfirmModal()');
+      headerEl.appendChild(closeBtn);
+    }
+  }
+}
+
 function openClearConfirmModal() {
   if (isAdminUser_()) {
     showLoading('Loading...');
@@ -1838,6 +1966,7 @@ function openClearConfirmModal() {
       .withSuccessHandler(function (res) {
         hideLoading();
         if (res && res.success) {
+          resetBatchExportLockState_({ syncBackend: true, clearSingleResults: true });
           showToast(
             'Đã xóa dữ liệu nháp của ' + (res.clearedCount || 0) + ' tài khoản Sinh viên (tài khoản đăng nhập và dữ liệu Admin được giữ nguyên).',
             'success'
@@ -1854,11 +1983,13 @@ function openClearConfirmModal() {
     return;
   }
 
+  initClearConfirmModalUi_();
   const modal = document.getElementById('clearConfirmModal');
   if (!modal) return;
-  const msgEl = modal.querySelector('p');
+  const msgEl = document.getElementById('clearConfirmModalMessage') || modal.querySelector('p');
   if (msgEl) {
-    msgEl.textContent = 'Bạn có chắc chắn muốn xóa toàn bộ dữ liệu đang nhập không?';
+    msgEl.textContent =
+      'Bạn có chắc chắn muốn xóa toàn bộ dữ liệu đang nhập, bản nháp đã lưu và đặt lại trạng thái khóa "Đã xuất" trong Xuất hàng loạt không?';
   }
   modal.classList.remove('hidden');
 }
@@ -1874,7 +2005,11 @@ function confirmClearData() {
   APP_STATE.items = [createEmptyItem()];
   APP_STATE.containers = [createEmptyContainer()];
   APP_STATE.exportResults = {};
+  APP_STATE.exportedLockedDocs = {};
+  APP_STATE.hasDataChanged = false;
+  APP_STATE.lastExportLockSnapshot = '';
   APP_STATE.unlockedStepIndex = 0;
+  APP_STATE.lastProgressArrowKey = '';
   APP_STATE.inspectionEnabled = createDefaultInspectionEnabled_();
   APP_STATE.visitedTabs = {};
   APP_STATE.activeTab = 'MASTER_PARTIES';
@@ -1896,23 +2031,25 @@ function confirmClearData() {
   validateContainerInputsInDOM();
   validateHsCodeInputsInDOM();
   updateCurrencyBadgesInDOM_();
-  markFormDataChanged_();
+
+  // Reset post-export "Đã xuất" lock, hasDataChanged tracking, persisted lock & re-render Batch Export checklist immediately
+  resetBatchExportLockState_({ syncBackend: true, clearSingleResults: true });
 
   if (APP_STATE.user && APP_STATE.user.maSV && !isAdminUser_()) {
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.success) {
-          showToast('Đã xóa toàn bộ dữ liệu đang nhập và bản nháp đã lưu.', 'success');
+          showToast('Đã xóa toàn bộ dữ liệu đang nhập, bản nháp đã lưu và mở khóa danh sách Xuất hàng loạt.', 'success');
         } else {
-          showToast('Đã xóa dữ liệu trên biểu mẫu hiện tại.', 'info');
+          showToast('Đã xóa dữ liệu trên biểu mẫu hiện tại và mở khóa danh sách Xuất hàng loạt.', 'info');
         }
       })
       .withFailureHandler(function () {
-        showToast('Đã xóa dữ liệu trên biểu mẫu hiện tại.', 'info');
+        showToast('Đã xóa dữ liệu trên biểu mẫu hiện tại và mở khóa danh sách Xuất hàng loạt.', 'info');
       })
       .saveUserDraft(APP_STATE.user.maSV, '');
   } else {
-    showToast('Đã xóa toàn bộ dữ liệu trên biểu mẫu hiện tại.', 'info');
+    showToast('Đã xóa toàn bộ dữ liệu trên biểu mẫu hiện tại và mở khóa danh sách Xuất hàng loạt.', 'info');
   }
 }
 
@@ -1922,6 +2059,7 @@ function handleLogout() {
   closeContSealLookupModal();
   closeDecTypeLookupModal();
   closeClearConfirmModal();
+  closeHistoryDeleteConfirmModal();
   closeBatchExportModal();
   closeDocPreviewModal();
   APP_STATE.user = null;
@@ -1929,6 +2067,11 @@ function handleLogout() {
   APP_STATE.items = [createEmptyItem()];
   APP_STATE.containers = [createEmptyContainer()];
   APP_STATE.exportResults = {};
+  APP_STATE.exportHistory = [];
+  APP_STATE.exportHistoryLoaded = false;
+  APP_STATE.exportHistoryLoading = false;
+  APP_STATE.pendingHistoryDeleteIds = null;
+  APP_STATE.lastProgressArrowKey = '';
   APP_STATE.exportedLockedDocs = {};
   APP_STATE.hasDataChanged = false;
   APP_STATE.lastExportLockSnapshot = '';
@@ -2487,7 +2630,11 @@ function handleExportSingle(docKey) {
     return;
   }
 
-  showLoading('Loading...');
+  const docTitle =
+    typeof DOC_FORM_CONFIGS !== 'undefined' && DOC_FORM_CONFIGS[docKey] && DOC_FORM_CONFIGS[docKey].title
+      ? DOC_FORM_CONFIGS[docKey].title
+      : docKey;
+  showLoading('Đang xuất chứng từ ' + docTitle + '...', 'Đang tạo Google Docs & PDF vào Drive cá nhân (XNK_Documents)...');
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -2500,6 +2647,7 @@ function handleExportSingle(docKey) {
       res.results.forEach(function (item) {
         APP_STATE.exportResults[item.docKey] = item;
       });
+      syncExportHistoryAfterExport_(res, 'SINGLE');
       renderSingleExportResultBox(docKey);
       showToast('Xuất chứng từ thành công!', 'success');
     })
@@ -2593,8 +2741,28 @@ function bindExportLockBeforeUnload_() {
   });
 }
 
+function syncExportLockToBackend_(lockedDocsMap) {
+  if (!APP_STATE.user || !APP_STATE.user.maSV) return;
+  if (!window.google || !google.script || !google.script.run) return;
+  const keys = lockedDocsMap && typeof lockedDocsMap === 'object' ? Object.keys(lockedDocsMap) : [];
+  if (keys.length === 0) {
+    if (typeof google.script.run.clearUserExportLockState === 'function') {
+      google.script.run
+        .withSuccessHandler(function () {})
+        .withFailureHandler(function () {})
+        .clearUserExportLockState(APP_STATE.user.maSV);
+    }
+  } else if (typeof google.script.run.saveUserExportLockState === 'function') {
+    google.script.run
+      .withSuccessHandler(function () {})
+      .withFailureHandler(function () {})
+      .saveUserExportLockState(APP_STATE.user.maSV, lockedDocsMap);
+  }
+}
+
 function restorePersistedExportLockForCurrentUser_() {
   bindExportLockBeforeUnload_();
+  APP_STATE._exportLockResetInSession = false;
   const userKey = getExportLockUserKey_();
   const stored = loadPersistedExportLock_(userKey);
   const currentSnap = computeFormDataSnapshot_();
@@ -2604,10 +2772,47 @@ function restorePersistedExportLockForCurrentUser_() {
     APP_STATE.lastExportLockSnapshot = currentSnap;
     APP_STATE.hasDataChanged = false;
     savePersistedExportLock_(userKey, APP_STATE.exportedLockedDocs, APP_STATE.lastExportLockSnapshot);
-  } else {
-    APP_STATE.exportedLockedDocs = {};
-    APP_STATE.lastExportLockSnapshot = currentSnap;
-    APP_STATE.hasDataChanged = false;
+    return;
+  }
+
+  APP_STATE.exportedLockedDocs = {};
+  APP_STATE.lastExportLockSnapshot = currentSnap;
+  APP_STATE.hasDataChanged = false;
+
+  // Hydrate persisted export lock from backend UserProperties if local storage is empty
+  if (
+    APP_STATE.user &&
+    APP_STATE.user.maSV &&
+    window.google &&
+    google.script &&
+    google.script.run &&
+    typeof google.script.run.getUserExportLockState === 'function'
+  ) {
+    const reqMaSV = APP_STATE.user.maSV;
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (APP_STATE._exportLockResetInSession) return;
+        if (!APP_STATE.user || APP_STATE.user.maSV !== reqMaSV) return;
+        if (
+          res &&
+          res.success &&
+          res.exportedLockedDocs &&
+          typeof res.exportedLockedDocs === 'object' &&
+          Object.keys(res.exportedLockedDocs).length > 0
+        ) {
+          APP_STATE.exportedLockedDocs = Object.assign({}, res.exportedLockedDocs);
+          APP_STATE.lastExportLockSnapshot = computeFormDataSnapshot_();
+          APP_STATE.hasDataChanged = false;
+          savePersistedExportLock_(getExportLockUserKey_(), APP_STATE.exportedLockedDocs, APP_STATE.lastExportLockSnapshot);
+          if (typeof renderBatchExportChecklist === 'function') {
+            renderBatchExportChecklist();
+          } else {
+            syncBatchExportLockUi_();
+          }
+        }
+      })
+      .withFailureHandler(function () {})
+      .getUserExportLockState(reqMaSV);
   }
 }
 
@@ -2650,6 +2855,7 @@ function finalizeExportLockOnExit_() {
     APP_STATE.hasDataChanged = false;
     APP_STATE.lastExportLockSnapshot = '';
     clearPersistedExportLock_(userKey);
+    syncExportLockToBackend_({});
   } else {
     savePersistedExportLock_(userKey, lockedDocs, APP_STATE.lastExportLockSnapshot || currentSnap);
   }
@@ -2664,10 +2870,80 @@ function lockExportedDocs_(docKeys) {
       APP_STATE.exportedLockedDocs[k] = true;
     }
   });
+  APP_STATE._exportLockResetInSession = false;
   APP_STATE.lastExportLockSnapshot = computeFormDataSnapshot_();
   APP_STATE.hasDataChanged = false;
   savePersistedExportLock_(getExportLockUserKey_(), APP_STATE.exportedLockedDocs, APP_STATE.lastExportLockSnapshot);
+  syncExportLockToBackend_(APP_STATE.exportedLockedDocs);
   syncBatchExportLockUi_();
+}
+
+function resetBatchExportLockState_(options) {
+  const opts = options && typeof options === 'object' ? options : {};
+  const userKey = getExportLockUserKey_();
+  const specificKeys =
+    Array.isArray(opts.docKeys) && opts.docKeys.length > 0 ? opts.docKeys : null;
+  const isFullReset = !specificKeys || opts.docKeys === 'ALL';
+
+  if (isFullReset) {
+    APP_STATE._exportLockResetInSession = true;
+    APP_STATE.exportedLockedDocs = {};
+    APP_STATE.hasDataChanged = false;
+    APP_STATE.lastExportLockSnapshot = computeFormDataSnapshot_();
+    if (opts.clearSingleResults) {
+      APP_STATE.exportResults = {};
+      if (typeof clearAllSingleExportResultBoxes_ === 'function') {
+        clearAllSingleExportResultBoxes_();
+      }
+    }
+    clearPersistedExportLock_(userKey);
+    if (opts.syncBackend !== false) {
+      syncExportLockToBackend_({});
+    }
+  } else {
+    if (!APP_STATE.exportedLockedDocs) {
+      APP_STATE.exportedLockedDocs = {};
+    }
+    specificKeys.forEach(function (dk) {
+      if (dk) {
+        delete APP_STATE.exportedLockedDocs[dk];
+        if (APP_STATE.exportResults && APP_STATE.exportResults[dk]) {
+          delete APP_STATE.exportResults[dk];
+          const box = document.getElementById('exportResult_' + dk);
+          if (box) {
+            box.innerHTML = '';
+            box.classList.add('hidden');
+          }
+        }
+      }
+    });
+
+    if (Object.keys(APP_STATE.exportedLockedDocs).length === 0) {
+      APP_STATE._exportLockResetInSession = true;
+      APP_STATE.hasDataChanged = false;
+      APP_STATE.lastExportLockSnapshot = computeFormDataSnapshot_();
+      clearPersistedExportLock_(userKey);
+      if (opts.syncBackend !== false) {
+        syncExportLockToBackend_({});
+      }
+    } else {
+      savePersistedExportLock_(
+        userKey,
+        APP_STATE.exportedLockedDocs,
+        APP_STATE.lastExportLockSnapshot || computeFormDataSnapshot_()
+      );
+      if (opts.syncBackend !== false) {
+        syncExportLockToBackend_(APP_STATE.exportedLockedDocs);
+      }
+    }
+  }
+
+  // Immediately re-render Batch Export modal checklist & reset selection counter cleanly
+  if (typeof renderBatchExportChecklist === 'function') {
+    renderBatchExportChecklist({ clearResults: isFullReset });
+  } else {
+    syncBatchExportLockUi_();
+  }
 }
 
 function syncBatchExportLockUi_() {
@@ -2925,7 +3201,11 @@ function openBatchExportModal() {
     return;
   }
 
-  initBatchExportModalUi_();
+  if (typeof renderBatchExportChecklist === 'function') {
+    renderBatchExportChecklist();
+  } else {
+    initBatchExportModalUi_();
+  }
   const resultsBox = document.getElementById('batchExportResults');
   if (resultsBox) resultsBox.classList.add('hidden');
   document.getElementById('batchExportModal').classList.remove('hidden');
@@ -3015,7 +3295,15 @@ function handleExportBatch() {
     return;
   }
 
-  showLoading('Loading...');
+  const selectedLabels = selectedKeys.map(function (k) {
+    return typeof DOC_FORM_CONFIGS !== 'undefined' && DOC_FORM_CONFIGS[k] && DOC_FORM_CONFIGS[k].title
+      ? DOC_FORM_CONFIGS[k].title
+      : k;
+  });
+  showLoading(
+    'Đang xuất hàng loạt ' + selectedKeys.length + ' chứng từ...',
+    'Đang xử lý: ' + selectedLabels.join(', ')
+  );
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -3046,6 +3334,7 @@ function handleExportBatch() {
         listEl.appendChild(row);
       });
 
+      syncExportHistoryAfterExport_(res, 'BATCH');
       lockExportedDocs_(exportedKeys);
       boxEl.classList.remove('hidden');
       showToast('Đã xuất thành công ' + res.results.length + ' chứng từ vào Drive cá nhân và khóa các chứng từ đã xuất!', 'success');
@@ -3055,6 +3344,305 @@ function handleExportBatch() {
       showToast('Lỗi xuất hàng loạt: ' + (err && err.message ? err.message : err), 'error');
     })
     .generateDocuments(APP_STATE.user.maSV, selectedKeys, buildExportPayload());
+}
+
+/* ==========================================================================
+   PER-USER EXPORT HISTORY ("Lịch sử chứng từ") — STRICT USER SCOPING & SAFE DELETE
+   ========================================================================== */
+
+const EXPORT_HISTORY_LOCAL_PREFIX_ = 'xnk_export_history_v1_';
+
+function getUserHistoryLocalKey_() {
+  const maSV = APP_STATE.user && APP_STATE.user.maSV ? String(APP_STATE.user.maSV).trim().toUpperCase() : '';
+  const tenSV = APP_STATE.user && APP_STATE.user.tenSV ? String(APP_STATE.user.tenSV).trim().toLowerCase() : '';
+  if (!maSV) return '';
+  return EXPORT_HISTORY_LOCAL_PREFIX_ + (tenSV || 'user').replace(/[^a-z0-9_-]/g, '_') + '__' + maSV;
+}
+
+function readLocalFallbackHistory_() {
+  const key = getUserHistoryLocalKey_();
+  if (!key) return [];
+  try {
+    if (window.localStorage) {
+      const raw = window.localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    }
+  } catch (e) {}
+  return [];
+}
+
+function writeLocalFallbackHistory_(list) {
+  const key = getUserHistoryLocalKey_();
+  if (!key) return;
+  try {
+    if (window.localStorage) {
+      if (!Array.isArray(list) || list.length === 0) {
+        window.localStorage.removeItem(key);
+      } else {
+        window.localStorage.setItem(key, JSON.stringify(list.slice(0, 100)));
+      }
+    }
+  } catch (e) {}
+}
+
+function syncExportHistoryAfterExport_(res, mode) {
+  if (!APP_STATE.user || !APP_STATE.user.maSV) return;
+  if (res && Array.isArray(res.history)) {
+    APP_STATE.exportHistory = res.history.slice();
+    APP_STATE.exportHistoryLoaded = true;
+    writeLocalFallbackHistory_(APP_STATE.exportHistory);
+  } else if (res && Array.isArray(res.results) && res.results.length > 0) {
+    const nowIso = new Date().toISOString();
+    const stamp = Date.now();
+    const newEntries = res.results.map(function (item, idx) {
+      const docKey = String(item.docKey || '');
+      const docType =
+        item.docType ||
+        item.tabName ||
+        (typeof DOC_FORM_CONFIGS !== 'undefined' && DOC_FORM_CONFIGS[docKey] && DOC_FORM_CONFIGS[docKey].title) ||
+        docKey;
+      return {
+        id: 'hist_' + stamp + '_' + idx + '_' + Math.floor(Math.random() * 10000),
+        exportedAt: item.exportedAt || nowIso,
+        docKey: docKey,
+        docType: String(docType || ''),
+        docName: String(item.docName || docKey),
+        docUrl: String(item.docUrl || ''),
+        pdfUrl: String(item.pdfUrl || ''),
+        docId: String(item.docId || ''),
+        pdfId: String(item.pdfId || ''),
+        mode: String(mode || (res.results.length > 1 ? 'BATCH' : 'SINGLE'))
+      };
+    });
+    const existing = Array.isArray(APP_STATE.exportHistory) ? APP_STATE.exportHistory : [];
+    APP_STATE.exportHistory = newEntries.concat(existing).slice(0, 100);
+    APP_STATE.exportHistoryLoaded = true;
+    writeLocalFallbackHistory_(APP_STATE.exportHistory);
+  }
+
+  if (typeof renderExportHistoryView === 'function') {
+    renderExportHistoryView();
+  }
+}
+
+function loadUserExportHistory_(forceReload) {
+  if (!APP_STATE.user || !APP_STATE.user.maSV) return;
+  if (APP_STATE.exportHistoryLoading) return;
+  if (APP_STATE.exportHistoryLoaded && !forceReload) {
+    if (typeof renderExportHistoryView === 'function') {
+      renderExportHistoryView();
+    }
+    return;
+  }
+
+  const hasBackendRpc =
+    window.google &&
+    google.script &&
+    google.script.run &&
+    typeof google.script.run.getUserExportHistory === 'function';
+
+  if (!hasBackendRpc) {
+    APP_STATE.exportHistory = readLocalFallbackHistory_();
+    APP_STATE.exportHistoryLoaded = true;
+    APP_STATE.exportHistoryLoading = false;
+    if (typeof renderExportHistoryView === 'function') {
+      renderExportHistoryView();
+    }
+    return;
+  }
+
+  APP_STATE.exportHistoryLoading = true;
+  if (typeof renderExportHistoryView === 'function') {
+    renderExportHistoryView();
+  }
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      APP_STATE.exportHistoryLoading = false;
+      APP_STATE.exportHistoryLoaded = true;
+      if (res && res.success && Array.isArray(res.history)) {
+        APP_STATE.exportHistory = res.history.slice();
+        writeLocalFallbackHistory_(APP_STATE.exportHistory);
+      } else if (!Array.isArray(APP_STATE.exportHistory)) {
+        APP_STATE.exportHistory = [];
+      }
+      if (typeof renderExportHistoryView === 'function') {
+        renderExportHistoryView();
+      }
+    })
+    .withFailureHandler(function () {
+      APP_STATE.exportHistoryLoading = false;
+      APP_STATE.exportHistoryLoaded = true;
+      APP_STATE.exportHistory = readLocalFallbackHistory_();
+      if (typeof renderExportHistoryView === 'function') {
+        renderExportHistoryView();
+      }
+    })
+    .getUserExportHistory(APP_STATE.user.maSV);
+}
+
+function refreshUserExportHistory() {
+  loadUserExportHistory_(true);
+  showToast('Đã làm mới lịch sử chứng từ.', 'info');
+}
+
+function openHistoryDeleteConfirmModal(targetIds) {
+  const historyList = Array.isArray(APP_STATE.exportHistory) ? APP_STATE.exportHistory : [];
+  if (historyList.length === 0) {
+    showToast('Chưa có lịch sử xuất chứng từ nào để xóa.', 'info');
+    return;
+  }
+
+  const isAll = targetIds === 'ALL' || !Array.isArray(targetIds) || targetIds.length === 0;
+  APP_STATE.pendingHistoryDeleteIds = isAll ? 'ALL' : targetIds.slice();
+
+  const modal = document.getElementById('historyDeleteConfirmModal');
+  if (!modal) return;
+  const msgEl = document.getElementById('historyDeleteConfirmMessage');
+  if (msgEl) {
+    if (isAll) {
+      msgEl.textContent =
+        'Bạn có chắc chắn muốn xóa toàn bộ ' +
+        historyList.length +
+        ' bản ghi trong Lịch sử chứng từ, chuyển các tệp xuất tương ứng trong Google Drive cá nhân vào thùng rác và mở khóa lại danh sách Xuất hàng loạt không?';
+    } else {
+      msgEl.textContent =
+        'Bạn có chắc chắn muốn xóa bản ghi lịch sử chứng từ này, chuyển tệp xuất liên quan trong Google Drive cá nhân vào thùng rác và mở khóa lại chứng từ này trong Xuất hàng loạt không?';
+    }
+  }
+  modal.classList.remove('hidden');
+}
+
+function closeHistoryDeleteConfirmModal() {
+  const modal = document.getElementById('historyDeleteConfirmModal');
+  if (modal) modal.classList.add('hidden');
+  APP_STATE.pendingHistoryDeleteIds = null;
+}
+
+function confirmDeleteExportHistory() {
+  if (!APP_STATE.user || !APP_STATE.user.maSV) {
+    closeHistoryDeleteConfirmModal();
+    return;
+  }
+
+  const targetIds = APP_STATE.pendingHistoryDeleteIds || 'ALL';
+  const isAll = targetIds === 'ALL';
+  closeHistoryDeleteConfirmModal();
+
+  const hasBackendRpc =
+    window.google &&
+    google.script &&
+    google.script.run &&
+    typeof google.script.run.deleteUserExportHistory === 'function';
+
+  if (!hasBackendRpc) {
+    const prevHistory = Array.isArray(APP_STATE.exportHistory) ? APP_STATE.exportHistory : [];
+    const removedDocKeys = [];
+    if (isAll) {
+      APP_STATE.exportHistory = [];
+    } else {
+      const idSet = {};
+      targetIds.forEach(function (id) { idSet[String(id)] = true; });
+      APP_STATE.exportHistory = prevHistory.filter(function (entry) {
+        const entryId = String(entry && entry.id ? entry.id : '');
+        if (idSet[entryId]) {
+          if (entry && entry.docKey && removedDocKeys.indexOf(entry.docKey) === -1) {
+            removedDocKeys.push(entry.docKey);
+          }
+          return false;
+        }
+        return true;
+      });
+    }
+    writeLocalFallbackHistory_(APP_STATE.exportHistory);
+
+    if (isAll || APP_STATE.exportHistory.length === 0) {
+      resetBatchExportLockState_({ syncBackend: false, clearSingleResults: true });
+    } else if (removedDocKeys.length > 0) {
+      const stillInHistory = {};
+      APP_STATE.exportHistory.forEach(function (e) {
+        if (e && e.docKey) stillInHistory[e.docKey] = true;
+      });
+      const keysToUnlock = removedDocKeys.filter(function (dk) { return !stillInHistory[dk]; });
+      if (keysToUnlock.length > 0) {
+        resetBatchExportLockState_({ docKeys: keysToUnlock, syncBackend: false });
+      }
+    }
+
+    if (typeof renderExportHistoryView === 'function') {
+      renderExportHistoryView();
+    }
+    showToast(
+      isAll
+        ? 'Đã xóa toàn bộ lịch sử chứng từ và mở khóa danh sách Xuất hàng loạt.'
+        : 'Đã xóa bản ghi lịch sử chứng từ và cập nhật trạng thái Xuất hàng loạt.',
+      'success'
+    );
+    return;
+  }
+
+  showLoading(
+    isAll ? 'Đang xóa toàn bộ lịch sử chứng từ...' : 'Đang xóa bản ghi lịch sử chứng từ...',
+    'Đang chuyển các tệp xuất liên quan trong Google Drive cá nhân vào thùng rác...'
+  );
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      hideLoading();
+      if (!res || !res.success) {
+        showToast((res && res.message) || 'Không thể xóa lịch sử chứng từ.', 'error');
+        return;
+      }
+
+      // Update in-memory state and re-render ONLY the "Lịch sử chứng từ" view (never clear main app shell)
+      APP_STATE.exportHistory = Array.isArray(res.history) ? res.history.slice() : [];
+      APP_STATE.exportHistoryLoaded = true;
+      writeLocalFallbackHistory_(APP_STATE.exportHistory);
+
+      // Reset or unlock post-export "Đã xuất" state & re-render Batch Export checklist immediately
+      if (isAll || res.exportLockReset || APP_STATE.exportHistory.length === 0) {
+        resetBatchExportLockState_({ syncBackend: false, clearSingleResults: true });
+      } else if (Array.isArray(res.unlockedDocKeys) && res.unlockedDocKeys.length > 0) {
+        resetBatchExportLockState_({ docKeys: res.unlockedDocKeys, syncBackend: false });
+      } else if (res.exportedLockedDocs && typeof res.exportedLockedDocs === 'object') {
+        APP_STATE.exportedLockedDocs = Object.assign({}, res.exportedLockedDocs);
+        if (Object.keys(APP_STATE.exportedLockedDocs).length === 0) {
+          resetBatchExportLockState_({ syncBackend: false, clearSingleResults: true });
+        } else {
+          savePersistedExportLock_(
+            getExportLockUserKey_(),
+            APP_STATE.exportedLockedDocs,
+            APP_STATE.lastExportLockSnapshot || computeFormDataSnapshot_()
+          );
+          if (typeof renderBatchExportChecklist === 'function') {
+            renderBatchExportChecklist();
+          }
+        }
+      }
+
+      if (typeof renderExportHistoryView === 'function') {
+        renderExportHistoryView();
+      }
+
+      const trashedNote =
+        res.trashedCount > 0
+          ? ' và đã chuyển ' + res.trashedCount + ' tệp Drive vào thùng rác.'
+          : '.';
+      showToast(
+        (isAll
+          ? 'Đã xóa toàn bộ lịch sử chứng từ, mở khóa Xuất hàng loạt'
+          : 'Đã xóa bản ghi lịch sử chứng từ') + trashedNote,
+        'success'
+      );
+    })
+    .withFailureHandler(function (err) {
+      hideLoading();
+      showToast('Lỗi xóa lịch sử chứng từ: ' + (err && err.message ? err.message : err), 'error');
+    })
+    .deleteUserExportHistory(APP_STATE.user.maSV, targetIds);
 }
 
 const CALC_TRIGGER_FIELDS = {

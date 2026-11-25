@@ -107,6 +107,13 @@ const DOC_FORM_CONFIGS = {
     sections: []
   },
 
+  EXPORT_HISTORY: {
+    title: 'Lịch sử chứng từ',
+    isMaster: true,
+    isHistoryScreen: true,
+    sections: []
+  },
+
   QUOTATION: {
     title: 'Quotation',
     sections: [
@@ -884,6 +891,11 @@ function renderAllFormViews() {
     validateHsCodeInputsInDOM();
   }
   renderBatchExportChecklist();
+  renderExportHistoryView();
+
+  if (typeof initClearConfirmModalUi_ === 'function') {
+    initClearConfirmModalUi_();
+  }
 
   if (typeof isAdminUser_ === 'function' ? isAdminUser_() : (APP_STATE.user && (APP_STATE.user.vaiTro === 'ADMIN' || APP_STATE.user.role === 'ADMIN'))) {
     loadAdminAccountsTables();
@@ -892,6 +904,10 @@ function renderAllFormViews() {
   Object.keys(APP_STATE.exportResults).forEach(function (docKey) {
     renderSingleExportResultBox(docKey);
   });
+
+  if (typeof syncSidebarProgressArrowScroll_ === 'function') {
+    syncSidebarProgressArrowScroll_(false);
+  }
 
   if (!workspaceListenersAttached) {
     container.addEventListener('input', onWorkspaceInputOrChange);
@@ -915,6 +931,31 @@ function buildPanelHtml(docKey, cfg) {
   const isAdminPanelActive = (APP_STATE.activeTab === 'ADMIN_PANEL' || APP_STATE.activeTab === 'ADMIN_ACCOUNTS') && (docKey === 'ADMIN_PANEL' || docKey === 'ADMIN_ACCOUNTS');
   const isActive = (APP_STATE.activeTab === docKey || isAdminPanelActive) ? ' active' : '';
   let html = '<section class="doc-panel' + isActive + '" data-tab-panel="' + docKey + '">';
+
+  if (cfg.isHistoryScreen) {
+    html += '<div class="doc-panel-header">';
+    html += '  <div>';
+    html += '    <h2 class="doc-panel-title">Lịch sử chứng từ</h2>';
+    html += '    <p class="history-panel-subtitle">Danh sách chứng từ đã xuất của riêng tài khoản đang đăng nhập (lưu trong thư mục Google Drive cá nhân <strong>XNK_Documents</strong>).</p>';
+    html += '  </div>';
+    html += '  <div class="history-toolbar-actions">';
+    html += '    <button type="button" class="btn btn-secondary btn-sm" onclick="refreshUserExportHistory()">Làm mới</button>';
+    html += '    <button type="button" id="btnClearAllHistory" class="btn btn-danger-outline btn-sm" onclick="openHistoryDeleteConfirmModal(\'ALL\')">Xóa lịch sử</button>';
+    html += '  </div>';
+    html += '</div>';
+
+    html += '<div class="card form-card section-box">';
+    html += '  <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">';
+    html += '    <h3 class="card-title">Danh sách chứng từ đã xuất <span id="exportHistoryCountBadge" class="sidebar-history-badge" style="margin-left:6px;">0</span></h3>';
+    html += '  </div>';
+    html += '  <div class="card-body">';
+    html += '    <div id="exportHistoryBody"></div>';
+    html += '  </div>';
+    html += '</div>';
+
+    html += '</section>';
+    return html;
+  }
 
   if (cfg.isAdminScreen) {
     html += '<div class="doc-panel-header"><div><h2 class="doc-panel-title">' + escapeHtml(cfg.title) + '</h2></div></div>';
@@ -1360,9 +1401,28 @@ function renderSingleExportResultBox(docKey) {
   box.classList.remove('hidden');
 }
 
-function renderBatchExportChecklist() {
+function clearAllSingleExportResultBoxes_() {
+  document.querySelectorAll('[id^="exportResult_"]').forEach(function (box) {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  });
+}
+
+function renderBatchExportChecklist(options) {
   const container = document.getElementById('batchExportChecklist');
   if (!container) return;
+
+  const opts = options && typeof options === 'object' ? options : {};
+  const hasAnyLocked = Boolean(
+    APP_STATE.exportedLockedDocs && Object.keys(APP_STATE.exportedLockedDocs).length > 0
+  );
+
+  if (opts.clearResults || !hasAnyLocked) {
+    const resultsBox = document.getElementById('batchExportResults');
+    const resultsList = document.getElementById('batchExportResultsList');
+    if (resultsList) resultsList.innerHTML = '';
+    if (resultsBox) resultsBox.classList.add('hidden');
+  }
 
   let html = '';
   DOC_GROUPS.forEach(function (group) {
@@ -1392,5 +1452,115 @@ function renderBatchExportChecklist() {
   } else if (typeof updateBatchSelectionCounter_ === 'function') {
     updateBatchSelectionCounter_();
   }
+}
+
+function formatExportHistoryTimestamp_(isoStr) {
+  if (!isoStr) return '—';
+  try {
+    const dt = new Date(isoStr);
+    if (isNaN(dt.getTime())) return String(isoStr);
+    const dd = String(dt.getDate()).padStart(2, '0');
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const yyyy = dt.getFullYear();
+    const hh = String(dt.getHours()).padStart(2, '0');
+    const mi = String(dt.getMinutes()).padStart(2, '0');
+    const ss = String(dt.getSeconds()).padStart(2, '0');
+    return dd + '/' + mm + '/' + yyyy + ' ' + hh + ':' + mi + ':' + ss;
+  } catch (e) {
+    return String(isoStr);
+  }
+}
+
+function renderExportHistoryView() {
+  const historyList = Array.isArray(APP_STATE.exportHistory) ? APP_STATE.exportHistory : [];
+  const count = historyList.length;
+
+  const sidebarBadge = document.getElementById('sidebarHistoryBadge');
+  if (sidebarBadge) {
+    sidebarBadge.textContent = String(count);
+    sidebarBadge.classList.toggle('hidden', count === 0);
+  }
+
+  const panelBadge = document.getElementById('exportHistoryCountBadge');
+  if (panelBadge) {
+    panelBadge.textContent = String(count);
+  }
+
+  const clearAllBtn = document.getElementById('btnClearAllHistory');
+  if (clearAllBtn) {
+    clearAllBtn.disabled = count === 0;
+  }
+
+  const bodyEl = document.getElementById('exportHistoryBody');
+  if (!bodyEl) return;
+
+  if (APP_STATE.exportHistoryLoading && count === 0) {
+    bodyEl.innerHTML =
+      '<div class="history-empty-state">' +
+        '<div class="history-empty-title">Đang tải lịch sử xuất chứng từ...</div>' +
+      '</div>';
+    return;
+  }
+
+  if (count === 0) {
+    bodyEl.innerHTML =
+      '<div class="history-empty-state">' +
+        '<div class="history-empty-title">Chưa có lịch sử xuất chứng từ nào.</div>' +
+        '<div class="history-empty-sub">Mỗi khi bạn xuất chứng từ đơn lẻ hoặc xuất hàng loạt, liên kết Google Docs và PDF trong Google Drive cá nhân sẽ được lưu tại đây.</div>' +
+      '</div>';
+    return;
+  }
+
+  let html = '<div class="table-scroll">';
+  html += '<table class="data-table">';
+  html += '<thead><tr>';
+  html += '<th style="width:48px; text-align:center;">STT</th>';
+  html += '<th style="min-width:155px;">Thời gian xuất</th>';
+  html += '<th style="min-width:240px;">Tên / Loại chứng từ</th>';
+  html += '<th style="min-width:210px;">Liên kết Google Drive</th>';
+  html += '<th style="width:100px; text-align:center;">Thao tác</th>';
+  html += '</tr></thead><tbody>';
+
+  historyList.forEach(function (entry, idx) {
+    const safeId = escapeHtml(entry.id || ('row_' + idx));
+    const safeTime = escapeHtml(formatExportHistoryTimestamp_(entry.exportedAt));
+    const safeName = escapeHtml(entry.docName || entry.docKey || 'Chứng từ');
+    const safeType = escapeHtml(entry.docType || entry.docKey || '');
+    const isBatch = String(entry.mode || '').toUpperCase() === 'BATCH';
+    const modeLabel = isBatch ? 'Xuất hàng loạt' : 'Xuất đơn lẻ';
+    const docUrl = entry.docUrl ? String(entry.docUrl) : '';
+    const pdfUrl = entry.pdfUrl ? String(entry.pdfUrl) : '';
+
+    html += '<tr>';
+    html += '<td style="text-align:center; font-weight:600;">' + (idx + 1) + '</td>';
+    html += '<td style="white-space:nowrap; font-size:12.5px;">' + safeTime + '</td>';
+    html += '<td>';
+    html += '  <div class="history-doc-name">' + safeName + '</div>';
+    html += '  <div class="history-doc-meta">';
+    if (safeType) {
+      html += '    <span>' + safeType + '</span>';
+    }
+    html += '    <span class="history-mode-badge' + (isBatch ? ' is-batch' : '') + '">' + modeLabel + '</span>';
+    html += '  </div>';
+    html += '</td>';
+    html += '<td><div class="history-links-wrap">';
+    if (docUrl) {
+      html += '<a class="btn btn-secondary btn-sm" href="' + escapeHtml(docUrl) + '" target="_blank" rel="noopener noreferrer">Mở Google Doc</a>';
+    }
+    if (pdfUrl) {
+      html += '<a class="btn btn-success btn-sm" href="' + escapeHtml(pdfUrl) + '" target="_blank" rel="noopener noreferrer">Tải PDF</a>';
+    }
+    if (!docUrl && !pdfUrl) {
+      html += '<span style="font-size:12px; color:#64748B;">Không có liên kết</span>';
+    }
+    html += '</div></td>';
+    html += '<td style="text-align:center;">';
+    html += '<button type="button" class="btn btn-danger-outline btn-sm" onclick="openHistoryDeleteConfirmModal([\'' + safeId + '\'])">Xóa</button>';
+    html += '</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  bodyEl.innerHTML = html;
 }
 </script>

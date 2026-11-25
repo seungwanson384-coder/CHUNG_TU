@@ -179,11 +179,12 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
-  <!-- Global Loading Overlay -->
-  <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-busy="true">
+  <!-- Global Loading Overlay (always above all modals) -->
+  <div id="loadingOverlay" class="loading-overlay hidden" style="z-index: 99999;" role="status" aria-busy="true">
     <div class="loading-card">
       <div class="spinner"></div>
       <div id="loadingMessage" class="loading-text">Loading...</div>
+      <div id="loadingSubMessage" class="loading-subtext hidden"></div>
     </div>
   </div>
 
@@ -204,6 +205,9 @@
       }
       if (typeof initBatchExportModalUi_ === 'function') {
         initBatchExportModalUi_();
+      }
+      if (typeof initClearConfirmModalUi_ === 'function') {
+        initClearConfirmModalUi_();
       }
     });
   </script>

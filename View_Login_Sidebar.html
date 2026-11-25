@@ -94,7 +94,7 @@
   </header>
 
   <div class="app-body">
-    <aside id="appSidebar" class="sidebar" aria-label="Danh mục chứng từ">
+    <aside id="appSidebar" class="sidebar" data-scroll-container="sidebar" aria-label="Danh mục chứng từ">
       <!-- QUẢN TRỊ HỆ THỐNG (Admin Only) - PLACED AT THE VERY TOP -->
       <div id="adminSidebarGroup" class="sidebar-group hidden" style="display:none;">
         <button
@@ -398,5 +398,21 @@
             </li>
           </ul>
         </div>
+      </div>
+
+      <!-- Lịch sử chứng từ (Independent of sequential unlock chain) -->
+      <div class="sidebar-group sidebar-history-group" data-group-id="GROUP_HISTORY">
+        <button
+          id="btnSidebarExportHistory"
+          type="button"
+          class="sidebar-nav-btn sidebar-history-btn"
+          data-nav="EXPORT_HISTORY"
+          data-independent="true"
+          onclick="switchTab('EXPORT_HISTORY')"
+        >
+          <span class="nav-history-icon" aria-hidden="true">&#128337;</span>
+          <span class="nav-label-text">Lịch sử chứng từ</span>
+          <span id="sidebarHistoryBadge" class="sidebar-history-badge hidden">0</span>
+        </button>
       </div>
     </aside>

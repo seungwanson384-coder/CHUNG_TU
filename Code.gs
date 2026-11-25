@@ -658,9 +658,16 @@ function saveUserDraft(maSV, draftJsonString) {
         targetCell.setValue(serializedDraft);
         SpreadsheetApp.flush();
 
+        let exportLockReset = false;
+        if (!serializedDraft || serializedDraft.trim() === '') {
+          clearUserExportLockState_(targetMaSV);
+          exportLockReset = true;
+        }
+
         return {
           success: true,
-          savedAt: new Date().toISOString()
+          savedAt: new Date().toISOString(),
+          exportLockReset: exportLockReset
         };
       }
     }
@@ -941,5 +948,420 @@ function readLoaiHinhXnkRecords_(ss, sheetName) {
 
   return records;
 }
+
+/* ==========================================================================
+   PER-USER EXPORT HISTORY (PropertiesService.getUserProperties scoped by email + MSSV)
+   ========================================================================== */
+
+const USER_HISTORY_PROP_PREFIX_ = 'XNK_EXPORT_HIST_V1_';
+const USER_HISTORY_CHUNK_SIZE_ = 7500;
+const USER_HISTORY_MAX_ITEMS_ = 100;
+
+function buildUserHistoryScopeKey_(maSV) {
+  let activeEmail = '';
+  try {
+    activeEmail = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+  } catch (e) {}
+  if (!activeEmail) {
+    try {
+      activeEmail = String(Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
+    } catch (e) {}
+  }
+  const cleanMaSV = String(maSV == null ? '' : maSV).trim().toUpperCase();
+  const rawScope = (activeEmail || 'user') + '__' + (cleanMaSV || 'UNKNOWN');
+  return USER_HISTORY_PROP_PREFIX_ + rawScope.replace(/[^a-zA-Z0-9_@.-]/g, '_');
+}
+
+function readUserExportHistoryList_(scopeKey) {
+  try {
+    const props = PropertiesService.getUserProperties();
+    const metaRaw = props.getProperty(scopeKey + '__META');
+    let jsonStr = '';
+
+    if (metaRaw) {
+      const partCount = parseInt(metaRaw, 10);
+      if (partCount > 0) {
+        for (let i = 0; i < partCount; i++) {
+          const chunk = props.getProperty(scopeKey + '__P' + i);
+          if (chunk == null) {
+            jsonStr = '';
+            break;
+          }
+          jsonStr += chunk;
+        }
+      }
+    } else {
+      jsonStr = props.getProperty(scopeKey) || '';
+    }
+
+    if (!jsonStr) return [];
+    const parsed = JSON.parse(jsonStr);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function clearUserExportHistoryProps_(props, scopeKey) {
+  try {
+    const metaRaw = props.getProperty(scopeKey + '__META');
+    if (metaRaw) {
+      const partCount = parseInt(metaRaw, 10);
+      if (partCount > 0) {
+        for (let i = 0; i < partCount; i++) {
+          props.deleteProperty(scopeKey + '__P' + i);
+        }
+      }
+      props.deleteProperty(scopeKey + '__META');
+    }
+    props.deleteProperty(scopeKey);
+  } catch (e) {}
+}
+
+function writeUserExportHistoryList_(scopeKey, list) {
+  const props = PropertiesService.getUserProperties();
+  const safeList = Array.isArray(list) ? list.slice(0, USER_HISTORY_MAX_ITEMS_) : [];
+
+  clearUserExportHistoryProps_(props, scopeKey);
+
+  if (safeList.length === 0) {
+    return [];
+  }
+
+  const serialized = JSON.stringify(safeList);
+  if (serialized.length <= USER_HISTORY_CHUNK_SIZE_) {
+    props.setProperty(scopeKey, serialized);
+    return safeList;
+  }
+
+  const totalParts = Math.ceil(serialized.length / USER_HISTORY_CHUNK_SIZE_);
+  const toSet = {};
+  toSet[scopeKey + '__META'] = String(totalParts);
+  for (let i = 0; i < totalParts; i++) {
+    toSet[scopeKey + '__P' + i] = serialized.substring(
+      i * USER_HISTORY_CHUNK_SIZE_,
+      (i + 1) * USER_HISTORY_CHUNK_SIZE_
+    );
+  }
+  props.setProperties(toSet, false);
+  return safeList;
+}
+
+function appendUserExportHistory_(maSV, exportedResults, exportMode) {
+  const lock = LockService.getUserLock();
+  try {
+    lock.waitLock(10000);
+    const scopeKey = buildUserHistoryScopeKey_(maSV);
+    const existing = readUserExportHistoryList_(scopeKey);
+    const nowIso = new Date().toISOString();
+    const batchStamp = Date.now();
+    const resultsArr = Array.isArray(exportedResults) ? exportedResults : [];
+    const newEntries = [];
+
+    for (let i = 0; i < resultsArr.length; i++) {
+      const item = resultsArr[i] || {};
+      newEntries.push({
+        id: 'hist_' + batchStamp + '_' + i + '_' + Math.floor(Math.random() * 10000),
+        exportedAt: item.exportedAt || nowIso,
+        docKey: String(item.docKey || ''),
+        docType: String(item.docType || item.tabName || item.docKey || ''),
+        docName: String(item.docName || item.docKey || ''),
+        docUrl: String(item.docUrl || ''),
+        pdfUrl: String(item.pdfUrl || ''),
+        docId: String(item.docId || ''),
+        pdfId: String(item.pdfId || ''),
+        mode: String(exportMode || (resultsArr.length > 1 ? 'BATCH' : 'SINGLE'))
+      });
+    }
+
+    const merged = newEntries.concat(existing).slice(0, USER_HISTORY_MAX_ITEMS_);
+    return writeUserExportHistoryList_(scopeKey, merged);
+  } catch (err) {
+    return [];
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (e) {}
+  }
+}
+
+function getUserExportHistory(maSV) {
+  try {
+    const cleanMaSV = String(maSV == null ? '' : maSV).trim();
+    if (!cleanMaSV) {
+      return {
+        success: false,
+        history: [],
+        message: 'Thiếu thông tin tài khoản (MSSV) để tải lịch sử chứng từ.'
+      };
+    }
+
+    const scopeKey = buildUserHistoryScopeKey_(cleanMaSV);
+    const history = readUserExportHistoryList_(scopeKey);
+    return {
+      success: true,
+      userKey: scopeKey,
+      history: history
+    };
+  } catch (err) {
+    return {
+      success: false,
+      history: [],
+      message: 'Lỗi tải lịch sử chứng từ: ' + err.message
+    };
+  }
+}
+
+function deleteUserExportHistory(maSV, entryIds) {
+  const lock = LockService.getUserLock();
+  try {
+    lock.waitLock(10000);
+    const cleanMaSV = String(maSV == null ? '' : maSV).trim();
+    if (!cleanMaSV) {
+      return {
+        success: false,
+        history: [],
+        message: 'Thiếu thông tin tài khoản (MSSV) để xóa lịch sử chứng từ.'
+      };
+    }
+
+    const scopeKey = buildUserHistoryScopeKey_(cleanMaSV);
+    const existing = readUserExportHistoryList_(scopeKey);
+    const deleteAll =
+      entryIds === 'ALL' ||
+      entryIds == null ||
+      (Array.isArray(entryIds) && entryIds.length === 0);
+
+    const targetIdSet = {};
+    if (!deleteAll && Array.isArray(entryIds)) {
+      entryIds.forEach(function (id) {
+        const cleanId = String(id || '').trim();
+        if (cleanId) targetIdSet[cleanId] = true;
+      });
+    }
+
+    const toDelete = [];
+    const remaining = [];
+
+    existing.forEach(function (entry) {
+      if (deleteAll || (entry && targetIdSet[String(entry.id || '')])) {
+        toDelete.push(entry);
+      } else {
+        remaining.push(entry);
+      }
+    });
+
+    // Protect any Drive file ID still referenced by remaining history rows (e.g. shared multi-tab Doc)
+    const remainingFileIds = {};
+    remaining.forEach(function (entry) {
+      if (entry && entry.docId) remainingFileIds[String(entry.docId)] = true;
+      if (entry && entry.pdfId) remainingFileIds[String(entry.pdfId)] = true;
+    });
+
+    const fileIdsToTrash = {};
+    toDelete.forEach(function (entry) {
+      if (!entry) return;
+      if (entry.docId && !remainingFileIds[String(entry.docId)]) {
+        fileIdsToTrash[String(entry.docId)] = true;
+      }
+      if (entry.pdfId && !remainingFileIds[String(entry.pdfId)]) {
+        fileIdsToTrash[String(entry.pdfId)] = true;
+      }
+    });
+
+    let trashedCount = 0;
+    const trashErrors = [];
+    Object.keys(fileIdsToTrash).forEach(function (fileId) {
+      try {
+        DriveApp.getFileById(fileId).setTrashed(true);
+        trashedCount++;
+      } catch (trashErr) {
+        trashErrors.push({
+          fileId: fileId,
+          message: trashErr && trashErr.message ? trashErr.message : String(trashErr)
+        });
+      }
+    });
+
+    const updatedHistory = writeUserExportHistoryList_(scopeKey, remaining);
+
+    // Sync/reset per-user batch-export "Đã xuất" lock state
+    let updatedLockMap = {};
+    const unlockedDocKeys = [];
+    const shouldFullResetLock = deleteAll || updatedHistory.length === 0;
+
+    if (shouldFullResetLock) {
+      clearUserExportLockState_(cleanMaSV);
+      updatedLockMap = {};
+    } else {
+      const remainingDocKeys = {};
+      updatedHistory.forEach(function (entry) {
+        if (entry && entry.docKey) {
+          remainingDocKeys[String(entry.docKey)] = true;
+        }
+      });
+      const currentLockMap = readUserExportLockMap_(cleanMaSV);
+      toDelete.forEach(function (entry) {
+        const dk = entry && entry.docKey ? String(entry.docKey) : '';
+        if (dk && !remainingDocKeys[dk]) {
+          if (currentLockMap[dk]) {
+            delete currentLockMap[dk];
+          }
+          if (unlockedDocKeys.indexOf(dk) === -1) {
+            unlockedDocKeys.push(dk);
+          }
+        }
+      });
+      updatedLockMap = writeUserExportLockMap_(cleanMaSV, currentLockMap);
+    }
+
+    return {
+      success: true,
+      history: updatedHistory,
+      deletedCount: toDelete.length,
+      trashedCount: trashedCount,
+      trashErrors: trashErrors,
+      exportLockReset: shouldFullResetLock,
+      unlockedDocKeys: unlockedDocKeys,
+      exportedLockedDocs: updatedLockMap
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: 'Lỗi xóa lịch sử chứng từ: ' + err.message
+    };
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (e) {}
+  }
+}
+
+/* ==========================================================================
+   PER-USER BATCH EXPORT LOCK STATE ("Đã xuất") — SYNC & RESET
+   ========================================================================== */
+
+const USER_EXPORT_LOCK_PROP_PREFIX_ = 'XNK_EXPORT_LOCK_V1_';
+
+function buildUserExportLockScopeKey_(maSV) {
+  let activeEmail = '';
+  try {
+    activeEmail = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+  } catch (e) {}
+  if (!activeEmail) {
+    try {
+      activeEmail = String(Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
+    } catch (e) {}
+  }
+  const cleanMaSV = String(maSV == null ? '' : maSV).trim().toUpperCase();
+  const rawScope = (activeEmail || 'user') + '__' + (cleanMaSV || 'UNKNOWN');
+  return USER_EXPORT_LOCK_PROP_PREFIX_ + rawScope.replace(/[^a-zA-Z0-9_@.-]/g, '_');
+}
+
+function readUserExportLockMap_(maSV) {
+  try {
+    const scopeKey = buildUserExportLockScopeKey_(maSV);
+    const raw = PropertiesService.getUserProperties().getProperty(scopeKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const clean = {};
+    Object.keys(parsed).forEach(function (k) {
+      if (parsed[k]) clean[String(k)] = true;
+    });
+    return clean;
+  } catch (err) {
+    return {};
+  }
+}
+
+function writeUserExportLockMap_(maSV, lockedDocsMap) {
+  const scopeKey = buildUserExportLockScopeKey_(maSV);
+  const props = PropertiesService.getUserProperties();
+  const clean = {};
+  if (lockedDocsMap && typeof lockedDocsMap === 'object' && !Array.isArray(lockedDocsMap)) {
+    Object.keys(lockedDocsMap).forEach(function (k) {
+      if (lockedDocsMap[k]) clean[String(k)] = true;
+    });
+  }
+  if (Object.keys(clean).length === 0) {
+    try {
+      props.deleteProperty(scopeKey);
+    } catch (e) {}
+    return {};
+  }
+  try {
+    props.setProperty(scopeKey, JSON.stringify(clean));
+  } catch (e) {}
+  return clean;
+}
+
+function clearUserExportLockState_(maSV) {
+  try {
+    const scopeKey = buildUserExportLockScopeKey_(maSV);
+    PropertiesService.getUserProperties().deleteProperty(scopeKey);
+  } catch (e) {}
+}
+
+function getUserExportLockState(maSV) {
+  try {
+    const cleanMaSV = String(maSV == null ? '' : maSV).trim();
+    if (!cleanMaSV) {
+      return { success: false, exportedLockedDocs: {} };
+    }
+    return {
+      success: true,
+      exportedLockedDocs: readUserExportLockMap_(cleanMaSV)
+    };
+  } catch (err) {
+    return {
+      success: false,
+      exportedLockedDocs: {},
+      message: 'Lỗi tải trạng thái khóa xuất chứng từ: ' + err.message
+    };
+  }
+}
+
+function saveUserExportLockState(maSV, lockedDocsMap) {
+  try {
+    const cleanMaSV = String(maSV == null ? '' : maSV).trim();
+    if (!cleanMaSV) {
+      return { success: false, exportedLockedDocs: {} };
+    }
+    const saved = writeUserExportLockMap_(cleanMaSV, lockedDocsMap);
+    return {
+      success: true,
+      exportedLockedDocs: saved
+    };
+  } catch (err) {
+    return {
+      success: false,
+      exportedLockedDocs: {},
+      message: 'Lỗi lưu trạng thái khóa xuất chứng từ: ' + err.message
+    };
+  }
+}
+
+function clearUserExportLockState(maSV) {
+  try {
+    const cleanMaSV = String(maSV == null ? '' : maSV).trim();
+    if (!cleanMaSV) {
+      return { success: false, exportedLockedDocs: {} };
+    }
+    clearUserExportLockState_(cleanMaSV);
+    return {
+      success: true,
+      exportedLockedDocs: {}
+    };
+  } catch (err) {
+    return {
+      success: false,
+      exportedLockedDocs: {},
+      message: 'Lỗi đặt lại trạng thái khóa xuất chứng từ: ' + err.message
+    };
+  }
+}
+
+
 
 

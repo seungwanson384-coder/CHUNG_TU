@@ -112,12 +112,17 @@ function generateDocuments(maSV, docKeysArray, payload) {
             docForPageInfo.saveAndClose();
           }
 
+          const exportedAtIso = new Date().toISOString();
           results.push({
             docKey: docKey,
+            docType: (tplConfig && tplConfig.tabName) || docKey,
             docName: copyFileName,
             tabName: tplFile.getName(),
             docUrl: copyFile.getUrl(),
-            pdfUrl: 'https://docs.google.com/document/d/' + copyFileId + '/export?format=pdf'
+            pdfUrl: 'https://docs.google.com/document/d/' + copyFileId + '/export?format=pdf',
+            docId: copyFileId,
+            pdfId: '',
+            exportedAt: exportedAtIso
           });
         } catch (fileErr) {
           if (copyFile) {
@@ -141,10 +146,18 @@ function generateDocuments(maSV, docKeysArray, payload) {
         };
       }
 
+      let updatedHistory = null;
+      if (typeof appendUserExportHistory_ === 'function') {
+        updatedHistory = appendUserExportHistory_(maSV, results, keys.length > 1 ? 'BATCH' : 'SINGLE');
+      }
+
       const folderResponse = {
         success: true,
         results: results
       };
+      if (Array.isArray(updatedHistory)) {
+        folderResponse.history = updatedHistory;
+      }
       if (errors.length > 0) {
         folderResponse.errors = errors;
       }
@@ -212,10 +225,14 @@ function generateDocuments(maSV, docKeysArray, payload) {
 
         results.push({
           docKey: docKey,
+          docType: tplConfig.tabName || docKey,
           docName: keys.length === 1 ? copyFileName : copyFileName + ' [' + tplConfig.tabName + ']',
           tabName: tplConfig.tabName,
           docUrl: docUrl,
-          pdfUrl: pdfUrl
+          pdfUrl: pdfUrl,
+          docId: copyFileId,
+          pdfId: '',
+          exportedAt: new Date().toISOString()
         });
       } catch (tabErr) {
         errors.push({
@@ -265,10 +282,18 @@ function generateDocuments(maSV, docKeysArray, payload) {
       docForPageInfo.saveAndClose();
     }
 
+    let updatedHistory = null;
+    if (typeof appendUserExportHistory_ === 'function') {
+      updatedHistory = appendUserExportHistory_(maSV, results, keys.length > 1 ? 'BATCH' : 'SINGLE');
+    }
+
     const response = {
       success: true,
       results: results
     };
+    if (Array.isArray(updatedHistory)) {
+      response.history = updatedHistory;
+    }
     if (errors.length > 0) {
       response.errors = errors;
     }
